@@ -1,0 +1,14 @@
+# Keep the build context small and — more importantly — keep local secrets and
+# state out of it entirely. Nothing here is needed to build any image.
+.git
+.github
+.claude
+.secrets
+.achilles/*.jsonl
+bin
+out
+.env
+.env.*
+!.env.example
+*.sarif
+!internal/normalize/testdata/*.sarif

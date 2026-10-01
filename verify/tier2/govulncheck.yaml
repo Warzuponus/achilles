@@ -1,0 +1,12 @@
+# Verify-only config: enables just govulncheck. Mirrors configs/tools.yaml.
+tools:
+  - id: govulncheck
+    license: BSD-3-Clause
+    commercialSafe: true
+    enabled: true
+    languages: [go]
+    network: default
+    image: achilles/govulncheck:1.6.0
+    format: sarif
+    argv: ["{src}", "{out}/results.sarif"]
+    outputFile: "{out}/results.sarif"

@@ -1,0 +1,53 @@
+# Example: run Achilles on pull requests, annotate the diff, upload SARIF to
+# GitHub code scanning, and fail only on newly-introduced high-severity findings.
+# Copy this into a consumer repo's .github/workflows/.
+name: Achilles scan (example)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write # required to upload SARIF
+  # pull-requests: write  # uncomment to let --pr-comment post the sticky summary
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed for --diff against the base ref
+
+      - name: Achilles scan
+        uses: Warzuponus/achilles@main
+        with:
+          target: "."
+          mode: "commercial"
+          # Diff-aware + baseline-aware gate; annotate the PR; emit SARIF.
+          # To post a sticky PR summary comment, add `pull-requests: write` above,
+          # set GITHUB_TOKEN in env, and add: --pr-comment ${{ github.event.pull_request.number }}
+          # NOTE: `--exclude evals` is specific to THIS repo — evals/triage/testdata
+          # holds deliberately vulnerable fixtures that are the eval harness's
+          # ground truth (see evals/README.md). Drop that flag when you copy this
+          # workflow into a consumer repo; keep the rest.
+          args: >-
+            --diff origin/${{ github.base_ref }}
+            --baseline .achilles/baseline.json
+            --exclude evals
+            --sarif-report achilles.sarif
+            --github
+            --fail-on high
+        # env:
+        #   GITHUB_TOKEN: ${{ github.token }}   # for --pr-comment
+
+      - name: Upload SARIF
+        if: always()
+        # Best-effort: uploading to GitHub code scanning needs `security-events:
+        # write` AND code scanning enabled on the repo. Not every consumer repo
+        # has it (private repos without Advanced Security, restricted default
+        # tokens), so a failed upload must not fail the whole scan job.
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: achilles.sarif

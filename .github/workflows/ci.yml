@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    # A real PostgreSQL for the Postgres vault backend's tests (they skip when the
+    # DSN is unset, so local `go test ./...` needs no database).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: vaulttest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      ACHILLES_TEST_POSTGRES_DSN: postgres://postgres:test@localhost:5432/vaulttest?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - name: Format check
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && echo 'run gofmt -w .' && exit 1)
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: go build ./...
+      - name: Tree hygiene (no local paths, key material, deployment state, old names)
+        run: scripts/check-tree.sh
+      - name: Dependency hygiene (no cloud SDK modules)
+        run: make check-deps
+      - name: Test (hermetic)
+        run: go test ./...
+      # Triage-context eval: hermetic (no model, no key), so it can gate. Fails if
+      # a change takes deciding evidence out of the triage prompt for any corpus
+      # case. Refresh the baseline deliberately with `make eval-baseline`.
+      - name: Eval — triage context coverage (no regression)
+        run: make eval-gate
+      # Integration tests need the real tools (opengrep, git); they self-skip when absent.
+      - name: Test (integration, best-effort)
+        run: go test -tags integration ./... || true

@@ -1,0 +1,276 @@
+# Declarative tool registry.
+#
+# Adding a SARIF-emitting tool should be a config entry here + an image pin —
+# no Go code (DESIGN.md §4.4). Tools with a hand-written adapter set bespoke:true.
+#
+# license/commercialSafe/requiresAttestation feed the policy gate (DESIGN.md §10):
+# a scan in commercial-mode refuses any tool where commercialSafe:false unless it
+# is requiresAttestation:true AND the operator passed --attest <id>.
+#
+# Scan profiles (--profile, default "default"):
+#   enabled: true      -> baseline tool, runs in every profile.
+#   profiles: [full]    -> runs only under `--profile full` (the heavy per-language
+#                          tools). `--profile full` = baseline + full-tagged.
+# The `full` tools need their Achilles-built images (deployments/<tool>/) and
+# language prerequisites (compiled bytecode / psalm.xml / .NET project + egress).
+#
+# argv placeholders resolve at run time to mount paths:
+#   {src}   read-only source tree
+#   {rules} read-only rules directory (if the tool uses one)
+#   {out}   writable output directory
+#
+# Container images are pinned by digest (tag@sha256:...) for reproducibility.
+# To re-pin after a version bump:
+#   docker buildx imagetools inspect --format '{{.Manifest.Digest}}' <image>:<tag>
+
+tools:
+  - id: opengrep
+    license: LGPL-2.1
+    commercialSafe: true
+    enabled: true
+    bespoke: true                 # hand-written adapter (internal/scanner/opengrep)
+    languages: [python, javascript, typescript, go, java, ruby, generic]
+    # No public container image: Opengrep ships as a binary (install.sh) and runs
+    # via the local binary (see action.yml). `--runner docker` is unsupported for it.
+    bin: opengrep
+    format: sarif
+    rules: configs/rules
+
+  - id: gosec
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: true
+    languages: [go]
+    image: ghcr.io/securego/gosec:2.27.1@sha256:d0859f242774504d57b17442b2dc77d4ffd2f4d30fbdf92c7eb612b2a394f477
+    bin: gosec
+    requires: [go]                 # gosec type-checks via the Go toolchain; without it: silent empty report
+    format: sarif
+    argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "{src}/..."]
+    outputFile: "{out}/results.sarif"
+
+  - id: trivy
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: true
+    languages: [generic]           # SCA/IaC/secrets/misconfig — language-agnostic
+    image: aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+    bin: trivy
+    format: sarif
+    argv: ["fs", "--quiet", "--format", "sarif", "--output", "{out}/results.sarif", "{src}"]
+    outputFile: "{out}/results.sarif"
+    localConfig:                   # honor the repo's own Trivy ignore list
+      - file: .trivyignore
+        arg: "--ignorefile={src}/.trivyignore"
+
+  - id: gitleaks
+    license: MIT
+    commercialSafe: true
+    enabled: true
+    languages: [generic]           # secrets — language-agnostic
+    image: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+    bin: gitleaks                  # local runner; docker uses the image entrypoint
+    format: sarif
+    argv: ["dir", "--report-format", "sarif", "--report-path", "{out}/results.sarif", "{src}"]
+    outputFile: "{out}/results.sarif"
+    localConfig:                   # honor the repo's own gitleaks config/allowlist
+      - file: .gitleaks.toml
+        arg: "--config={src}/.gitleaks.toml"
+
+  - id: osv-scanner
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: true
+    languages: [generic]           # SCA — dependency vulns from the OSV database
+    network: default               # queries the OSV DB (deps.dev) — needs egress
+    image: ghcr.io/google/osv-scanner:v2.4.0@sha256:5116601dedc01c1c580eb92371883ec052fc4c13c3fbc109d621a63ac416d475
+    bin: osv-scanner
+    format: sarif
+    argv: ["scan", "--recursive", "--format", "sarif", "--output-file", "{out}/results.sarif", "{src}"]
+    outputFile: "{out}/results.sarif"
+
+  # --- `full` profile: heavy per-language tools (opt-in via --profile full) ---
+
+  # SpotBugs + Find Security Bugs — JVM taint analysis (Java/Kotlin/Scala/Groovy).
+  # LGPL-2.1, commercial-safe (invoked as a separate process). Disabled because it
+  # needs (1) a built image (deployments/spotbugs-findsecbugs/) and (2) a COMPILED
+  # target — SpotBugs analyzes bytecode, not source, so build the project first.
+  # Verified end-to-end in the tier2-verify CI workflow (2026-07-07); stays disabled
+  # by default only because it needs a locally-built image + a compiled target.
+  - id: findsecbugs
+    license: LGPL-2.1
+    commercialSafe: true
+    enabled: false
+    profiles: [full]
+    languages: [java, kotlin, scala, groovy]
+    image: achilles/findsecbugs:1.14.0
+    format: sarif
+    argv: ["-effort:max", "-sarif={out}/results.sarif", "{src}"]
+    outputFile: "{out}/results.sarif"
+
+  # Psalm — PHP static analysis with security taint tracking. MIT, commercial-safe.
+  # Disabled: needs a built image (deployments/psalm/) AND the target project's own
+  # psalm.xml (Psalm resolves projectFiles relative to it; run composer install for
+  # accuracy). Verified end-to-end in the tier2-verify CI workflow (2026-07-07);
+  # stays disabled by default only because it needs a built image + the project's psalm.xml.
+  - id: psalm
+    license: MIT
+    commercialSafe: true
+    enabled: false
+    profiles: [full]
+    languages: [php]
+    image: achilles/psalm:6.16.1
+    format: sarif
+    argv: ["--config={src}/psalm.xml", "--root={src}", "--taint-analysis", "--no-cache", "--report={out}/results.sarif"]
+    outputFile: "{out}/results.sarif"
+
+  # Security Code Scan — .NET (C#/VB) SAST. LGPL-3.0, commercial-safe (separate
+  # process). Disabled: needs a built image (deployments/security-code-scan/), a
+  # real .NET project target, and NETWORK egress (MSBuildWorkspace restores NuGet)
+  # — so it sets network: default and is incompatible with strict-containment.
+  # argv from the tool source (positional project, x|export= -> SARIF). Verified
+  # end-to-end in the tier2-verify CI workflow (2026-07-08).
+  - id: security-code-scan
+    license: LGPL-3.0
+    commercialSafe: true
+    enabled: false
+    profiles: [full]
+    network: default
+    languages: [csharp, vbnet]
+    image: achilles/security-code-scan:5.6.7
+    format: sarif
+    argv: ["{src}", "--export={out}/results.sarif", "--ignore-msbuild-errors"]
+    outputFile: "{out}/results.sarif"
+
+  # clang-tidy — C/C++ static analysis. Apache-2.0-WITH-LLVM-exception (clang-tidy)
+  # + MIT (clang-tidy-sarif converter); commercial-safe (separate processes). No
+  # native SARIF, so the image pipes clang-tidy through clang-tidy-sarif. Disabled:
+  # needs a built image (deployments/clang-tidy/); best with a compile_commands.json.
+  # No egress needed (works under strict-containment). Verified in tier2-verify CI (2026-07-08).
+  - id: clang-tidy
+    license: Apache-2.0 WITH LLVM-exception
+    commercialSafe: true
+    enabled: false
+    profiles: [full]
+    languages: [c, cpp]
+    image: achilles/clang-tidy:18
+    format: sarif
+    argv: ["{src}", "{out}/results.sarif"]
+    outputFile: "{out}/results.sarif"
+
+  # govulncheck — Go vulnerability scanner (BSD-3-Clause, commercial-safe,
+  # separate process). Reachability-aware SCA: flags vulnerable symbols the code
+  # actually calls, not just modules in go.mod. Needs the Go toolchain + network
+  # (vuln DB + module graph) → network: default, so it's a full-profile tool with
+  # a built image (deployments/govulncheck/). SARIF-native (via a stdout→file
+  # wrapper). Verified end-to-end in tier2-verify CI (2026-07-09).
+  - id: govulncheck
+    license: BSD-3-Clause
+    commercialSafe: true
+    enabled: false
+    profiles: [full]
+    languages: [go]
+    network: default
+    image: achilles/govulncheck:1.6.0
+    format: sarif
+    argv: ["{src}", "{out}/results.sarif"]
+    outputFile: "{out}/results.sarif"
+
+  # Syft — SBOM generator (Apache-2.0, commercial-safe, separate process). NOT a
+  # findings scanner: it produces a CycloneDX software bill of materials, used by
+  # the `--sbom <path>` feature (not the scan/normalize pipeline), so the registry
+  # build skips it. Built image (deployments/syft/). No egress (offline dir scan).
+  # Verified in tier2-verify CI (2026-07-09).
+  - id: syft
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: false
+    languages: [generic]
+    image: achilles/syft:1.46.0
+    format: cyclonedx
+    argv: ["scan", "dir:{src}", "-o", "cyclonedx-json={out}/sbom.json", "-q"]
+    outputFile: "{out}/sbom.json"
+
+  # ShellCheck — shell script (sh/bash) static analysis. GPL-3.0, so invoked
+  # STRICTLY as a separate-process container, never linked (commercial-safe; same
+  # posture as TruffleHog). No SARIF → JSON normalized (internal/normalize/
+  # shellcheck.go, format: shellcheck). Built image (deployments/shellcheck/) with
+  # a wrapper (finds scripts, redirects stdout JSON). No egress → strict-
+  # containment OK. Verified in tier2-verify CI (2026-07-09). Opt-in via full.
+  - id: shellcheck
+    license: GPL-3.0
+    commercialSafe: true
+    enabled: false
+    profiles: [full]
+    languages: [shell]
+    image: achilles/shellcheck:0.11.0
+    format: shellcheck
+    argv: ["{src}", "{out}/results.json"]
+    outputFile: "{out}/results.json"
+
+  # Checkov — IaC static analysis (Apache-2.0, commercial-safe, separate
+  # process). A second IaC scanner alongside Trivy (Terraform/CFN/K8s/Helm/…).
+  # SARIF-native (no normalizer). languages: [generic] since IaC isn't in the
+  # language detector, so it's a wildcard that always applies. network: default
+  # for Checkov's version-check/telemetry (core scanning is offline). Built image
+  # (deployments/checkov/) with a direct entrypoint. Verified in tier2-verify CI
+  # (2026-07-09). Opt-in via the full profile.
+  - id: checkov
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: false
+    profiles: [full]
+    languages: [generic]
+    network: default
+    image: achilles/checkov:3.3.8
+    format: sarif
+    argv: ["-d", "{src}", "-o", "sarif", "--output-file-path", "{out}", "--compact", "--quiet"]
+    outputFile: "{out}/results_sarif.sarif"
+
+  # Bandit — Python SAST (Apache-2.0, commercial-safe, separate process). No
+  # public container, and its SARIF formatter crashes outside a git repo, so we
+  # build our own image (deployments/bandit/) and run `-f json`, normalized by
+  # internal/normalize/bandit.go (format: bandit). Disabled by default; enabled
+  # in the `full` profile. No egress needed (works under strict-containment).
+  # Verified end-to-end in the tier2-verify CI workflow (2026-07-09).
+  - id: bandit
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: false
+    profiles: [full]
+    languages: [python]
+    image: achilles/bandit:1.9.4
+    format: bandit
+    argv: ["-r", "{src}", "-f", "json", "-o", "{out}/results.json"]
+    outputFile: "{out}/results.json"
+
+  # Railroader — Ruby on Rails SAST (MIT, commercial-safe, separate process).
+  # The MIT fork of Brakeman (which is CC-BY-NC-SA → blocked, see below). No
+  # public container and no SARIF, so we build our own image (deployments/
+  # railroader/) and normalize its JSON (internal/normalize/railroader.go,
+  # format: railroader). Scans Rails apps; static (no bundle install), no egress
+  # → strict-containment OK. Verified end-to-end in tier2-verify CI (2026-07-09).
+  - id: railroader
+    license: MIT
+    commercialSafe: true
+    enabled: false
+    profiles: [full]
+    languages: [ruby]
+    image: achilles/railroader:4.3.8
+    format: railroader
+    argv: ["-f", "json", "-o", "{out}/results.json", "-q", "{src}"]
+    outputFile: "{out}/results.json"
+
+  # Brakeman — the original Ruby SAST, but CC-BY-NC-SA (non-commercial): blocked
+  # in commercial mode. Use Railroader (its MIT fork, above) instead.
+  - id: brakeman
+    license: CC-BY-NC-SA
+    commercialSafe: false          # non-commercial license — blocked in commercial-mode
+    enabled: false
+    languages: [ruby]
+
+  - id: codeql
+    license: GitHub terms
+    commercialSafe: false
+    requiresAttestation: true      # customer code requires a paid GitHub license
+    enabled: false
+    languages: [python, javascript, go, java, csharp]

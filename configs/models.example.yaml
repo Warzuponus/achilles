@@ -1,0 +1,23 @@
+# Per-task LLM model routing (achilles --model-config configs/models.example.yaml).
+#
+# Route each pipeline step to a different model/endpoint — a cheap, fast model
+# for the high-volume triage pass, a stronger one for the adversarial judge and
+# for remediation. Any task you omit falls back to --llm-model. An omitted
+# baseURL uses --llm-base-url. The API key always comes from ACHILLES_LLM_API_KEY
+# (or OPENAI_API_KEY).
+#
+# Routable tasks: triage, judge, remediation, review, sca, threat-model, research,
+# mine-rules. Unknown names are accepted so new steps can be pre-configured.
+tasks:
+  triage:
+    model: gpt-4o-mini
+  judge:
+    model: gpt-4o
+  remediation:
+    model: gpt-4o
+    # baseURL: https://your-gateway.example/v1   # optional per-task endpoint
+  # review:       { model: gpt-4o }
+  # sca:          { model: gpt-4o-mini }
+  # threat-model: { model: gpt-4o }
+  # research:     { model: gpt-4o }       # --research
+  # mine-rules:   { model: gpt-4o }       # --mine-rules

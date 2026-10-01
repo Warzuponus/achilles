@@ -1,0 +1,28 @@
+# End-to-end verification of the Tier-2 scanners (SpotBugs+find-sec-bugs, Psalm)
+# that can't be run on a dev laptop without Docker + the language runtimes.
+# GitHub's runners have Docker, so this is where these tools actually get proven.
+# Runs on demand and when the tool integration changes (heavy: builds images).
+name: Tier-2 verify
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "deployments/**"
+      - "verify/tier2/**"
+      - "configs/tools.yaml"
+      - ".github/workflows/tier2-verify.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Verify Tier-2 scanners end-to-end
+        run: verify/tier2/verify.sh

@@ -1,0 +1,56 @@
+# Publish the user guides to GitHub Pages. Rebuilds docs/site.html from the
+# markdown sources on every docs change and deploys it as the site root.
+#
+# One-time enable (repo admin): Settings → Pages → Build and deployment →
+# Source: "GitHub Actions". (No branch to pick — this workflow is the source.)
+name: Docs to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs-pages.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; don't cancel an in-flight publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Render guides
+        # Absolute repo links so `../DESIGN.md` etc. resolve on the hosted site.
+        env:
+          ACHILLES_DOCS_REPO_URL: https://github.com/${{ github.repository }}/blob/main
+        run: |
+          python3 -m pip install --quiet markdown
+          python3 docs/build.py
+          mkdir -p _site
+          cp docs/site.html _site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

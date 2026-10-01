@@ -1,0 +1,42 @@
+# Example fleet definition for achilles-fleet: scan several of your own repos on a
+# schedule. Each tenant is a "project": an isolated Evidence Vault (the key
+# tenant-<id> in PostgreSQL, or <vault-root>/<id>/vault.jsonl for the file backend),
+# so the War Room and `achilles --metrics` read results per project.
+#
+#   achilles-fleet --config configs/fleet.example.yaml \
+#     --vault-backend postgres --runner local     # (ACHILLES_VAULT_DSN in the environment)
+#
+# (Local/dev: --vault-backend file --vault-root .achilles/tenants --runner local)
+#
+# A target is either:
+#   - a plain string: a local filesystem path (the original form), or
+#   - a git source mapping, which achilles-fleet clones into an ephemeral
+#     --workspace dir, scans, and deletes (no pre-existing filesystem needed,
+#     so it works in containers and CI):
+#       url:   https://, ssh://, git@host:path, or file:// (no user:pass@ -- rejected)
+#       ref:   optional branch | tag | full commit sha (default: remote HEAD)
+#       depth: optional shallow-clone depth (default 1)
+#       auth:  optional; names the ENV VAR holding the credential -- never the
+#              credential itself:
+#                tokenEnv:  https access token (sent as an HTTP header via the
+#                           git process environment; never in argv/URL/logs)
+#                sshKeyEnv: PEM private key content (written 0600, deleted
+#                           right after the fetch)
+tenants:
+  - id: acme                      # -> collection tenant-acme
+    mode: commercial              # license mode (default oss)
+    profile: full                 # scan profile (default default)
+    targets:
+      - /workspace/acme/api       # path target
+      - /workspace/acme/web
+      - url: https://example.com/acme/example-app.git     # public repo
+      - url: https://example.com/acme/example-private.git # private repo
+        ref: main
+        auth: {tokenEnv: ACME_GIT_TOKEN}
+      - url: git@example.com:acme/example-infra.git       # ssh deploy key
+        ref: release/1.2
+        depth: 50
+        auth: {sshKeyEnv: ACME_DEPLOY_KEY}
+  - id: globex
+    targets:
+      - /workspace/globex/svc

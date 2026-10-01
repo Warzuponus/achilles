@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Achilles — War Room</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; background: #1a1d21; color: #e6e6e6; }
+    header { background: #111316; padding: 16px 24px; border-bottom: 1px solid #2a2e34; }
+    h1 { margin: 0; font-size: 18px; }
+    .meta { color: #8b93a1; font-size: 13px; }
+    main { padding: 24px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2e34; font-size: 14px; }
+    th { color: #8b93a1; font-weight: 600; }
+    a { color: #a78bfa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .empty { color: #8b93a1; padding: 24px 0; }
+    .bar { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+    .tenantpick { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .tenantpick label { color: #8b93a1; font-size: 13px; }
+    select { background: #1a1d21; color: #e6e6e6; border: 1px solid #2a2e34;
+             border-radius: 6px; padding: 5px 8px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <h1>Achilles — War Room</h1>
+      <div class="meta">project: {{.Tenant}}</div>
+      {{if .Tenants}}
+      <form class="tenantpick" method="get" action="/">
+        <label for="tenant">Project</label>
+        <select id="tenant" name="tenant" onchange="this.form.submit()">
+          {{range .Tenants}}
+          <option value="{{.}}"{{if eq . $.Tenant}} selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+        <noscript><button type="submit">Switch</button></noscript>
+      </form>
+      {{end}}
+    </div>
+  </header>
+  <main>
+    <h2>Scan runs</h2>
+    {{if .Runs}}
+    <table>
+      <thead><tr><th>Run</th><th>Target</th><th>Mode</th><th>Findings</th></tr></thead>
+      <tbody>
+      {{range .Runs}}
+        <tr>
+          <td><a href="/runs/{{.RunID}}">{{.RunID}}</a></td>
+          <td>{{.Target}}</td>
+          <td>{{.Mode}}</td>
+          <td>{{.Findings}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="empty">No runs yet. Run <code>achilles</code> with this project's vault.</p>
+    {{end}}
+  </main>
+</body>
+</html>

@@ -1,0 +1,91 @@
+# Central scan hub: run a full, LLM-routed Achilles scan of ANOTHER repo from
+# here, so the LLM key + routing live only in this repo — targets need no
+# secrets and no workflow of their own. The LLM endpoint is any OpenAI-compatible
+# service (Ollama Cloud below; change ACHILLES_LLM_BASE_URL / --llm-model for others).
+#
+# Cross-repo READ is granted by a GitHub App (Contents: Read) installed on the
+# target repos; the workflow mints a short-lived installation token to check the
+# target out. Results are uploaded as artifacts of THIS run (read-only; nothing is
+# written back to the target). See DEPLOY.md → "Central scan hub" for setup.
+#
+# Prereqs (one-time, done by a repo/org admin — see DEPLOY.md):
+#   secrets.ACHILLES_LLM_API_KEY      — API key for the LLM endpoint below
+#   secrets.SCANNER_APP_ID            — the GitHub App's id
+#   secrets.SCANNER_APP_PRIVATE_KEY   — the GitHub App's private key (.pem contents)
+name: Achilles scan hub
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: "Repo to scan, name only (owner is this repository's owner)"
+        required: true
+      ref:
+        description: "Branch/tag/SHA to scan (blank = default branch)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read # only this repo; target access comes from the App token
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    env:
+      ACHILLES_LLM_API_KEY: ${{ secrets.ACHILLES_LLM_API_KEY }}
+      ACHILLES_LLM_BASE_URL: https://ollama.com/v1
+    steps:
+      # 1. This repo — provides the action, the tool registry, and the routing.
+      - uses: actions/checkout@v4
+
+      # 2. A short-lived token scoped to JUST the target repo (Contents: Read).
+      - name: Mint target-scoped token
+        id: tok
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.SCANNER_APP_ID }}
+          private-key: ${{ secrets.SCANNER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ inputs.target_repo }}
+
+      # 3. Check the target out into ./target using that token.
+      - name: Checkout target
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/${{ inputs.target_repo }}
+          ref: ${{ inputs.ref }}
+          token: ${{ steps.tok.outputs.token }}
+          path: target
+          fetch-depth: 1
+
+      # 4. Routed LLM scan of the target. Uses the in-repo action (./) so it always
+      #    matches this checkout; routing = configs/models.ollama.yaml (this repo).
+      - name: Achilles routed scan
+        uses: ./
+        with:
+          target: "target"
+          mode: "commercial"
+          args: >-
+            --llm-base-url https://ollama.com/v1
+            --llm-model glm-5.2
+            --model-config configs/models.ollama.yaml
+            --review
+            --sca-advice
+            --threat-model achilles-threatmodel.otm.json
+            --sarif-report achilles.sarif
+            --markdown achilles-report.md
+            --html-report achilles-report.html
+
+      # 5. Central results — artifacts of THIS run. Nothing written to the target.
+      #    achilles-report.html is the self-contained, human-readable report
+      #    (findings + AI review/advice/threat-model) — open it in a browser.
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: achilles-${{ inputs.target_repo }}
+          path: |
+            achilles-report.html
+            achilles.sarif
+            achilles-report.md
+            achilles-threatmodel.otm.json

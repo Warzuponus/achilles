@@ -1,0 +1,13 @@
+/bin/
+/.achilles/*
+!/.achilles/baseline.json
+*.sarif
+!internal/normalize/testdata/*.sarif
+*.out
+.DS_Store
+
+# Local secrets — never committed
+.secrets/
+
+# Claude Code worktrees / local state
+.claude/

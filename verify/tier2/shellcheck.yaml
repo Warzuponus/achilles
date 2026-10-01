@@ -1,0 +1,11 @@
+# Verify-only config: enables just ShellCheck. Mirrors configs/tools.yaml.
+tools:
+  - id: shellcheck
+    license: GPL-3.0
+    commercialSafe: true
+    enabled: true
+    languages: [shell]
+    image: achilles/shellcheck:0.11.0
+    format: shellcheck
+    argv: ["{src}", "{out}/results.json"]
+    outputFile: "{out}/results.json"

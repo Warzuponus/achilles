@@ -1,0 +1,11 @@
+# Verify-only config: enables just psalm. argv mirrors configs/tools.yaml.
+tools:
+  - id: psalm
+    license: MIT
+    commercialSafe: true
+    enabled: true
+    languages: [php]
+    image: achilles/psalm:6.16.1
+    format: sarif
+    argv: ["--config={src}/psalm.xml", "--root={src}", "--taint-analysis", "--no-cache", "--report={out}/results.sarif"]
+    outputFile: "{out}/results.sarif"

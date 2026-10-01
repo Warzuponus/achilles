@@ -1,0 +1,30 @@
+# Fails the build if any Go dependency is copyleft (AGPL / GPL / LGPL), enforcing
+# the commercial-license posture: AGPL/GPL tools (e.g. TruffleHog) are invoked as
+# separate-process containers, NEVER imported as Go modules (THIRD-PARTY.md).
+# Permissive (MIT/Apache/BSD) and weak/file-level copyleft (MPL, "reciprocal") are
+# allowed as imports.
+name: License check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Install go-licenses (pinned)
+        run: go install github.com/google/go-licenses@v1.6.0
+      - name: Fail on copyleft (AGPL/GPL/LGPL) Go imports
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          go-licenses check ./... --disallowed_types=forbidden,restricted

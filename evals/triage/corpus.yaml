@@ -1,0 +1,347 @@
+# Labeled triage corpus — ground truth for measuring whether Achilles's LLM
+# triage layer actually gets better when we change it.
+#
+# Each case is a finding a real scanner would report, over a real source file,
+# with a human label for what the right answer is. Half are genuine bugs the
+# pipeline must NOT suppress; half are safe-but-flagged code it SHOULD suppress.
+# The FP half is the hard half, and the reason this corpus exists: a triager that
+# says "true_positive" to everything scores 50% here and 100% on a TP-only set.
+#
+# The last four cases are ADVERSARIAL naming traps — each the inverse of an
+# earlier case, with an identifier that points at the wrong answer. They exist
+# because the textbook pairs are in every model's training data and stopped
+# discriminating (see evals/README.md "Known limits").
+#
+# Fields:
+#   id             stable identifier; results are keyed on it across runs
+#   fixture        source file, relative to this manifest
+#   label          tp | fp — the correct answer
+#   why            why that is the correct answer (for review, and printed on failure)
+#   finding        what the scanner reports (tool/rule/CWE/severity/message/line)
+#   evidenceLines  the lines a triager MUST see to decide correctly. Used by
+#                  `--mode context` to check, with no LLM at all, whether the
+#                  prompt we build actually contains the deciding evidence.
+# `--mode remediate` needs no extra field: it verifies a proposed patch by
+# RE-RUNNING the case's own scanner on the patched file and asking whether the rule
+# still fires — the same shape as the §9.3 generated-rule gate. An earlier attempt
+# used a hand-authored "this string must disappear" field and was wrong three ways
+# (ast.literal_eval contains eval(, whitespace sensitivity, and some findings have
+# several legitimate fixes). See internal/eval/fixcheck.go.
+#
+# Fixtures live under testdata/ on purpose: the Go tool and gosec both skip
+# directories named testdata, so deliberately-vulnerable fixtures cannot break
+# `go build`, `go vet`, or the self-scan gate.
+#
+# Adding a case: write the fixture, add the entry, then run
+#   achilles-eval --corpus evals/triage/corpus.yaml --mode context
+# which validates every line number against the file before scoring anything.
+
+version: 1
+
+cases:
+  # ---------- SQL injection (CWE-89) ----------
+  - id: go-sqli-request-concat
+    fixture: testdata/go_sqli_concat.go
+    label: tp
+    why: >
+      The name is read from the request query string and concatenated into the
+      SQL text, so the caller controls the statement.
+    finding:
+      tool: gosec
+      ruleId: G701
+      cwe: ["CWE-89"]
+      severity: high
+      message: "SQL injection via taint analysis"
+      line: 12
+    evidenceLines: [10, 11]
+
+  - id: go-sqli-allowlisted-table
+    fixture: testdata/go_sqli_allowlist.go
+    label: fp
+    why: >
+      The table name does come from the request, so gosec's taint analysis is
+      right that request data reaches the query — but the allowlist check refuses
+      anything outside a closed set of two literals before the Sprintf runs, so
+      the interpolated value can only ever be one of those two. A placeholder
+      cannot bind an identifier, which is why interpolation is unavoidable here.
+      Deciding this correctly means noticing the guard clause, not just the flow.
+    finding:
+      tool: gosec
+      ruleId: G701
+      cwe: ["CWE-89"]
+      severity: high
+      message: "SQL injection via taint analysis"
+      line: 25
+    evidenceLines: [13, 20, 21, 24, 25]
+
+  # ---------- Weak hash (CWE-327) ----------
+  - id: go-md5-password-hash
+    fixture: testdata/go_md5_password.go
+    label: tp
+    why: >
+      MD5 is used to hash a credential for storage — fast and collision-prone,
+      which is exactly the wrong property for password hashing.
+    finding:
+      tool: gosec
+      ruleId: G401
+      cwe: ["CWE-327"]
+      severity: medium
+      message: "Use of weak cryptographic primitive"
+      line: 10
+    evidenceLines: [9, 10]
+
+  - id: go-md5-cache-key
+    fixture: testdata/go_md5_cachekey.go
+    label: fp
+    why: >
+      The digest is a fixed-length map key for an in-process cache. It is never
+      compared against a secret and never stored as a credential; a collision
+      costs a cache miss, not a security boundary.
+    finding:
+      tool: gosec
+      ruleId: G401
+      cwe: ["CWE-327"]
+      severity: medium
+      message: "Use of weak cryptographic primitive"
+      line: 10
+    evidenceLines: [9, 10, 11]
+
+  # ---------- Command injection (CWE-78) ----------
+  - id: go-exec-request-arg
+    fixture: testdata/go_exec_userinput.go
+    label: tp
+    why: >
+      A filename from the request is interpolated into a string handed to
+      `sh -c`, so shell metacharacters in it execute.
+    finding:
+      tool: gosec
+      ruleId: G204
+      cwe: ["CWE-78"]
+      severity: medium
+      message: "Subprocess launched with a potential tainted input or cmd arguments"
+      line: 11
+    evidenceLines: [10, 11]
+
+  - id: go-exec-allowlisted
+    fixture: testdata/go_exec_allowlist.go
+    label: fp
+    why: >
+      The action is checked against a closed allowlist and anything absent is
+      refused, so the value reaching exec.Command is always one of three
+      literals. It is also passed as its own argv element with no shell
+      involved, so even an unexpected value could not become a second command.
+    finding:
+      tool: gosec
+      ruleId: G204
+      cwe: ["CWE-78"]
+      severity: medium
+      message: "Subprocess launched with variable"
+      line: 20
+    evidenceLines: [9, 16, 17, 20]
+
+  # ---------- Weak randomness (CWE-338) ----------
+  - id: go-rand-session-token
+    fixture: testdata/go_rand_token.go
+    label: tp
+    why: >
+      math/rand generates the value that authenticates a session. Its output is
+      predictable, so tokens can be forged.
+    finding:
+      tool: gosec
+      ruleId: G404
+      cwe: ["CWE-338"]
+      severity: high
+      message: "Use of weak random number generator (math/rand or math/rand/v2 instead of crypto/rand)"
+      line: 10
+    evidenceLines: [9, 10]
+
+  - id: go-rand-retry-jitter
+    fixture: testdata/go_rand_jitter.go
+    label: fp
+    why: >
+      The random value is retry jitter — a timing hint, not a secret or an
+      identifier. Predicting it gains an attacker nothing.
+    finding:
+      tool: gosec
+      ruleId: G404
+      cwe: ["CWE-338"]
+      severity: high
+      message: "Use of weak random number generator (math/rand or math/rand/v2 instead of crypto/rand)"
+      line: 11
+    evidenceLines: [9, 11]
+
+  # ---------- Path traversal (CWE-22) ----------
+  - id: go-readfile-request-path
+    fixture: testdata/go_readfile_userpath.go
+    label: tp
+    why: >
+      A caller-supplied name is appended to a directory with no normalization or
+      containment check, so "../.." escapes the intended root.
+    finding:
+      tool: gosec
+      ruleId: G304
+      cwe: ["CWE-22"]
+      severity: medium
+      message: "Potential file inclusion via variable"
+      line: 11
+    evidenceLines: [10, 11]
+
+  - id: go-readfile-contained
+    fixture: testdata/go_readfile_validated.go
+    label: fp
+    why: >
+      Request data does reach the path, so the taint flow gosec reports is real.
+      But filepath.Join cleans its result, so a traversing name resolves to a
+      path outside filesRoot, and the prefix check then refuses it before
+      ReadFile is called. Containment is genuine; gosec's taint analysis simply
+      does not model it — the same false positive this repo's own containedPath
+      helper produces.
+    finding:
+      tool: gosec
+      ruleId: G703
+      cwe: ["CWE-22"]
+      severity: high
+      message: "Path traversal via taint analysis"
+      line: 21
+    evidenceLines: [11, 16, 17, 18, 21]
+
+  # ---------- eval injection (CWE-95) ----------
+  - id: py-eval-request-body
+    fixture: testdata/py_eval_request.py
+    label: tp
+    why: >
+      The expression is taken from the POST body and passed to eval(), so the
+      caller executes arbitrary Python in this process.
+    finding:
+      tool: bandit
+      ruleId: B307
+      cwe: ["CWE-95"]
+      severity: medium
+      message: "Use of possibly insecure function - consider using safer ast.literal_eval."
+      line: 10
+    evidenceLines: [8, 9, 10]
+
+  - id: py-eval-module-literal
+    fixture: testdata/py_eval_constant.py
+    label: fp
+    why: >
+      eval() is applied to a literal defined in this same file. Nothing on the
+      path is caller-controlled or externally configurable.
+    finding:
+      tool: bandit
+      ruleId: B307
+      cwe: ["CWE-95"]
+      severity: medium
+      message: "Use of possibly insecure function - consider using safer ast.literal_eval."
+      line: 6
+    evidenceLines: [1, 6]
+
+  # ---------- shell=True (CWE-78) ----------
+  - id: py-shell-request-dir
+    fixture: testdata/py_subprocess_userinput.py
+    label: tp
+    why: >
+      A directory name from the query string is concatenated into a command run
+      with shell=True, so injected metacharacters execute.
+    finding:
+      tool: bandit
+      ruleId: B602
+      cwe: ["CWE-78"]
+      severity: high
+      message: "subprocess call with shell=True identified, security issue."
+      line: 9
+    evidenceLines: [8, 9]
+
+  - id: py-shell-fixed-command
+    fixture: testdata/py_subprocess_literal.py
+    label: fp
+    why: >
+      The command is a fixed literal with no interpolation; shell=True is only
+      there so the pipeline runs. No input reaches it.
+    finding:
+      tool: bandit
+      ruleId: B602
+      cwe: ["CWE-78"]
+      severity: low
+      message: "subprocess call with shell=True seems safe, but may be changed in the future, consider rewriting without shell"
+      line: 6
+    evidenceLines: [6]
+
+  # ---------- ADVERSARIAL: naming traps ----------
+  #
+  # Each of these is the INVERSE of a case above: same rule, same CWE, similar
+  # shape, opposite label — and an identifier chosen to point the wrong way. They
+  # exist because a case was once answered correctly while context mode reported
+  # its deciding line as NOT in the prompt, which suggests naming may be doing
+  # work that evidence should. A triager that reads names rather than code gets
+  # these backwards; one that reads the code does not.
+
+  - id: go-trap-sqli-request-table
+    fixture: testdata/go_trap_sqli_request_table.go
+    label: tp
+    why: >
+      Inverts go-sqli-allowlisted-table, and the two are now as close as a pair
+      can get: same rule, same identifier, and the identical source line
+      `reportTable := r.URL.Query().Get("table")`. The ONLY difference is that
+      the allowlist guard is absent here, so the request value reaches the
+      Sprintf unconstrained. Answering fp means a guard was assumed from the
+      shape of the code rather than read.
+    finding:
+      tool: gosec
+      ruleId: G701
+      cwe: ["CWE-89"]
+      severity: high
+      message: "SQL injection via taint analysis"
+      line: 13
+    evidenceLines: [11, 12]
+
+  - id: go-trap-md5-auth-compare
+    fixture: testdata/go_trap_md5_auth_compare.go
+    label: tp
+    why: >
+      Inverts go-md5-cache-key: the function is still called `cacheKey`, but its
+      digest is compared against a stored credential by `authenticate` below, so
+      MD5 is guarding authentication rather than keying a cache. The deciding
+      evidence is at the CALL SITE, outside the flagged function.
+    finding:
+      tool: gosec
+      ruleId: G401
+      cwe: ["CWE-327"]
+      severity: medium
+      message: "Use of weak cryptographic primitive"
+      line: 10
+    evidenceLines: [10, 16]
+
+  - id: go-trap-readfile-allowlisted
+    fixture: testdata/go_trap_readfile_allowlisted.go
+    label: fp
+    why: >
+      Inverts go-readfile-request-path: every identifier on the path says taint
+      (`readUserFile`, `userControlledPath`), but the only caller-controlled
+      value is an integer, it is bounds-checked, and the filename is then
+      synthesized from it — so no caller-supplied text ever reaches ReadFile.
+      Answering tp here means the names were trusted over the guard clause.
+    finding:
+      tool: gosec
+      ruleId: G304
+      cwe: ["CWE-22"]
+      severity: medium
+      message: "Potential file inclusion via variable"
+      line: 17
+    evidenceLines: [9, 13, 14, 16, 17]
+
+  - id: py-trap-shell-const
+    fixture: testdata/py_trap_shell_const.py
+    label: fp
+    why: >
+      Inverts py-shell-request-dir: the interpolated local is named `user_input`,
+      but it holds a module constant, and no request data exists in this file at
+      all. Answering tp here means the variable name outweighed its assignment.
+    finding:
+      tool: bandit
+      ruleId: B602
+      cwe: ["CWE-78"]
+      severity: high
+      message: "subprocess call with shell=True identified, security issue."
+      line: 9
+    evidenceLines: [3, 8, 9]

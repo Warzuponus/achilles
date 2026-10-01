@@ -1,0 +1,1631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Achilles — User Guides</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#171e2e; --panel2:#1e2740; --text:#e7ecf5; --muted:#93a0b8;
+    --border:#2a3550; --accent:#7c9cff; --code:#0b0f1a;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f5f7fb; --panel:#fff; --panel2:#f0f3f9; --text:#111726; --muted:#5a6784;
+      --border:#dde3ef; --accent:#3b5bdb; --code:#f3f5fa; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .layout{display:flex;max-width:1180px;margin:0 auto;gap:32px;padding:0 20px}
+  nav{position:sticky;top:0;align-self:flex-start;height:100vh;overflow-y:auto;
+    width:220px;flex:none;padding:28px 0}
+  nav .brand{font-weight:800;font-size:18px;letter-spacing:-.02em;margin:0 0 4px}
+  nav .tag{color:var(--muted);font-size:12px;margin:0 0 18px}
+  nav ul{list-style:none;margin:0;padding:0}
+  nav li a{display:block;padding:7px 12px;color:var(--muted);text-decoration:none;
+    border-radius:8px;font-size:14px}
+  nav li a:hover{background:var(--panel);color:var(--text)}
+  main{flex:1;min-width:0;padding:28px 0 100px}
+  section{border-bottom:1px solid var(--border);padding:8px 0 40px;margin-bottom:12px}
+  section:last-child{border-bottom:none}
+  h1{font-size:26px;letter-spacing:-.02em;margin:.2em 0 .6em;scroll-margin-top:20px}
+  h2{font-size:20px;margin:1.4em 0 .5em;padding-top:.3em}
+  h3{font-size:16px;margin:1.2em 0 .4em}
+  h4{font-size:14px;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;margin:1.1em 0 .3em}
+  p,li{color:var(--text)}
+  a{color:var(--accent)}
+  blockquote{border-left:3px solid var(--accent);margin:1em 0;padding:.4em 0 .4em 16px;color:var(--muted)}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;
+    background:var(--panel2);border-radius:5px;padding:1px 6px}
+  pre{background:var(--code);border:1px solid var(--border);border-radius:10px;
+    padding:14px 16px;overflow-x:auto}
+  pre code{background:none;padding:0;font-size:13px;line-height:1.5}
+  .tbl,table{width:100%;border-collapse:collapse;margin:1em 0;font-size:14px;display:block;overflow-x:auto}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  hr{border:none;border-top:1px solid var(--border);margin:1.5em 0}
+  footer{color:var(--muted);font-size:12px;padding:24px 0}
+  @media (max-width:760px){ .layout{flex-direction:column;gap:0} nav{position:static;height:auto;width:auto;padding:20px 0} main{padding-top:0} }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav>
+    <div class="brand">Achilles</div>
+    <div class="tag">User Guides</div>
+    <ul><li><a href="#getting-started">Getting Started</a></li>
+<li><a href="#cli-reference">CLI Reference</a></li>
+<li><a href="#reports-and-gating">Reports & Gating</a></li>
+<li><a href="#llm-and-agents">LLM Triage & Agents</a></li>
+<li><a href="#ci-and-hub">CI & the Scan Hub</a></li>
+<li><a href="#fleet">Fleet</a></li>
+<li><a href="#containers">Running in Containers</a></li></ul>
+  </nav>
+  <main>
+    <section id="getting-started"><h1>Getting Started</h1>
+<p>This gets you from an empty shell to a scan you understand.</p>
+<h2>1. Install</h2>
+<p>Achilles is a single Go binary (Go 1.26, no cgo).</p>
+<pre><code class="language-bash">git clone git@github.com:Warzuponus/achilles.git &amp;&amp; cd achilles
+make build            # -&gt; bin/achilles
+sudo cp bin/achilles /usr/local/bin/   # optional: put it on PATH
+</code></pre>
+<p>Verify the spine without installing any scanners — this ingests an existing SARIF
+file and runs the normalize → report path:</p>
+<pre><code class="language-bash">achilles --from-sarif internal/normalize/testdata/sample.sarif
+</code></pre>
+<h2>2. Get the scanners on PATH</h2>
+<p>A real scan shells out to scanner tools. The <strong>default profile</strong> uses five:</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Covers</th>
+<th>Install</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Opengrep</td>
+<td>multi-language patterns</td>
+<td><code>curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh \| bash</code></td>
+</tr>
+<tr>
+<td>gosec</td>
+<td>Go SAST</td>
+<td><code>go install github.com/securego/gosec/v2/cmd/gosec@latest</code></td>
+</tr>
+<tr>
+<td>osv-scanner</td>
+<td>dependency CVEs (SCA)</td>
+<td><code>go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest</code></td>
+</tr>
+<tr>
+<td>Trivy</td>
+<td>IaC / misconfig / secrets / SCA</td>
+<td><a href="https://github.com/aquasecurity/trivy">install script</a></td>
+</tr>
+<tr>
+<td>Gitleaks</td>
+<td>secret scanning</td>
+<td><a href="https://github.com/gitleaks/gitleaks/releases">release binary</a></td>
+</tr>
+</tbody>
+</table>
+<p>Missing tools <strong>degrade gracefully</strong> — Achilles skips them and scans with what's
+present (it doesn't fail the run). To avoid installing anything, run everything in
+containers instead: add <code>--runner docker</code> (uses the pinned images in
+<code>configs/tools.yaml</code>). <em>Exception:</em> Opengrep has no public image and always runs
+as a local binary, so keep it on PATH even in docker mode.</p>
+<h2>3. Your first scan</h2>
+<pre><code class="language-bash">achilles /path/to/code
+</code></pre>
+<p>You'll get a human-readable report on stdout: the tools that ran, a per-severity
+count, and each finding with its rule, location, and message. The run is also
+recorded to the <strong>Evidence Vault</strong> at <code>.achilles/vault.jsonl</code>.</p>
+<p>Write a shareable report instead of (or as well as) the terminal output:</p>
+<pre><code class="language-bash">achilles --html-report report.html /path/to/code   # open report.html in a browser
+</code></pre>
+<h2>4. The core knobs</h2>
+<ul>
+<li><strong><code>--profile default|full</code></strong> — <code>default</code> is the five baseline tools above.
+  <code>full</code> adds the heavy per-language analyzers (JVM/PHP/.NET/C++), which need
+  their prebuilt images + language prerequisites (see <code>deployments/&lt;tool&gt;/</code>).</li>
+<li><strong><code>--mode oss|commercial</code></strong> — the license gate. <code>commercial</code> (the strict one)
+  refuses any tool not marked <code>commercialSafe</code>, so you can safely run on customer
+  code. <code>oss</code> allows everything. Default is <code>oss</code>.</li>
+<li><strong><code>--runner local|docker</code></strong> — run tools as binaries on PATH, or as pinned
+  containers. Docker mode needs a Docker daemon.</li>
+<li><strong><code>--vault &lt;path&gt;</code></strong> — where the append-only Evidence Vault is written
+  (<code>.achilles/vault.jsonl</code> by default). It's the audit trail, the reproducibility
+  record, and the learning corpus. Use <code>--vault-backend postgres</code> (any PostgreSQL,
+  DSN in <code>$ACHILLES_VAULT_DSN</code>) when several processes — scans and the War Room —
+  should share one store (see <a href="#containers">Running in containers</a>).</li>
+<li><strong><code>--timeout 5m</code></strong> — overall scan timeout. Raise it for large repos or slow
+  LLM steps.</li>
+</ul>
+<h2>5. Reading results &amp; failing a build</h2>
+<p>By default Achilles <strong>reports</strong> but exits 0. To make it <strong>gate</strong>:</p>
+<pre><code class="language-bash">achilles --fail-on high /path/to/code    # exit 1 if any finding is &gt;= high
+</code></pre>
+<p>To fail only on <em>newly introduced</em> findings (the usual CI setup), pair it with a
+baseline or a diff — see <a href="#reports-and-gating">Reports &amp; Gating</a>.</p>
+<h2>Where to go next</h2>
+<ul>
+<li>Add AI verification + fix advice → <a href="#llm-and-agents">LLM Triage &amp; Agents</a></li>
+<li>Run it in CI → <a href="#ci-and-hub">CI &amp; the Scan Hub</a></li>
+<li>Every flag with examples → <a href="#cli-reference">CLI Reference</a></li>
+</ul></section>
+<section id="cli-reference"><h1>CLI Reference</h1>
+<p>Every <code>achilles</code> flag, grouped by task. (For <code>achilles-fleet</code>, see <a href="#fleet">Fleet</a>.)</p>
+<blockquote>
+<p><strong>Flags before the target.</strong> <code>achilles [flags] &lt;target-path&gt;</code>. Go's stdlib
+<code>flag</code> stops at the first positional, so a flag after the path is ignored.
+The target defaults to <code>.</code> if omitted.</p>
+</blockquote>
+<h2>Scan setup</h2>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config</code></td>
+<td><code>configs/tools.yaml</code></td>
+<td>tool registry file</td>
+</tr>
+<tr>
+<td><code>--profile</code></td>
+<td><code>default</code></td>
+<td><code>default</code> (baseline tools) or <code>full</code> (adds heavy per-language tools)</td>
+</tr>
+<tr>
+<td><code>--mode</code></td>
+<td><code>oss</code></td>
+<td>license mode: <code>oss</code> or <code>commercial</code> (strict — refuses non-<code>commercialSafe</code> tools)</td>
+</tr>
+<tr>
+<td><code>--attest</code></td>
+<td>—</td>
+<td>comma-separated tool IDs you hold a license attestation for (satisfies the gate in <code>commercial</code>)</td>
+</tr>
+<tr>
+<td><code>--runner</code></td>
+<td><code>local</code></td>
+<td>run tools <code>local</code> (PATH) or <code>docker</code> (pinned images)</td>
+</tr>
+<tr>
+<td><code>--timeout</code></td>
+<td><code>5m</code></td>
+<td>overall scan timeout</td>
+</tr>
+<tr>
+<td><code>--from-sarif</code></td>
+<td>—</td>
+<td>skip scanning; normalize an existing SARIF file (exercises the report spine)</td>
+</tr>
+<tr>
+<td><code>--sarif-out</code></td>
+<td>—</td>
+<td>also write each tool's raw SARIF into this directory</td>
+</tr>
+</tbody>
+</table>
+<h2>Evidence Vault</h2>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--vault</code></td>
+<td><code>.achilles/vault.jsonl</code></td>
+<td>vault path (file backend)</td>
+</tr>
+<tr>
+<td><code>--vault-backend</code></td>
+<td><code>file</code></td>
+<td><code>file</code> or <code>postgres</code>. <code>postgres</code> reads its connection string from <code>$ACHILLES_VAULT_DSN</code> (env only — never a flag, it holds a password)</td>
+</tr>
+<tr>
+<td><code>--vault-tenant</code></td>
+<td><code>default</code></td>
+<td>the <strong>project</strong> these results belong to (a namespace for grouping the repos you scan). The postgres backend stores it under the key <code>tenant-&lt;id&gt;</code>, which is what the War Room reads</td>
+</tr>
+</tbody>
+</table>
+<h2>Noise, baselines &amp; diff-aware scanning</h2>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--exclude</code></td>
+<td>—</td>
+<td>extra noise patterns, comma-separated (path segment like <code>tests</code>, or glob like <code>*.gen.go</code>)</td>
+</tr>
+<tr>
+<td><code>--no-default-excludes</code></td>
+<td><code>false</code></td>
+<td>disable the built-in vendored/generated/minified filter</td>
+</tr>
+<tr>
+<td><code>--no-correlate</code></td>
+<td><code>false</code></td>
+<td>disable cross-tool correlation (triage every duplicate report separately)</td>
+</tr>
+<tr>
+<td><code>--dry-run</code></td>
+<td><code>false</code></td>
+<td>scan, print the LLM cost estimate, stop before any model call or outward action</td>
+</tr>
+<tr>
+<td><code>--max-cost</code></td>
+<td><code>0</code></td>
+<td>refuse to start LLM work above this estimated USD spend (needs <code>--price-config</code>)</td>
+</tr>
+<tr>
+<td><code>--price-config</code></td>
+<td>—</td>
+<td>YAML per-model token prices (see <code>configs/prices.example.yaml</code>)</td>
+</tr>
+<tr>
+<td><code>--baseline</code></td>
+<td>—</td>
+<td>suppress findings whose fingerprint is in this baseline file</td>
+</tr>
+<tr>
+<td><code>--write-baseline</code></td>
+<td>—</td>
+<td>write current findings' fingerprints as a baseline to this file</td>
+</tr>
+<tr>
+<td><code>--diff</code></td>
+<td>—</td>
+<td>keep only findings in files changed vs this git ref (e.g. <code>origin/main</code>)</td>
+</tr>
+<tr>
+<td><code>--pr-mini</code></td>
+<td>—</td>
+<td>auto-baseline: seed the file if absent (no gate), else delta-scan against it</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="#reports-and-gating">Reports &amp; Gating</a> for how these combine.</p>
+<h2>Gating</h2>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--fail-on</code></td>
+<td>—</td>
+<td>exit non-zero if a finding at/above this severity survives filtering: <code>critical\|high\|medium\|low</code></td>
+</tr>
+</tbody>
+</table>
+<h2>LLM triage &amp; agents</h2>
+<p>Needs <code>--llm-model</code> and an API key in <code>ACHILLES_LLM_API_KEY</code> (or <code>OPENAI_API_KEY</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--triage</code></td>
+<td><code>false</code></td>
+<td>LLM triage + adversarial judge on each finding</td>
+</tr>
+<tr>
+<td><code>--remediate</code></td>
+<td><code>false</code></td>
+<td>propose fixes for high-confidence findings (implies <code>--triage</code>)</td>
+</tr>
+<tr>
+<td><code>--rag</code></td>
+<td><code>false</code></td>
+<td>RAG few-shot from past feedback (needs <code>--llm-embed-model</code>)</td>
+</tr>
+<tr>
+<td><code>--review</code></td>
+<td><code>false</code></td>
+<td>holistic full-repo security review agent</td>
+</tr>
+<tr>
+<td><code>--sca-advice</code></td>
+<td><code>false</code></td>
+<td>dependency-upgrade advisor (merge-safety scored)</td>
+</tr>
+<tr>
+<td><code>--threat-model</code></td>
+<td>—</td>
+<td>infer an OTM threat model, write it to this file</td>
+</tr>
+<tr>
+<td><code>--llm-base-url</code></td>
+<td><code>https://api.openai.com/v1</code></td>
+<td>OpenAI-compatible endpoint</td>
+</tr>
+<tr>
+<td><code>--llm-model</code></td>
+<td><code>$ACHILLES_LLM_MODEL</code></td>
+<td>default/fallback model</td>
+</tr>
+<tr>
+<td><code>--llm-judge-model</code></td>
+<td>—</td>
+<td>model for the judge pass (default: same as <code>--llm-model</code>)</td>
+</tr>
+<tr>
+<td><code>--llm-embed-model</code></td>
+<td><code>$ACHILLES_LLM_EMBED_MODEL</code></td>
+<td>embeddings model for <code>--rag</code></td>
+</tr>
+<tr>
+<td><code>--llm-auth</code></td>
+<td><code>key</code></td>
+<td>credential mode: <code>key</code> (Bearer, from <code>ACHILLES_LLM_API_KEY</code>; optional for local runtimes), <code>api-key</code> (same key as an <code>api-key:</code> header — Azure OpenAI), or <code>none</code> (no credential header — local runtimes). Extra headers, query, timeout and retries: <a href="#llm-and-agents">provider settings</a></td>
+</tr>
+<tr>
+<td><code>--model-config</code></td>
+<td>—</td>
+<td>YAML routing each task (triage/judge/remediation/review/sca/threat-model) to a model/endpoint</td>
+</tr>
+</tbody>
+</table>
+<p>Full walkthrough: <a href="#llm-and-agents">LLM Triage &amp; Agents</a>.</p>
+<h2>Feedback &amp; the learning loop</h2>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--feedback</code></td>
+<td>—</td>
+<td>record analyst feedback for a finding fingerprint, then exit</td>
+</tr>
+<tr>
+<td><code>--label</code></td>
+<td>—</td>
+<td><code>tp</code> or <code>fp</code> (with <code>--feedback</code>)</td>
+</tr>
+<tr>
+<td><code>--note</code></td>
+<td>—</td>
+<td>optional note (with <code>--feedback</code>)</td>
+</tr>
+<tr>
+<td><code>--rule-health</code></td>
+<td><code>false</code></td>
+<td>print per-rule TP/FP health from feedback, then exit</td>
+</tr>
+<tr>
+<td><code>--metrics</code></td>
+<td><code>false</code></td>
+<td>print a metrics rollup over the vault, then exit</td>
+</tr>
+<tr>
+<td><code>--research</code></td>
+<td><code>false</code></td>
+<td>research agents synthesize + validate new Opengrep rules</td>
+</tr>
+<tr>
+<td><code>--mine-rules</code></td>
+<td><code>false</code></td>
+<td>mine rules from analyst-confirmed findings (needs <code>--llm-model</code>)</td>
+</tr>
+<tr>
+<td><code>--rule-repo</code></td>
+<td><code>.achilles/generated-rules</code></td>
+<td>generated-rule repository directory</td>
+</tr>
+<tr>
+<td><code>--rule-shadow-days</code></td>
+<td><code>7</code></td>
+<td>admitted generated rules are report-only until this many days old</td>
+</tr>
+<tr>
+<td><code>--research-max</code></td>
+<td><code>20</code></td>
+<td>max dependencies to research per run (budget cap)</td>
+</tr>
+</tbody>
+</table>
+<h2>Report outputs</h2>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--html-report</code></td>
+<td>—</td>
+<td>self-contained HTML report (findings + AI review/advice/threat-model)</td>
+</tr>
+<tr>
+<td><code>--sarif-report</code></td>
+<td>—</td>
+<td>unified SARIF 2.1.0 report (for GitHub code scanning etc.)</td>
+</tr>
+<tr>
+<td><code>--junit</code></td>
+<td>—</td>
+<td>JUnit XML report (for CI test panels)</td>
+</tr>
+<tr>
+<td><code>--markdown</code></td>
+<td>—</td>
+<td>Markdown summary (good for a PR comment)</td>
+</tr>
+<tr>
+<td><code>--github</code></td>
+<td><code>false</code></td>
+<td>emit GitHub Actions annotations to stdout</td>
+</tr>
+<tr>
+<td><code>--sbom</code></td>
+<td>—</td>
+<td>generate a CycloneDX SBOM (via Syft) to this file</td>
+</tr>
+<tr>
+<td><code>--diagnostics</code></td>
+<td>—</td>
+<td>write a diagnostics sidecar (tool/parse failures + LLM token usage)</td>
+</tr>
+<tr>
+<td><code>--strict-tools</code></td>
+<td><code>$ACHILLES_STRICT_TOOLS</code></td>
+<td>fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan. On in the container image — see <a href="#containers">Running in containers</a></td>
+</tr>
+</tbody>
+</table>
+<h2>GitHub integrations (outward-facing, opt-in)</h2>
+<p>Need <code>GITHUB_TOKEN</code> and <code>--repo</code> (or <code>$GITHUB_REPOSITORY</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--repo</code></td>
+<td><code>$GITHUB_REPOSITORY</code></td>
+<td><code>owner/name</code> for GitHub integrations</td>
+</tr>
+<tr>
+<td><code>--pr-comment</code></td>
+<td><code>0</code></td>
+<td>post/update a sticky summary comment on this PR number</td>
+</tr>
+<tr>
+<td><code>--pr-review</code></td>
+<td><code>0</code></td>
+<td>post findings as inline review comments (needs <code>--pr-head-sha</code>)</td>
+</tr>
+<tr>
+<td><code>--pr-head-sha</code></td>
+<td>—</td>
+<td>PR head commit SHA for <code>--pr-review</code></td>
+</tr>
+<tr>
+<td><code>--file-issues</code></td>
+<td><code>false</code></td>
+<td>file/reconcile issues (dedupe by fingerprint; closed suppresses; resolved auto-close)</td>
+</tr>
+<tr>
+<td><code>--fix-pr</code></td>
+<td><code>false</code></td>
+<td>open a review PR with auto-fixes (needs <code>--remediate</code>; <strong>never merges</strong>)</td>
+</tr>
+<tr>
+<td><code>--fix-remote</code></td>
+<td><code>origin</code></td>
+<td>git remote to push the auto-fix branch to</td>
+</tr>
+<tr>
+<td><code>--fix-base</code></td>
+<td>current branch</td>
+<td>base branch for the auto-fix PR</td>
+</tr>
+</tbody>
+</table>
+<h2>Common recipes</h2>
+<pre><code class="language-bash"># Local dev: fast scan, HTML report, don't fail
+achilles --html-report report.html .
+
+# CI gate: only new high-severity findings vs main, emit SARIF + annotations
+achilles --diff origin/main --baseline .achilles/baseline.json \
+  --sarif-report achilles.sarif --github --fail-on high .
+
+# AI-assisted full analysis (needs a key)
+export ACHILLES_LLM_API_KEY=...
+achilles --triage --remediate --review --sca-advice \
+  --threat-model tm.otm.json --html-report report.html \
+  --llm-model gpt-4o .
+
+# Record analyst feedback (a false positive), then see rule health
+achilles --feedback &lt;fingerprint&gt; --label fp --note &quot;test fixture&quot;
+achilles --rule-health
+</code></pre></section>
+<section id="reports-and-gating"><h1>Reports & Gating</h1>
+<p>How to get the output you want, and how to fail a build on the <em>right</em> findings.</p>
+<h2>Output formats</h2>
+<p>Achilles prints a human report to stdout by default. Add any of these to also
+write a file (they compose — ask for several at once):</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Format</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--html-report f.html</code></td>
+<td>self-contained HTML</td>
+<td>humans — open in a browser; findings + AI review, upgrade advice, and threat model in one page</td>
+</tr>
+<tr>
+<td><code>--sarif-report f.sarif</code></td>
+<td>SARIF 2.1.0</td>
+<td>GitHub code scanning, other SARIF consumers</td>
+</tr>
+<tr>
+<td><code>--junit f.xml</code></td>
+<td>JUnit XML</td>
+<td>CI test panels</td>
+</tr>
+<tr>
+<td><code>--markdown f.md</code></td>
+<td>Markdown table</td>
+<td>pasting into a PR/issue</td>
+</tr>
+<tr>
+<td><code>--github</code></td>
+<td>Actions annotations</td>
+<td>inline <code>::error</code>/<code>::warning</code> in a workflow log</td>
+</tr>
+<tr>
+<td><code>--sbom f.json</code></td>
+<td>CycloneDX SBOM</td>
+<td>supply-chain inventory (via Syft; independent of findings)</td>
+</tr>
+<tr>
+<td><code>--diagnostics f.json</code></td>
+<td>JSON sidecar</td>
+<td>debugging coverage — which tools failed to run/parse, LLM token usage</td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>HTML report</strong> is the showcase: it folds in the LLM agents' output when they
+ran (systemic-risk review, dependency upgrade plan, STRIDE threat model) plus each
+finding's triage verdict and suggested fix. See <a href="#llm-and-agents">LLM Triage &amp; Agents</a>.</p>
+<pre><code class="language-bash">achilles --html-report report.html --sarif-report achilles.sarif .
+</code></pre>
+<h2>Gating: fail on severity</h2>
+<p>By default Achilles exits 0 (report-only). Make it gate with <code>--fail-on</code>:</p>
+<pre><code class="language-bash">achilles --fail-on high .     # exit 1 if any surviving finding is &gt;= high
+</code></pre>
+<p>Severity order: <code>critical &gt; high &gt; medium &gt; low</code>. The gate runs <em>after</em> all
+filtering below, so it only ever considers findings you didn't suppress.</p>
+<h3>One other thing fails the run</h3>
+<p>Independent of <code>--fail-on</code>: if <strong>Evidence Vault writes fail</strong>, the run exits
+non-zero even when no finding would have gated it. The vault is the audit trail,
+so a scan whose evidence didn't persist must not look like a clean pass. You get
+the failure count and the first cause (e.g. a database permission error), and the
+check runs <em>before</em> the severity gate so an outage can't hide behind a passing
+gate. The report and other outputs are still produced.</p>
+<h2>Cutting noise so the gate is useful</h2>
+<p>A gate on <em>every</em> finding fails forever on legacy debt. Three tools narrow it to
+what matters — they stack.</p>
+<h3>1. Noise filter (on by default)</h3>
+<p>Vendored / generated / minified files are dropped before findings are counted.
+Add your own patterns or turn it off:</p>
+<pre><code class="language-bash">achilles --exclude 'tests,*.gen.go' .     # extra patterns (path segment or glob)
+achilles --no-default-excludes .          # disable the built-in filter
+</code></pre>
+<p>Note: test code is <strong>not</strong> excluded by default — real issues live in tests too.</p>
+<h3>2. Baselines: only new findings</h3>
+<p>A baseline is a file of finding fingerprints to suppress. Seed it once, commit it,
+then future scans only surface (and gate on) findings not in it.</p>
+<pre><code class="language-bash">achilles --write-baseline .achilles/baseline.json .   # seed from the current state
+git add .achilles/baseline.json &amp;&amp; git commit -m &quot;seed achilles baseline&quot;
+
+# later runs: pre-existing findings are suppressed, new ones surface
+achilles --baseline .achilles/baseline.json --fail-on high .
+</code></pre>
+<p>Findings are classified <strong>introduced / pre-existing / fixed</strong> against the baseline,
+so you can see churn. When a finding is legitimately a false-positive-in-context,
+regenerate the baseline to accept it (this is exactly how Achilles scans itself —
+see <code>.achilles/baseline.json</code>).</p>
+<h3>3. Diff-aware: only changed files</h3>
+<p>On a PR, scan only files changed vs the base branch:</p>
+<pre><code class="language-bash">achilles --diff origin/main --fail-on high .
+</code></pre>
+<p>Combine with a baseline for the strictest, quietest gate — new findings, in
+changed files, at/above your severity floor:</p>
+<pre><code class="language-bash">achilles --diff origin/main --baseline .achilles/baseline.json --fail-on high .
+</code></pre>
+<h3><code>--pr-mini</code>: baseline autopilot</h3>
+<p>If you don't want to manage a baseline file by hand, <code>--pr-mini</code> does it: if the
+file is absent it seeds it (full scan, no gate); if present it delta-scans and
+gates on what's new. It's mutually exclusive with <code>--baseline</code>/<code>--write-baseline</code>.</p>
+<pre><code class="language-bash">achilles --pr-mini .achilles/pr-baseline.json --fail-on high .
+</code></pre>
+<h2>Recommended CI gate</h2>
+<pre><code class="language-bash">achilles \
+  --diff origin/${BASE_BRANCH} \
+  --baseline .achilles/baseline.json \
+  --sarif-report achilles.sarif \
+  --github \
+  --fail-on high \
+  .
+</code></pre>
+<p>Diff + baseline keep the signal high; <code>--sarif-report</code> feeds the Security tab;
+<code>--github</code> annotates the diff; <code>--fail-on high</code> blocks the merge. Wire it up in
+<a href="#ci-and-hub">CI &amp; the Scan Hub</a>.</p></section>
+<section id="llm-and-agents"><h1>LLM Triage & Agents</h1>
+<p>Achilles uses LLMs to <em>interpret</em> scanner output — verify findings, propose fixes,
+and produce holistic analysis — and it can route each task to a different model.
+All of it is <strong>opt-in</strong>; with no LLM configured, Achilles is a pure scanner.</p>
+<h2>Setup</h2>
+<p>Achilles talks to any <strong>OpenAI-compatible</strong> endpoint. You need a model and a key:</p>
+<pre><code class="language-bash">export ACHILLES_LLM_API_KEY=...        # or OPENAI_API_KEY
+achilles --triage --llm-model gpt-4o /path/to/code
+</code></pre>
+<p>Point <code>--llm-base-url</code> elsewhere for a self-hosted or alternative provider
+(Ollama, vLLM, LiteLLM, OpenRouter, Azure OpenAI, a gateway, etc.):</p>
+<pre><code class="language-bash">achilles --triage --llm-base-url https://ollama.com/v1 --llm-model glm-5.2 .
+</code></pre>
+<p>The key is read from the environment only — it never appears on a command line or
+in the vault.</p>
+<h2>Measuring whether triage actually works</h2>
+<p>Everything below is only worth having if it is <em>measurably</em> better than the
+scanner's raw output. <code>achilles-eval</code> scores the triage layer against a labeled
+corpus (<a href="../evals/README.md"><code>evals/</code></a>) so a change to prompts, context, or model
+routing can be proven instead of asserted:</p>
+<pre><code class="language-bash">make eval-context                                    # hermetic: no model, no key
+make eval-verdict-ollama EVAL_ARGS=&quot;--repeat 3&quot;      # the Ollama open-model routing (needs a key)
+</code></pre>
+<p><strong>Eval the routing, not a model.</strong> The verdict target drives a committed
+<code>--model-config</code>, because triage and judge deliberately use <em>different</em> models,
+so a score belongs to the pair, and the report names both. Measuring some model you
+don't actually run tells you nothing about production.</p>
+<p><strong>Context mode</strong> is hermetic. For each case it builds the prompt Achilles would
+send and checks whether the deciding evidence is inside it — answering <em>did we
+give the model what it needed?</em> with no API call, so it runs in CI and gates
+against regressions (<code>make eval-gate</code>).</p>
+<p><strong>Verdict mode</strong> runs the real triage→judge path against a live model and scores
+verdicts against the labels. Its headline is <strong>balanced accuracy</strong>, which weights
+both classes equally: a triager that confirms everything scores 100% on a
+true-positive-only corpus and 50% here. It also reports TP recall, FP suppression,
+a calibration gap (<code>|mean confidence − accuracy|</code>, so an overconfident model is
+visible), and — with <code>--repeat</code> — which cases the model answers inconsistently on
+the same input.</p>
+<p>Both modes write JSON with <code>--out</code> and diff against a previous run with
+<code>--baseline</code>, which is how you show a change helped.</p>
+<h2>Knowing the bill first: <code>--dry-run</code> and <code>--max-cost</code></h2>
+<p>LLM spend scales with findings, so a large repo — or the fleet fanning a scan out
+across tenants — can run up a real bill before anyone notices. Achilles estimates
+the cost <strong>before the first model call</strong>:</p>
+<pre><code class="language-bash">achilles --triage --remediate --llm-model &lt;m&gt; \
+  --price-config configs/prices.yaml --dry-run .
+</code></pre>
+<pre><code>LLM cost estimate (pre-flight; no model has been called)
+  TASK           MODEL              CALLS    IN TOKENS   OUT TOKENS        USD
+  judge          gpt-4o-mini            2          867          240     0.0062
+  remediation    gpt-4o-mini            2          363         1200     0.0191
+  triage         gpt-4o-mini            2          404          500     0.0087
+  TOTAL                                 6         1634         1940     0.0340
+</code></pre>
+<p><code>--dry-run</code> runs the whole deterministic pipeline (scan, normalize, noise filter,
+diff, baseline, correlate), writes local reports, applies <code>--fail-on</code>, and then
+stops: <strong>no model call and no outward-facing action</strong> — no PR comment, no inline
+review, no issues, no fix PR, no research or rule mining.</p>
+<p><code>--max-cost &lt;usd&gt;</code> is the guardrail for real runs. If the estimate exceeds it,
+Achilles prints the breakdown and exits non-zero <strong>without calling any model</strong>:</p>
+<pre><code>achilles: estimated LLM spend $0.0340 exceeds --max-cost $0.0100; no model was
+called (raise the cap, narrow the scan with --diff/--baseline, or route cheaper models)
+</code></pre>
+<p><strong>You supply the prices.</strong> Achilles ships no built-in price table: prices change
+without notice, differ per provider for the same model name, and are often
+negotiated, so a cap computed from prices we guessed would be worse than no cap.
+Copy <a href="../configs/prices.example.yaml"><code>configs/prices.example.yaml</code></a>, fill in your
+provider's published numbers, and pass it with <code>--price-config</code>. Tokens are always
+estimated (we can compute those from our own prompts); dollars appear only for
+models you have priced, and <code>--max-cost</code> <strong>refuses to run</strong> rather than enforce a
+cap it cannot compute.</p>
+<p>What the estimate does and does not cover:</p>
+<ul>
+<li><strong>Reflected:</strong> the surfaced finding set only (post-noise, post-diff,
+  post-baseline), correlated duplicates costing nothing, and findings the
+  calibrator auto-resolves without an LLM call.</li>
+<li><strong>Upper bound:</strong> with <code>--remediate</code>, every triaged finding is counted, since
+  which ones turn out high-confidence is unknowable in advance.</li>
+<li><strong>Excluded, and named in the output:</strong> the one-per-scan whole-repo agents
+  (<code>--review</code>, <code>--sca-advice</code>, <code>--threat-model</code>), <code>--research</code>/<code>--mine-rules</code>, and
+  the extra prompt tokens <code>--rag</code> adds.</li>
+<li><strong>Approximate:</strong> tokens are counted at ~4 characters each and output sizes are
+  per-task defaults. Compare against <code>--diagnostics</code> after a real run.</li>
+</ul>
+<p>The cap is checked <strong>pre-flight only</strong> — it does not abort a run mid-way if actual
+spend outpaces the estimate.</p>
+<h2>Cross-tool correlation (before triage)</h2>
+<p>Achilles runs overlapping engines on purpose, so the same defect often arrives from
+two or three tools — Opengrep and gosec on one Go line, Trivy and Checkov on one
+infrastructure-as-code resource. Before triage, findings that share a <strong>file, line, and CWE set</strong>
+but come from <strong>different tools</strong> are grouped into a cluster, and only the
+highest-severity member is sent to the LLM. The rest inherit its verdict, so a
+defect costs one triage+judge pair no matter how many tools reported it.</p>
+<p>Correlation <strong>collapses nothing</strong>: every finding keeps its own fingerprint,
+severity, and behaviour under <code>--baseline</code>, <code>--file-issues</code>, and <code>--fail-on</code>. The
+report shows the overlap instead of hiding it:</p>
+<pre><code>  [high] B602
+    subprocess call with shell=True
+    at run.py:5  (bandit)
+    [CWE-78]
+    also reported by: Opengrep OSS:achilles.python.subprocess-shell-true
+    triage: true_positive  confidence=0.90  exploitability=reachable
+</code></pre>
+<p>and the duplicate records where its verdict came from:</p>
+<pre><code>    (verdict inherited from correlated finding 17cf544325f61c67)
+</code></pre>
+<p>The key is deliberately strict — a finding with no CWE or no line number never
+clusters, and one tool reporting twice on a line is left alone — because a wrong
+merge costs a wrong verdict while a missed merge costs one extra LLM call. Two
+things still take precedence over an inherited verdict: <strong>calibration</strong> (feedback
+about a finding's <em>own</em> rule outranks a sibling's verdict) and <strong>remediation</strong>,
+which is never inherited, since a patch belongs to one specific finding. Disable
+the whole thing with <code>--no-correlate</code>.</p>
+<h2>Per-finding: triage → judge → remediation</h2>
+<p>Achilles sends the <strong>enclosing function or block</strong> as context, not a fixed number
+of lines either side — a 3-line window usually hides the signature and the guard
+clause that decide whether a finding is real. Brace-matching covers C-family
+languages (Go, Java, JS/TS, C/C++, C#, PHP, Rust, Swift, Kotlin, Scala, HCL) and
+indentation covers Python; other file types keep a fixed radius. It's a heuristic,
+so it's bounded: the window must contain the flagged line, it's capped (oversized
+scopes are clamped and labelled <code>// enclosing scope truncated to N lines</code>), and
+anything unresolved falls back to the radius — which is a floor, so context never
+shrinks. Wider prompts cost more; <code>--dry-run</code> shows exactly how much before you
+pay it.</p>
+<ul>
+<li><strong><code>--triage</code></strong> — for each finding, Achilles adds code context and asks the model
+  for a structured verdict: <code>true_positive</code> / <code>false_positive</code> / <code>uncertain</code>, a
+  confidence, exploitability, and reasoning. A second <strong>adversarial judge</strong> pass
+  then tries to <em>refute</em> that verdict — only unrefuted true-positives with
+  confidence ≥ 0.7 are treated as high-confidence.</li>
+<li><strong><code>--remediate</code></strong> — for those high-confidence findings, propose a fix: a summary
+  plus a unified diff when a clean patch is possible, or prose guidance otherwise.
+  Implies <code>--triage</code>. Achilles proposes; it never auto-applies (see <code>--fix-pr</code> in
+  <a href="#ci-and-hub">CI &amp; the Scan Hub</a> for opening a <em>review</em> PR).</li>
+</ul>
+<pre><code class="language-bash">achilles --remediate --llm-model gpt-4o --html-report report.html .
+</code></pre>
+<p>Verdicts and fixes show up per-finding in the HTML report and are recorded to the
+vault.</p>
+<h2>Whole-repo agents</h2>
+<p>These reason over the codebase profile + findings rather than one finding at a time:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Produces</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--review</code></td>
+<td><strong>Systemic risks</strong> — architectural weaknesses, themes across findings, missing controls</td>
+</tr>
+<tr>
+<td><code>--sca-advice</code></td>
+<td><strong>Dependency upgrade plan</strong> — what to bump, merge-risk scored, security-driven first</td>
+</tr>
+<tr>
+<td><code>--threat-model f.otm.json</code></td>
+<td>an <strong>OTM threat model</strong> — trust zones, components, STRIDE threats + mitigations</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">achilles --review --sca-advice --threat-model tm.otm.json \
+  --html-report report.html --llm-model gpt-4o .
+</code></pre>
+<h2>The learning loop</h2>
+<p>Achilles gets quieter over time from analyst feedback:</p>
+<pre><code class="language-bash">achilles --feedback &lt;fingerprint&gt; --label fp --note &quot;md5 used for a cache key&quot;
+</code></pre>
+<ul>
+<li><strong>Calibration</strong> — once a rule accrues enough <code>fp</code> feedback, Achilles
+  auto-resolves it <em>without</em> an LLM call (deterministic pre-triage for chronically
+  noisy rules).</li>
+<li><strong>RAG</strong> (<code>--rag</code>, needs <code>--llm-embed-model</code>) — injects similar past findings and
+  how analysts ruled them as few-shot context for triage.</li>
+<li><strong><code>--rule-health</code></strong> prints per-rule TP/FP rates so you can see what's noisy.</li>
+<li><strong><code>--mine-rules</code></strong> turns analyst-confirmed findings into new Opengrep rules
+  (validated before they can run — see <a href="../DESIGN.md">DESIGN.md</a> §9).</li>
+</ul>
+<h2>Multi-model routing</h2>
+<p>Different tasks want different models — a fast/cheap one for high-volume triage, a
+strong reasoner for the judge and threat model, a good coder for remediation. Map
+tasks to models in a YAML file and pass it with <code>--model-config</code>:</p>
+<pre><code class="language-yaml"># models.yaml — any task you omit falls back to --llm-model
+tasks:
+  triage:       { model: gpt-4o-mini }
+  judge:        { model: gpt-4o }
+  remediation:  { model: gpt-4o }
+  review:       { model: gpt-4o }
+  sca:          { model: gpt-4o-mini }
+  threat-model: { model: gpt-4o }
+</code></pre>
+<pre><code class="language-bash">achilles --triage --review --sca-advice \
+  --llm-model gpt-4o-mini --model-config models.yaml .
+</code></pre>
+<p>Routable task names: <code>triage</code>, <code>judge</code>, <code>remediation</code>, <code>review</code>, <code>sca</code>,
+<code>threat-model</code>, <code>research</code>, <code>mine-rules</code>. A task entry may also set its own <code>baseURL</code>. The API key is shared
+across all of them (one <code>ACHILLES_LLM_API_KEY</code>), as are the provider settings below.</p>
+<h3>Any OpenAI-compatible provider</h3>
+<p>Achilles speaks the OpenAI Chat Completions wire format, so anything that exposes
+<code>POST {base-url}/chat/completions</code> works: OpenAI, Azure OpenAI, Ollama, vLLM,
+llama.cpp, LM Studio, LiteLLM, OpenRouter, and gateways in front of them.
+<code>--llm-base-url</code> is the URL <em>before</em> <code>/chat/completions</code>.</p>
+<p>Provider differences are settings, not code. <code>--llm-auth</code> picks how the key is
+sent; environment variables cover the rest (they are env-only so CI, the fleet and
+containers pass them through unchanged):</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--llm-auth key</code></td>
+<td><code>Authorization: Bearer $ACHILLES_LLM_API_KEY</code> (or <code>OPENAI_API_KEY</code>). An <strong>empty key sends no header</strong>, so keyless local runtimes just work.</td>
+</tr>
+<tr>
+<td><code>--llm-auth api-key</code></td>
+<td>same key, sent as an <code>api-key:</code> header (Azure OpenAI).</td>
+</tr>
+<tr>
+<td><code>--llm-auth none</code></td>
+<td>never send a credential — local runtimes, or auth carried in <code>ACHILLES_LLM_HEADERS</code>.</td>
+</tr>
+<tr>
+<td><code>ACHILLES_LLM_HEADERS</code></td>
+<td>extra headers on every request, <code>Name=Value,Name2=Value2</code> (OpenRouter's <code>HTTP-Referer</code> / <code>X-Title</code>, gateway routing headers). Values may contain <code>=</code> but not <code>,</code>.</td>
+</tr>
+<tr>
+<td><code>ACHILLES_LLM_QUERY</code></td>
+<td>query string, <code>name=value,...</code> — Azure's <code>api-version=2024-10-21</code>.</td>
+</tr>
+<tr>
+<td><code>ACHILLES_LLM_TIMEOUT</code></td>
+<td>per-request timeout as a Go duration (default <code>120s</code>). Raise it, e.g. <code>10m</code>, for slow CPU-bound local models.</td>
+</tr>
+<tr>
+<td><code>ACHILLES_LLM_OMIT_TEMPERATURE</code></td>
+<td><code>true</code> drops the <code>temperature</code> field. Needed for reasoning models (OpenAI o-series / GPT-5 class) that reject any explicit value.</td>
+</tr>
+<tr>
+<td><code>ACHILLES_LLM_MAX_TOKENS</code></td>
+<td>cap output tokens. <code>ACHILLES_LLM_MAX_TOKENS_PARAM</code> names the wire field: <code>max_tokens</code> (default, widest support) or <code>max_completion_tokens</code> (newer OpenAI models).</td>
+</tr>
+<tr>
+<td><code>ACHILLES_LLM_MAX_RETRIES</code></td>
+<td>retries on HTTP 429/502/503/504 with backoff, honoring <code>Retry-After</code> (default <code>2</code>; negative disables).</td>
+</tr>
+</tbody>
+</table>
+<p>Examples:</p>
+<pre><code class="language-bash"># Local Ollama — no key, longer timeout
+ACHILLES_LLM_TIMEOUT=10m achilles --triage --llm-auth none \
+  --llm-base-url http://localhost:11434/v1 --llm-model qwen3:32b .
+
+# Azure OpenAI — the deployment is part of the base URL
+export ACHILLES_LLM_API_KEY=&lt;azure-key&gt;
+ACHILLES_LLM_QUERY=api-version=2024-10-21 achilles --triage --llm-auth api-key \
+  --llm-base-url https://&lt;resource&gt;.openai.azure.com/openai/deployments/&lt;deployment&gt; \
+  --llm-model &lt;deployment&gt; .
+
+# OpenRouter
+export ACHILLES_LLM_API_KEY=&lt;openrouter-key&gt;
+ACHILLES_LLM_HEADERS=&quot;HTTP-Referer=https://example.com,X-Title=achilles&quot; achilles --triage \
+  --llm-base-url https://openrouter.ai/api/v1 --llm-model &lt;vendor&gt;/&lt;model&gt; .
+
+# OpenAI reasoning model
+ACHILLES_LLM_OMIT_TEMPERATURE=true ACHILLES_LLM_MAX_TOKENS_PARAM=max_completion_tokens \
+  achilles --triage --llm-model &lt;reasoning-model&gt; .
+</code></pre>
+<p><strong>What Achilles tolerates from imperfect servers.</strong> Structured output is requested
+as <code>json_schema</code> and, if the server rejects the <code>response_format</code> (HTTP 400, 404,
+405, 415, 422, 500, 501, or a 200 with an unusable body), retried once as plain
+<code>json_object</code>; credential, rate-limit, timeout and network failures are <em>not</em>
+retried that way, since they would only fail again. The schema is sent as OpenAI
+<code>strict</code> only when it satisfies strict mode's rules. Replies are parsed after
+stripping <code>&lt;think&gt;…&lt;/think&gt;</code> blocks and code fences; if <code>content</code> is empty, the
+server's <code>reasoning_content</code> / <code>reasoning</code> is used. Token usage is reported as 0
+when a server omits <code>usage</code>.</p>
+<p><strong>Quality is per-model, not per-protocol.</strong> "Works" means wire-compatible; the
+measured triage accuracy differs a lot between models (see the eval harness in
+<a href="../evals/README.md"><code>evals/</code></a>). Run it against your own endpoint before trusting
+gating decisions to it.</p>
+<h3>Open models via Ollama Cloud</h3>
+<p>Ollama Cloud is OpenAI-compatible, so you can mix open models per task. Achilles
+ships a bake-off-derived routing at <a href="../configs/models.ollama.yaml"><code>configs/models.ollama.yaml</code></a>:</p>
+<pre><code class="language-bash">export ACHILLES_LLM_API_KEY=&lt;ollama-key&gt;
+achilles --triage --review --sca-advice --threat-model tm.otm.json \
+  --llm-base-url https://ollama.com/v1 \
+  --llm-model glm-5.2 \
+  --model-config configs/models.ollama.yaml \
+  --html-report report.html .
+</code></pre>
+<p>That config routes <code>triage</code>/<code>review</code>/<code>sca</code> → <code>minimax-m2.7</code> (fast, well-calibrated),
+<code>judge</code>/<code>remediation</code>/<code>threat-model</code> → <code>kimi-k2.6</code> (deepest reasoner), with
+<code>glm-5.2</code> as the fallback. Tune it freely.</p>
+<blockquote>
+<p><strong>Note on open models.</strong> They're looser than frontier models about JSON shape.
+Achilles hardens for this (fence-stripping + a schema-validated repair retry), but
+output quality still varies run-to-run — the agents are best-effort by design and
+never block the scan.</p>
+</blockquote></section>
+<section id="ci-and-hub"><h1>CI & the Scan Hub</h1>
+<p>Three ways to run Achilles in GitHub Actions, from simplest to most powerful.
+For every way to run Achilles (workstation, containers, CI, scheduled), see <a href="../DEPLOY.md">DEPLOY.md</a>.</p>
+<h2>Option A — per-PR gate (in the repo being scanned)</h2>
+<p>Copy <a href="../.github/workflows/scan-example.yml"><code>.github/workflows/scan-example.yml</code></a>
+into a repo. It runs on pull requests, annotates the diff, uploads SARIF to code
+scanning, and fails only on newly-introduced high-severity findings. The core step:</p>
+<pre><code class="language-yaml">- uses: Warzuponus/achilles@main
+  with:
+    target: &quot;.&quot;
+    mode: &quot;commercial&quot;
+    args: &gt;-
+      --diff origin/${{ github.base_ref }}
+      --baseline .achilles/baseline.json
+      --sarif-report achilles.sarif
+      --github
+      --fail-on high
+</code></pre>
+<p>The composite action installs the binary + the baseline scanners
+(Opengrep, gosec, osv-scanner, Trivy, Gitleaks) for you. No LLM key needed.</p>
+<h2>Option B — routed LLM full scan</h2>
+<p>Copy <a href="../.github/workflows/scan-ollama-example.yml"><code>.github/workflows/scan-ollama-example.yml</code></a>
+for a scheduled, LLM-assisted scan using multi-model routing.</p>
+<ol>
+<li>Add <strong>one</strong> repo/org secret: <strong><code>ACHILLES_LLM_API_KEY</code></strong> (your Ollama Cloud key).
+   <em>Do this yourself — never hard-code a key in a workflow.</em></li>
+<li>The workflow sets <code>ACHILLES_LLM_BASE_URL=https://ollama.com/v1</code>, writes the
+   routing inline (mirrors <a href="../configs/models.ollama.yaml"><code>configs/models.ollama.yaml</code></a>),
+   and runs the agents + HTML report:</li>
+</ol>
+<pre><code class="language-yaml">env:
+  ACHILLES_LLM_API_KEY: ${{ secrets.ACHILLES_LLM_API_KEY }}
+  ACHILLES_LLM_BASE_URL: https://ollama.com/v1
+# ... args: --model-config models.ollama.yaml --review --sca-advice
+#           --threat-model tm.otm.json --html-report achilles-report.html
+</code></pre>
+<p>It uploads <code>achilles-report.html</code> (and SARIF/threat-model) as run artifacts.
+Because full LLM scans are heavier than a gate, it runs on a schedule /
+<code>workflow_dispatch</code>, not every PR.</p>
+<h2>Option C — the central scan hub</h2>
+<p>Scan <strong>other</strong> repos from the Achilles repo, so the key + routing live in one place
+and targets need <strong>no secret and no workflow</strong>. This is the GitHub-Actions
+expression of the fleet model.
+Workflow: <a href="../.github/workflows/scan-hub.yml"><code>.github/workflows/scan-hub.yml</code></a>.</p>
+<h3>One-time setup (org/repo admin)</h3>
+<ol>
+<li><strong>Create a GitHub App</strong> in the org: repository permission <strong>Contents: Read</strong>
+   only, no webhook, "Only on this account."</li>
+<li><strong>Install it</strong> on the repos you want scannable — only those get read access.</li>
+<li>Add two secrets to <code>Warzuponus/achilles</code>:
+   - <code>SCANNER_APP_ID</code> — the App's ID
+   - <code>SCANNER_APP_PRIVATE_KEY</code> — the App's <strong>private key</strong> (the <code>.pem</code> contents,
+     from the App's <em>Private keys</em> section — <strong>not</strong> the client secret)
+   - (<code>ACHILLES_LLM_API_KEY</code> is already the scan-hub's LLM key.)</li>
+</ol>
+<p>Set the private key reliably with:</p>
+<pre><code class="language-bash">gh secret set SCANNER_APP_PRIVATE_KEY -R Warzuponus/achilles &lt; your-app.private-key.pem
+</code></pre>
+<h3>Running it</h3>
+<p>Actions → <strong>Achilles scan hub</strong> → <em>Run workflow</em> → enter the target repo name
+(e.g. <code>example-app</code>). The workflow:</p>
+<pre><code class="language-yaml">- uses: actions/create-github-app-token@v1   # short-lived, scoped to just the target
+  id: tok
+  with:
+    app-id: ${{ secrets.SCANNER_APP_ID }}
+    private-key: ${{ secrets.SCANNER_APP_PRIVATE_KEY }}
+    owner: ${{ github.repository_owner }}
+    repositories: ${{ inputs.target_repo }}
+- uses: actions/checkout@v4
+  with:
+    repository: ${{ github.repository_owner }}/${{ inputs.target_repo }}
+    token: ${{ steps.tok.outputs.token }}
+    path: target
+# then a routed scan of ./target → achilles-report.html uploaded as an artifact
+</code></pre>
+<p>Inputs: <code>target_repo</code> (required, repo name only — the owner is this repository's owner)
+and <code>ref</code> (optional branch/tag/SHA; blank = the default branch). Secrets:
+<code>SCANNER_APP_ID</code>, <code>SCANNER_APP_PRIVATE_KEY</code>, and the LLM key <code>ACHILLES_LLM_API_KEY</code>.</p>
+<p><strong>Least privilege by design:</strong> a per-run token scoped to exactly the target repo
+(not a personal PAT), and results are artifacts of the hub run — nothing is written
+back to the target. To also post SARIF to a target's Security tab, grant the App
+<strong>Code scanning: Write</strong> on that repo and add an upload-sarif step.</p>
+<p>Download the report from <strong>the run → Artifacts → <code>achilles-&lt;repo&gt;</code> → <code>achilles-report.html</code></strong>
+(the same artifact also holds <code>achilles.sarif</code>, <code>achilles-report.md</code> and the threat
+model). There is no cloud vault: the artifacts are the record.</p>
+<h2>Keeping history across CI runs</h2>
+<p>By default a CI scan's Evidence Vault is ephemeral — it lives and dies with the
+job, and the scan hub publishes its results as workflow artifacts (HTML report,
+SARIF, Markdown, threat model) with <strong>no central vault</strong>. There are two ways to keep
+history:</p>
+<ul>
+<li><strong>Baselines.</strong> Commit <code>.achilles/baseline.json</code> (see
+  <a href="#reports-and-gating">Reports &amp; Gating</a>) and let the gate fail only on findings
+  that are new relative to it. This needs no shared storage.</li>
+<li><strong>A shared PostgreSQL vault.</strong> Point <code>--vault-backend postgres</code> at a database your
+  runner can reach (DSN in <code>ACHILLES_VAULT_DSN</code>, supplied from a repository secret)
+  and use <code>--vault-tenant &lt;project&gt;</code> to group the repos. The War Room running on
+  your own machine or server against the same database then shows those scans. This
+  works for self-hosted runners that can see your database; GitHub-hosted runners
+  need the database to be reachable from the internet, which you should only do
+  deliberately and over TLS. It is not set up by any of the bundled workflows.</li>
+</ul>
+<p>If you do write to a vault from CI, the vault is load-bearing: if those writes fail
+the run exits non-zero rather than silently reporting success.</p>
+<h2>Which option?</h2>
+<table>
+<thead>
+<tr>
+<th>You want…</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Block risky PRs, no LLM</td>
+<td>A (per-repo gate)</td>
+</tr>
+<tr>
+<td>Deep AI analysis on a schedule, per repo</td>
+<td>B (routed full scan)</td>
+</tr>
+<tr>
+<td>One place to scan many repos, no per-repo setup</td>
+<td>C (scan hub)</td>
+</tr>
+<tr>
+<td>Many repos on a schedule, from one machine</td>
+<td><a href="#fleet">Fleet</a></td>
+</tr>
+</tbody>
+</table></section>
+<section id="fleet"><h1>Fleet</h1>
+<p><code>achilles-fleet</code> scans many of your own repos in one run: it reads a fleet
+definition (projects → targets) and dispatches an <code>achilles</code> scan for each target
+into that project's <strong>own</strong> Evidence Vault. A <em>project</em> is just a namespace for
+grouping related repos (the fleet file and the vault layout call it a <code>tenant</code>; it
+is the same thing). It's a separate binary from <code>achilles</code> on purpose — the OSS
+engine stays the single source of scanning truth; the fleet layer is just
+orchestration. For scheduling it on a machine, see
+<a href="../DEPLOY.md">DEPLOY.md</a> → <em>Scheduled scans</em>.</p>
+<h2>The fleet definition</h2>
+<pre><code class="language-yaml"># fleet.yaml
+tenants:
+  - id: acme
+    mode: commercial      # license mode for this project's scans
+    profile: default      # scan profile
+    targets:
+      - /work/acme/api
+      - /work/acme/web
+  - id: globex
+    mode: commercial
+    profile: full
+    targets:
+      - /work/globex/monolith
+</code></pre>
+<p>See <a href="../configs/fleet.example.yaml"><code>configs/fleet.example.yaml</code></a>.</p>
+<h2>Git-source targets (no pre-existing filesystem)</h2>
+<p>A target is either a <strong>path</strong> (a plain string, as above) or a <strong>git source</strong> that
+<code>achilles-fleet</code> clones itself. That is what lets a k8s pod, a CI job or a
+bare <code>docker run</code> start with an empty filesystem and still scan repos:</p>
+<pre><code class="language-yaml">tenants:
+  - id: acme
+    targets:
+      - /work/acme/api                                  # path (unchanged)
+      - url: https://example.com/acme/example-app.git   # public repo, remote HEAD
+      - url: https://example.com/acme/example-private.git
+        ref: main                                       # branch | tag | full commit sha
+        depth: 1                                        # default 1 (shallow)
+        auth: {tokenEnv: ACME_GIT_TOKEN}                # env var NAME, not the token
+      - url: git@example.com:acme/example-infra.git
+        auth: {sshKeyEnv: ACME_DEPLOY_KEY}              # env var holding the PEM key
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>url</code></td>
+<td>Required. <code>https://…</code>, <code>ssh://…</code>, <code>git@host:path</code>, or <code>file://…</code> (local mirrors / hermetic tests). <strong>Anything else is rejected</strong>, as is any URL with embedded credentials (<code>user:pass@</code>) or a query string.</td>
+</tr>
+<tr>
+<td><code>ref</code></td>
+<td>Optional branch, tag or full commit sha. Default: the remote's <code>HEAD</code>.</td>
+</tr>
+<tr>
+<td><code>depth</code></td>
+<td>Optional, default <code>1</code>. Raise it if a scan needs git history (<code>--diff</code>, blame).</td>
+</tr>
+<tr>
+<td><code>auth.tokenEnv</code></td>
+<td>Name of an env var holding an HTTPS access token. https URLs only.</td>
+</tr>
+<tr>
+<td><code>auth.sshKeyEnv</code></td>
+<td>Name of an env var holding the PEM private key <em>content</em>. ssh URLs only.</td>
+</tr>
+</tbody>
+</table>
+<p>Config is validated at load time with the project and target number in the error;
+unknown keys (a typo like <code>tokenenv</code>) are errors rather than silent
+unauthenticated clones.</p>
+<p><strong>How a source is scanned.</strong> For each job <code>FetchingRunner</code> creates a private
+(<code>0700</code>) directory under <code>--workspace</code> (default: the OS temp dir), fetches the
+source into it with the <code>git</code> binary (<code>init</code> + shallow <code>fetch</code> of the ref +
+<code>checkout</code>; no submodules, no LFS), runs the normal scan against the checkout, and
+<strong>always</strong> deletes the directory — on success, scan failure, fetch failure,
+timeout, or SIGINT/SIGTERM. Fetching is bounded by <code>--fetch-timeout</code> (default 5m).
+Path targets bypass all of this.</p>
+<p><strong>Credentials.</strong> The token or key is read from the environment variable named in
+the config and travels only in the environment of the <code>git</code> process:</p>
+<ul>
+<li><em>HTTPS token</em> → <code>GIT_CONFIG_COUNT</code>/<code>GIT_CONFIG_KEY_n</code>/<code>GIT_CONFIG_VALUE_n</code>
+  injecting an <code>Authorization: Basic …</code> <code>http.extraHeader</code> (needs git ≥ 2.31). It
+  is never in argv (<code>ps</code>), the URL, an on-disk git config, a log line, an error
+  message or the Evidence Vault, and HTTP redirects are disabled while a token is
+  in play so the header can't be replayed to another host. The header uses
+  <code>x-access-token</code> as the username, which GitHub accepts; GitLab and most other
+  hosts accept a personal/project access token the same way.</li>
+<li><em>SSH key</em> → written <code>0600</code> into the job's private directory, passed via
+  <code>GIT_SSH_COMMAND</code> (<code>BatchMode</code>, <code>IdentitiesOnly</code>), and deleted as soon as the
+  fetch ends — before the scanner runs. Host keys use <code>StrictHostKeyChecking=accept-new</code>:
+  hosts already in <code>known_hosts</code> are verified (a changed key fails), new hosts are
+  trusted on first use. To pin hosts, bake <code>/etc/ssh/ssh_known_hosts</code> into the image.</li>
+<li>Prompts are disabled (<code>GIT_TERMINAL_PROMPT=0</code>), the user's/system git config is
+  ignored (no stray <code>insteadOf</code> or credential helper), and <code>git</code> sees only a small
+  allow-list of environment variables (<code>PATH</code>, <code>HOME</code>, proxy and CA vars) —
+  <code>ACHILLES_LLM_API_KEY</code> and other projects' tokens are not passed to it. Any
+  secret value (and any <code>user:pass@</code> that git echoes back) is scrubbed from error
+  text before it is returned.</li>
+</ul>
+<p><strong>Identity in the vault.</strong> The run's <code>scan_meta</code> record stores the stable,
+credential-free repo URL as <code>target</code> (not the throwaway checkout path, so
+<code>--metrics</code> counts one target per repo) plus the resolved <code>commit</code> sha. The CLI
+flags behind this are <code>achilles --target-label</code> / <code>--source-commit</code>.</p>
+<p>With <code>--runner docker</code>, the workspace must be a path the Docker daemon can
+bind-mount (in a container without a Docker daemon, use <code>--runner local</code>).</p>
+<h2>Running it</h2>
+<pre><code class="language-bash">make build   # builds bin/achilles AND bin/achilles-fleet
+
+achilles-fleet \
+  --config fleet.yaml \
+  --achilles ./bin/achilles \
+  --vault-backend file \
+  --vault-root .achilles/tenants \
+  --runner local \
+  --concurrency 4
+</code></pre>
+<p>Each project's findings land at <code>&lt;vault-root&gt;/&lt;id&gt;/vault.jsonl</code> (file backend)
+or under the key <code>tenant-&lt;id&gt;</code> (postgres backend) — the same layout the
+War Room UI reads, so fleet-written data shows up there and in
+<code>achilles --metrics</code>. Scans run in a bounded concurrent pool and are
+failure-isolated: one project failing doesn't stop the rest.</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config</code></td>
+<td><code>fleet.yaml</code></td>
+<td>the fleet definition</td>
+</tr>
+<tr>
+<td><code>--achilles</code></td>
+<td><code>achilles</code></td>
+<td>path to the engine binary</td>
+</tr>
+<tr>
+<td><code>--vault-backend</code></td>
+<td><code>file</code></td>
+<td><code>file</code> or <code>postgres</code> (postgres: DSN from <code>$ACHILLES_VAULT_DSN</code>, inherited by each scan)</td>
+</tr>
+<tr>
+<td><code>--vault-root</code></td>
+<td><code>.achilles/tenants</code></td>
+<td>per-project vault root (file backend)</td>
+</tr>
+<tr>
+<td><code>--runner</code></td>
+<td><code>docker</code></td>
+<td>tool runner passed to each scan: <code>local</code> or <code>docker</code></td>
+</tr>
+<tr>
+<td><code>--concurrency</code></td>
+<td><code>0</code> (=numCPU)</td>
+<td>max concurrent scans</td>
+</tr>
+<tr>
+<td><code>--workspace</code></td>
+<td>OS temp dir</td>
+<td>parent dir for ephemeral git-source checkouts</td>
+</tr>
+<tr>
+<td><code>--fetch-timeout</code></td>
+<td><code>5m</code></td>
+<td>max time to fetch one git source</td>
+</tr>
+<tr>
+<td><code>--every</code></td>
+<td><code>0</code> (off)</td>
+<td>re-run the whole dispatch on this interval until SIGINT/SIGTERM</td>
+</tr>
+</tbody>
+</table>
+<h2>Scheduling</h2>
+<p>By default <code>achilles-fleet</code> runs once and exits (<code>1</code> if any scan failed), which
+is what k8s <code>CronJob</code>s and host cron expect. Prefer that: let the
+platform own the schedule. For a plain container with no scheduler, <code>--every</code>
+loops the full dispatch instead:</p>
+<pre><code class="language-bash">achilles-fleet --config /fleet/fleet.yaml --runner local --every 24h
+</code></pre>
+<p>Runs never overlap (the interval counts from the end of one run to the start of the
+next). SIGINT/SIGTERM cancels in-flight scans and fetches (their workspaces are
+still removed) and exits <code>0</code>; a run with failures is reported but doesn't stop the
+loop. The config is read once at start, so restart the container to pick up edits.</p>
+<p><strong>Kubernetes <code>CronJob</code></strong> (git sources, tokens from a Secret):</p>
+<pre><code class="language-yaml">apiVersion: batch/v1
+kind: CronJob
+metadata: {name: fleet-nightly}
+spec:
+  schedule: &quot;0 2 * * *&quot;
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: fleet
+              image: registry.example.com/acme/achilles-fleet:latest
+              args: [&quot;--config&quot;, &quot;/fleet/fleet.yaml&quot;, &quot;--runner&quot;, &quot;local&quot;,
+                     &quot;--vault-backend&quot;, &quot;postgres&quot;, &quot;--workspace&quot;, &quot;/work&quot;]
+              envFrom: [{secretRef: {name: fleet-git-credentials}}]  # ACME_GIT_TOKEN, ACHILLES_VAULT_DSN, …
+              volumeMounts:
+                - {name: fleet-config, mountPath: /fleet}
+                - {name: work, mountPath: /work}
+          volumes:
+            - {name: fleet-config, configMap: {name: fleet-config}}
+            - {name: work, emptyDir: {}}
+</code></pre>
+<p><strong>docker compose</strong> (self-scheduling, no cron):</p>
+<pre><code class="language-yaml">services:
+  fleet:
+    image: registry.example.com/acme/achilles-fleet:latest
+    command: [&quot;--config&quot;, &quot;/fleet/fleet.yaml&quot;, &quot;--runner&quot;, &quot;local&quot;,
+              &quot;--vault-root&quot;, &quot;/vaults&quot;, &quot;--every&quot;, &quot;24h&quot;]
+    environment:
+      ACME_GIT_TOKEN: ${ACME_GIT_TOKEN}
+    volumes: [&quot;./fleet.yaml:/fleet/fleet.yaml:ro&quot;, &quot;vaults:/vaults&quot;]
+    restart: unless-stopped
+volumes: {vaults: {}}
+</code></pre>
+<h2>Routed LLM analyses across the fleet</h2>
+<p>The fleet can run the LLM agents per project and forward multi-model routing. The
+API key is <strong>not</strong> put on any command line — each scan inherits
+<code>ACHILLES_LLM_API_KEY</code> from the environment.</p>
+<pre><code class="language-bash">export ACHILLES_LLM_API_KEY=&lt;key&gt;
+achilles-fleet \
+  --config fleet.yaml --achilles ./bin/achilles \
+  --vault-root .achilles/tenants --runner local \
+  --llm-base-url https://ollama.com/v1 \
+  --llm-model glm-5.2 \
+  --model-config configs/models.ollama.yaml \
+  --analyses triage,review,sca-advice
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--llm-base-url</code></td>
+<td>OpenAI-compatible endpoint forwarded to each scan</td>
+</tr>
+<tr>
+<td><code>--llm-model</code></td>
+<td>default/fallback model</td>
+</tr>
+<tr>
+<td><code>--model-config</code></td>
+<td>per-task routing YAML (see <a href="#llm-and-agents">LLM Triage &amp; Agents</a>)</td>
+</tr>
+<tr>
+<td><code>--llm-auth</code></td>
+<td>credential mode forwarded to each scan: <code>key</code>, <code>api-key</code> or <code>none</code></td>
+</tr>
+<tr>
+<td><code>--analyses</code></td>
+<td>comma-separated: <code>triage</code>, <code>review</code>, <code>sca-advice</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>--analyses</code> is restricted to those three — vault-recording agents with no output
+path. Threat-model (needs a per-file path) and auto-fix (writes side effects) are
+deliberately <strong>excluded</strong> from fleet fan-out. Setting <code>--analyses</code> requires
+<code>--llm-model</code>.</p>
+<h2>Reviewing fleet results</h2>
+<ul>
+<li><strong>Cross-project rollup:</strong> <code>achilles --metrics --vault-backend postgres</code> (DSN in
+  <code>$ACHILLES_VAULT_DSN</code>), or point <code>--vault</code> at one project's file, summarizes
+  findings by severity/tool/rule and feedback FP-rate.</li>
+<li><strong>War Room:</strong> <code>achillesd</code> serves a per-project UI plus a <code>/admin/fleet</code>
+  cross-project rollup. The dashboard header has a <strong>project switcher</strong> listing every
+  project with data — discovered from the backend (<code>tenant-</code> keys in PostgreSQL, or
+  <code>&lt;root&gt;/&lt;id&gt;/vault.jsonl</code> dirs), so projects created by a scan appear even though
+  scans never register themselves. Selecting one sets <code>?tenant=&lt;id&gt;</code> and persists it
+  in a cookie. The War Room has no authentication; see
+  <a href="#containers">Running in containers</a>.</li>
+</ul>
+<h2>Running it on a schedule</h2>
+<p>The fleet runs on any machine that has the image or the binaries: a compose
+profile (<code>docker compose --profile fleet up -d</code>), host cron, or a Kubernetes
+<code>CronJob</code> as shown above. See <a href="../DEPLOY.md">DEPLOY.md</a> → <em>Scheduled scans</em>.</p></section>
+<section id="containers"><h1>Running in Containers</h1>
+<p>Achilles runs anywhere Docker does — a laptop, a VM, Kubernetes. Nothing here needs a
+cloud account. This guide covers the bundled image, the compose stack, and how the
+pieces are secured.</p>
+<h2>Five-minute quickstart</h2>
+<p>You need Docker with Compose v2 and ~2 GB of disk (the image bundles the scanners).</p>
+<pre><code class="language-bash">git clone &lt;this repository&gt; &amp;&amp; cd &lt;this repository&gt;/deploy/compose
+docker compose up -d --build                    # PostgreSQL + War Room
+docker compose --profile scan run --rm scan     # scan the bundled vulnerable sample
+</code></pre>
+<p>Open <a href="http://127.0.0.1:8080">http://127.0.0.1:8080</a> (change the port with <code>WARROOM_PORT</code>). There is no
+login: the port is published on your machine's loopback only (see
+<a href="#security-model-no-authentication">Security model</a>). The dashboard lists
+the run; open it to see findings from Opengrep and gosec, and submit verdicts that feed
+the learning loop.</p>
+<p>This exact sequence is run in CI on every relevant change
+(<a href="../.github/workflows/quickstart.yml">quickstart.yml</a> via <code>deploy/compose/smoke.sh</code>).</p>
+<p><strong>Scan your own code</strong></p>
+<pre><code class="language-bash">TARGET=/path/to/your/repo TENANT=my-app docker compose --profile scan run --rm scan
+</code></pre>
+<p>The repo is mounted read-only; findings land in the War Room under the <code>my-app</code>
+project (a project groups the repos you scan; <code>TENANT</code> is the compose variable that
+names it).
+Pass more flags by editing the <code>scan</code> service's <code>command</code> (e.g. <code>--fail-on high</code>,
+<code>--html-report</code>, <code>--triage</code> with an LLM — see <a href="#llm-and-agents">LLM Triage &amp; Agents</a>).</p>
+<h2>What's in the image</h2>
+<p><code>deployments/achilles/Dockerfile</code> builds one image with <code>achilles</code>, <code>achillesd</code>,
+<code>achilles-fleet</code>, <code>achilles-eval</code> and the baseline scanners — Opengrep, gosec, Trivy,
+Gitleaks, osv-scanner — so scans run <strong>inside</strong> the container with <code>--runner local</code>.
+There is no docker socket and no docker-in-docker. Each downloaded binary is pinned by
+version and sha256 and verified at build time.</p>
+<table>
+<thead>
+<tr>
+<th>Variant</th>
+<th>Build</th>
+<th>Contains</th>
+<th>Scans Go?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>full (default)</td>
+<td><code>docker build -f deployments/achilles/Dockerfile .</code></td>
+<td>scanners + Go toolchain</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>slim</td>
+<td><code>--build-arg WITH_GO=false</code></td>
+<td>scanners only (~250 MB smaller)</td>
+<td>no — gosec <strong>fails loudly</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Published images (when releases are cut) are <code>ghcr.io/&lt;owner&gt;/&lt;repo&gt;:&lt;version&gt;</code> and
+<code>:&lt;version&gt;-slim</code>, for amd64 and arm64.</p>
+<p>Not included: the heavy <code>--profile full</code> per-language tools (SpotBugs, Psalm, Security
+Code Scan, clang-tidy, Bandit, Checkov, …). They need their own runtimes (JVM, PHP,
+.NET, Python, a C toolchain). Build their images from <code>deployments/&lt;tool&gt;/</code> and use
+<code>--runner docker</code> on a host with a Docker daemon, or extend the Dockerfile for the
+languages you need.</p>
+<p>Network: Trivy fetches its vulnerability database and osv-scanner queries OSV, so scans
+need outbound HTTPS. Air-gapped use is not supported today.</p>
+<h2>A scan that could not run is not a clean scan</h2>
+<p>The image sets <code>ACHILLES_STRICT_TOOLS=true</code> (<code>--strict-tools</code>). If a scanner is
+missing, cannot run, or its output cannot be parsed, the run <strong>fails with exit 2</strong>
+instead of printing "no findings". Exit codes: <code>0</code> ok, <code>1</code> findings at/above
+<code>--fail-on</code>, <code>2</code> the run itself failed (including an incomplete scan).</p>
+<p>Tools that shell out to something else declare it in <code>configs/tools.yaml</code>
+(<code>requires: [go]</code> for gosec), so a missing prerequisite is reported as that tool's
+failure rather than as an empty report. Outside the image the flag is opt-in, so
+existing CI keeps working; the human report still never says "Clean scan" when a
+tool failed.</p>
+<h2>How the compose stack is wired</h2>
+<pre><code> you ──▶ 127.0.0.1:8080 ──▶ warroom (achillesd --allow-remote) ──▶ postgres
+        (loopback only)                                           not published
+ scan / fleet jobs ───────────────────────────────────────────────▶ postgres
+</code></pre>
+<ul>
+<li><strong>PostgreSQL</strong> is the Evidence Vault (<code>--vault-backend postgres</code>). The connection
+  string reaches containers as <code>ACHILLES_VAULT_DSN</code> — an environment variable, never a
+  flag, because it carries a password. Data lives in the <code>pgdata</code> volume; back it up
+  with <code>pg_dump</code>. Projects are keys (<code>tenant-&lt;id&gt;</code>) in one table; use separate databases
+  if you need isolation that survives a bug.</li>
+<li><strong>The War Room is published on <code>127.0.0.1</code> only</strong> (<code>127.0.0.1:${WARROOM_PORT}:8080</code>),
+  so only processes on your machine can reach it. Inside the container it must listen
+  on <code>0.0.0.0</code> for Docker's port mapping to work, so the compose file starts it with
+  <code>--allow-remote</code> — the explicit opt-in <code>achillesd</code> requires to bind a non-loopback
+  address. Do not change the published address to <code>0.0.0.0</code> or remove the <code>127.0.0.1:</code>
+  prefix unless you have put your own authenticating proxy in front (below).</li>
+<li>The default database password is a placeholder for a port that is never published.
+  Set <code>POSTGRES_PASSWORD</code> in <code>.env</code> if you publish or share the database.</li>
+</ul>
+<h2>Security model: no authentication</h2>
+<p><strong>The War Room has no authentication.</strong> Anyone who can reach its port can read every
+finding and can submit feedback, create projects, purge data and view the fleet
+rollup. Achilles is built for one person scanning their own repositories, and it
+protects that case by limiting who can reach the port rather than by identifying
+users:</p>
+<ul>
+<li><code>achillesd</code> listens on <strong>loopback</strong> (<code>127.0.0.1:8080</code>) by default and <strong>refuses to
+  bind any other address without <code>--allow-remote</code></strong>.</li>
+<li>In compose, the port is published on <strong><code>127.0.0.1</code> only</strong>.</li>
+<li>The <code>Host</code> header must be <code>localhost</code>, <code>127.0.0.1</code> or <code>::1</code>, or a name you list
+  with <code>--allowed-hosts a,b</code>. This defeats DNS-rebinding, where a web page tries to
+  reach your local server under an attacker's hostname.</li>
+<li>State-changing requests are protected against cross-site requests (Go's
+  <code>http.CrossOriginProtection</code>): a cross-origin <code>POST</code> is rejected, so another site
+  open in your browser cannot submit feedback or purge data on your behalf.</li>
+<li>Secrets in findings are redacted before they reach the UI or API.</li>
+</ul>
+<p>What this does <strong>not</strong> give you: any separation between people. Do not bind the War
+Room to a LAN or public address, and do not forward its port, expecting a login to
+protect it. Achilles ships none.</p>
+<h3>Sharing the War Room</h3>
+<p>Preferably don't. If you must, put <strong>your own authenticating reverse proxy</strong> in front of it (Authelia,
+Caddy or nginx with basic auth, your SSO gateway, a VPN, an SSH tunnel) and
+add the hostname people will use to <code>--allowed-hosts</code>. Keep the War Room itself
+unreachable except through that proxy. The proxy, not Achilles, is then responsible
+for who gets in; every person it admits can see every project and change any data.</p>
+<h2>Recurring scans: the fleet</h2>
+<p><code>achilles-fleet</code> scans many repos (grouped into projects), including <strong>git URLs</strong> it clones into an
+ephemeral workspace (no pre-existing filesystem needed). In compose:</p>
+<pre><code class="language-bash">cp ../../configs/fleet.example.yaml fleet.yaml   # edit projects and targets
+docker compose --profile fleet up -d             # re-runs every FLEET_EVERY (default 24h)
+</code></pre>
+<p>Credentials for private repos come from environment variables <em>named</em> in <code>fleet.yaml</code>
+(<code>auth.tokenEnv</code>), passed to the container from your secret store — see
+<a href="#fleet">Fleet</a>. For SSH sources add <code>openssh-client</code> to the image.</p>
+<h2>Local models</h2>
+<pre><code class="language-bash">docker compose --profile ollama up -d
+docker compose exec ollama ollama pull &lt;model&gt;
+# in .env:
+#   ACHILLES_LLM_BASE_URL=http://ollama:11434/v1
+#   ACHILLES_LLM_AUTH=none
+#   ACHILLES_LLM_MODEL=&lt;model&gt;
+</code></pre>
+<p>Then add <code>--triage</code> (etc.) to the <code>scan</code> service's command. Any OpenAI-compatible
+endpoint works; quality varies by model — see
+<a href="#llm-and-agents">Any OpenAI-compatible provider</a>.
+CPU-only models are slow: raise <code>ACHILLES_LLM_TIMEOUT</code>.</p>
+<h2>Kubernetes</h2>
+<p>The same image and flags map directly:</p>
+<ul>
+<li><strong>War Room</strong>: a <code>Deployment</code> running <code>achillesd --addr :8080 --allow-remote
+  --vault-backend postgres</code>, with <code>ACHILLES_VAULT_DSN</code> from a <code>Secret</code>. There is no
+  authentication, so keep the Service cluster-internal and reach it with
+  <code>kubectl port-forward</code> (use <code>--allowed-hosts</code> for any other hostname), or put your
+  own authenticating proxy in front — see <a href="#sharing-the-war-room">Sharing the War Room</a>.</li>
+<li><strong>Scans</strong>: a <code>CronJob</code> running <code>achilles-fleet --config /etc/achilles/fleet.yaml
+  --vault-backend postgres --runner local --workspace /tmp/fleet</code> (no <code>--every</code>; the
+  CronJob is the scheduler), <code>fleet.yaml</code> from a <code>ConfigMap</code>, git credentials from a
+  <code>Secret</code>. Give the pod outbound HTTPS and an <code>emptyDir</code> for <code>/tmp</code>.</li>
+<li>Run as the image's non-root user (uid 10001); the root filesystem can be read-only
+  apart from <code>/tmp</code> and <code>$HOME</code>.</li>
+</ul>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>port is already allocated</code></td>
+<td>something else uses 8080 — set <code>WARROOM_PORT</code></td>
+</tr>
+<tr>
+<td>scan exits 2: <code>gosec needs go on PATH</code></td>
+<td>you built the slim variant and scanned Go; use the full image</td>
+</tr>
+<tr>
+<td>scan exits 2: a tool <code>failed</code></td>
+<td>read the line above it; usually no network for Trivy/osv-scanner</td>
+</tr>
+<tr>
+<td>War Room shows no runs</td>
+<td>the scan wrote to a different <code>TENANT</code> (project); pick it in the project switcher</td>
+</tr>
+<tr>
+<td><code>403 host not allowed</code></td>
+<td>you browsed to the War Room under a hostname or IP other than <code>localhost</code> / <code>127.0.0.1</code> / <code>::1</code>; add that name with <code>--allowed-hosts</code> (and keep the port private)</td>
+</tr>
+<tr>
+<td>a form submission is rejected with <code>403</code></td>
+<td>the request came from another origin (a different site, or a proxy that rewrites <code>Origin</code>); open the War Room directly at its own address</td>
+</tr>
+<tr>
+<td><code>achillesd</code> refuses to start with a non-loopback <code>--addr</code></td>
+<td>you set <code>--addr</code> to something other than loopback; add <code>--allow-remote</code> only if the port is not reachable by others</td>
+</tr>
+</tbody>
+</table></section>
+    <footer>Generated from docs/*.md by docs/build.py · LLM-assisted SAST</footer>
+  </main>
+</div>
+</body>
+</html>

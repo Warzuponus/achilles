@@ -1,0 +1,37 @@
+{
+  "scan_info": { "app_path": "/app", "rails_version": "7.1.0" },
+  "warnings": [
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "aa11bb22cc33",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/controllers/users_controller.rb",
+      "line": 4,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "User.where(\"name = '#{params[:name]}'\")",
+      "render_path": null,
+      "location": { "type": "method", "class": "UsersController", "method": "index" },
+      "user_input": "params[:name]",
+      "confidence": "High"
+    },
+    {
+      "warning_type": "Command Injection",
+      "warning_code": 14,
+      "fingerprint": "dd44ee55ff66",
+      "check_name": "Execute",
+      "message": "Possible command injection",
+      "file": "app/controllers/users_controller.rb",
+      "line": 8,
+      "link": "https://brakemanscanner.org/docs/warning_types/command_injection/",
+      "code": "system(\"ping -c 1 #{params[:host]}\")",
+      "render_path": null,
+      "location": { "type": "method", "class": "UsersController", "method": "ping" },
+      "user_input": "params[:host]",
+      "confidence": "Medium"
+    }
+  ],
+  "errors": [],
+  "obsolete": []
+}

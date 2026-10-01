@@ -1,0 +1,323 @@
+# LLM Triage & Agents
+
+Achilles uses LLMs to *interpret* scanner output — verify findings, propose fixes,
+and produce holistic analysis — and it can route each task to a different model.
+All of it is **opt-in**; with no LLM configured, Achilles is a pure scanner.
+
+## Setup
+
+Achilles talks to any **OpenAI-compatible** endpoint. You need a model and a key:
+
+```bash
+export ACHILLES_LLM_API_KEY=...        # or OPENAI_API_KEY
+achilles --triage --llm-model gpt-4o /path/to/code
+```
+
+Point `--llm-base-url` elsewhere for a self-hosted or alternative provider
+(Ollama, vLLM, LiteLLM, OpenRouter, Azure OpenAI, a gateway, etc.):
+
+```bash
+achilles --triage --llm-base-url https://ollama.com/v1 --llm-model glm-5.2 .
+```
+
+The key is read from the environment only — it never appears on a command line or
+in the vault.
+
+## Measuring whether triage actually works
+
+Everything below is only worth having if it is *measurably* better than the
+scanner's raw output. `achilles-eval` scores the triage layer against a labeled
+corpus ([`evals/`](../evals/README.md)) so a change to prompts, context, or model
+routing can be proven instead of asserted:
+
+```bash
+make eval-context                                    # hermetic: no model, no key
+make eval-verdict-ollama EVAL_ARGS="--repeat 3"      # the Ollama open-model routing (needs a key)
+```
+
+**Eval the routing, not a model.** The verdict target drives a committed
+`--model-config`, because triage and judge deliberately use *different* models,
+so a score belongs to the pair, and the report names both. Measuring some model you
+don't actually run tells you nothing about production.
+
+**Context mode** is hermetic. For each case it builds the prompt Achilles would
+send and checks whether the deciding evidence is inside it — answering *did we
+give the model what it needed?* with no API call, so it runs in CI and gates
+against regressions (`make eval-gate`).
+
+**Verdict mode** runs the real triage→judge path against a live model and scores
+verdicts against the labels. Its headline is **balanced accuracy**, which weights
+both classes equally: a triager that confirms everything scores 100% on a
+true-positive-only corpus and 50% here. It also reports TP recall, FP suppression,
+a calibration gap (`|mean confidence − accuracy|`, so an overconfident model is
+visible), and — with `--repeat` — which cases the model answers inconsistently on
+the same input.
+
+Both modes write JSON with `--out` and diff against a previous run with
+`--baseline`, which is how you show a change helped.
+
+## Knowing the bill first: `--dry-run` and `--max-cost`
+
+LLM spend scales with findings, so a large repo — or the fleet fanning a scan out
+across tenants — can run up a real bill before anyone notices. Achilles estimates
+the cost **before the first model call**:
+
+```bash
+achilles --triage --remediate --llm-model <m> \
+  --price-config configs/prices.yaml --dry-run .
+```
+
+```
+LLM cost estimate (pre-flight; no model has been called)
+  TASK           MODEL              CALLS    IN TOKENS   OUT TOKENS        USD
+  judge          gpt-4o-mini            2          867          240     0.0062
+  remediation    gpt-4o-mini            2          363         1200     0.0191
+  triage         gpt-4o-mini            2          404          500     0.0087
+  TOTAL                                 6         1634         1940     0.0340
+```
+
+`--dry-run` runs the whole deterministic pipeline (scan, normalize, noise filter,
+diff, baseline, correlate), writes local reports, applies `--fail-on`, and then
+stops: **no model call and no outward-facing action** — no PR comment, no inline
+review, no issues, no fix PR, no research or rule mining.
+
+`--max-cost <usd>` is the guardrail for real runs. If the estimate exceeds it,
+Achilles prints the breakdown and exits non-zero **without calling any model**:
+
+```
+achilles: estimated LLM spend $0.0340 exceeds --max-cost $0.0100; no model was
+called (raise the cap, narrow the scan with --diff/--baseline, or route cheaper models)
+```
+
+**You supply the prices.** Achilles ships no built-in price table: prices change
+without notice, differ per provider for the same model name, and are often
+negotiated, so a cap computed from prices we guessed would be worse than no cap.
+Copy [`configs/prices.example.yaml`](../configs/prices.example.yaml), fill in your
+provider's published numbers, and pass it with `--price-config`. Tokens are always
+estimated (we can compute those from our own prompts); dollars appear only for
+models you have priced, and `--max-cost` **refuses to run** rather than enforce a
+cap it cannot compute.
+
+What the estimate does and does not cover:
+
+- **Reflected:** the surfaced finding set only (post-noise, post-diff,
+  post-baseline), correlated duplicates costing nothing, and findings the
+  calibrator auto-resolves without an LLM call.
+- **Upper bound:** with `--remediate`, every triaged finding is counted, since
+  which ones turn out high-confidence is unknowable in advance.
+- **Excluded, and named in the output:** the one-per-scan whole-repo agents
+  (`--review`, `--sca-advice`, `--threat-model`), `--research`/`--mine-rules`, and
+  the extra prompt tokens `--rag` adds.
+- **Approximate:** tokens are counted at ~4 characters each and output sizes are
+  per-task defaults. Compare against `--diagnostics` after a real run.
+
+The cap is checked **pre-flight only** — it does not abort a run mid-way if actual
+spend outpaces the estimate.
+
+## Cross-tool correlation (before triage)
+
+Achilles runs overlapping engines on purpose, so the same defect often arrives from
+two or three tools — Opengrep and gosec on one Go line, Trivy and Checkov on one
+infrastructure-as-code resource. Before triage, findings that share a **file, line, and CWE set**
+but come from **different tools** are grouped into a cluster, and only the
+highest-severity member is sent to the LLM. The rest inherit its verdict, so a
+defect costs one triage+judge pair no matter how many tools reported it.
+
+Correlation **collapses nothing**: every finding keeps its own fingerprint,
+severity, and behaviour under `--baseline`, `--file-issues`, and `--fail-on`. The
+report shows the overlap instead of hiding it:
+
+```
+  [high] B602
+    subprocess call with shell=True
+    at run.py:5  (bandit)
+    [CWE-78]
+    also reported by: Opengrep OSS:achilles.python.subprocess-shell-true
+    triage: true_positive  confidence=0.90  exploitability=reachable
+```
+
+and the duplicate records where its verdict came from:
+
+```
+    (verdict inherited from correlated finding 17cf544325f61c67)
+```
+
+The key is deliberately strict — a finding with no CWE or no line number never
+clusters, and one tool reporting twice on a line is left alone — because a wrong
+merge costs a wrong verdict while a missed merge costs one extra LLM call. Two
+things still take precedence over an inherited verdict: **calibration** (feedback
+about a finding's *own* rule outranks a sibling's verdict) and **remediation**,
+which is never inherited, since a patch belongs to one specific finding. Disable
+the whole thing with `--no-correlate`.
+
+## Per-finding: triage → judge → remediation
+
+Achilles sends the **enclosing function or block** as context, not a fixed number
+of lines either side — a 3-line window usually hides the signature and the guard
+clause that decide whether a finding is real. Brace-matching covers C-family
+languages (Go, Java, JS/TS, C/C++, C#, PHP, Rust, Swift, Kotlin, Scala, HCL) and
+indentation covers Python; other file types keep a fixed radius. It's a heuristic,
+so it's bounded: the window must contain the flagged line, it's capped (oversized
+scopes are clamped and labelled `// enclosing scope truncated to N lines`), and
+anything unresolved falls back to the radius — which is a floor, so context never
+shrinks. Wider prompts cost more; `--dry-run` shows exactly how much before you
+pay it.
+
+- **`--triage`** — for each finding, Achilles adds code context and asks the model
+  for a structured verdict: `true_positive` / `false_positive` / `uncertain`, a
+  confidence, exploitability, and reasoning. A second **adversarial judge** pass
+  then tries to *refute* that verdict — only unrefuted true-positives with
+  confidence ≥ 0.7 are treated as high-confidence.
+- **`--remediate`** — for those high-confidence findings, propose a fix: a summary
+  plus a unified diff when a clean patch is possible, or prose guidance otherwise.
+  Implies `--triage`. Achilles proposes; it never auto-applies (see `--fix-pr` in
+  [CI & the Scan Hub](ci-and-hub.md) for opening a *review* PR).
+
+```bash
+achilles --remediate --llm-model gpt-4o --html-report report.html .
+```
+
+Verdicts and fixes show up per-finding in the HTML report and are recorded to the
+vault.
+
+## Whole-repo agents
+
+These reason over the codebase profile + findings rather than one finding at a time:
+
+| Flag | Produces |
+|------|----------|
+| `--review` | **Systemic risks** — architectural weaknesses, themes across findings, missing controls |
+| `--sca-advice` | **Dependency upgrade plan** — what to bump, merge-risk scored, security-driven first |
+| `--threat-model f.otm.json` | an **OTM threat model** — trust zones, components, STRIDE threats + mitigations |
+
+```bash
+achilles --review --sca-advice --threat-model tm.otm.json \
+  --html-report report.html --llm-model gpt-4o .
+```
+
+## The learning loop
+
+Achilles gets quieter over time from analyst feedback:
+
+```bash
+achilles --feedback <fingerprint> --label fp --note "md5 used for a cache key"
+```
+
+- **Calibration** — once a rule accrues enough `fp` feedback, Achilles
+  auto-resolves it *without* an LLM call (deterministic pre-triage for chronically
+  noisy rules).
+- **RAG** (`--rag`, needs `--llm-embed-model`) — injects similar past findings and
+  how analysts ruled them as few-shot context for triage.
+- **`--rule-health`** prints per-rule TP/FP rates so you can see what's noisy.
+- **`--mine-rules`** turns analyst-confirmed findings into new Opengrep rules
+  (validated before they can run — see [DESIGN.md](../DESIGN.md) §9).
+
+## Multi-model routing
+
+Different tasks want different models — a fast/cheap one for high-volume triage, a
+strong reasoner for the judge and threat model, a good coder for remediation. Map
+tasks to models in a YAML file and pass it with `--model-config`:
+
+```yaml
+# models.yaml — any task you omit falls back to --llm-model
+tasks:
+  triage:       { model: gpt-4o-mini }
+  judge:        { model: gpt-4o }
+  remediation:  { model: gpt-4o }
+  review:       { model: gpt-4o }
+  sca:          { model: gpt-4o-mini }
+  threat-model: { model: gpt-4o }
+```
+
+```bash
+achilles --triage --review --sca-advice \
+  --llm-model gpt-4o-mini --model-config models.yaml .
+```
+
+Routable task names: `triage`, `judge`, `remediation`, `review`, `sca`,
+`threat-model`, `research`, `mine-rules`. A task entry may also set its own `baseURL`. The API key is shared
+across all of them (one `ACHILLES_LLM_API_KEY`), as are the provider settings below.
+
+### Any OpenAI-compatible provider
+
+Achilles speaks the OpenAI Chat Completions wire format, so anything that exposes
+`POST {base-url}/chat/completions` works: OpenAI, Azure OpenAI, Ollama, vLLM,
+llama.cpp, LM Studio, LiteLLM, OpenRouter, and gateways in front of them.
+`--llm-base-url` is the URL *before* `/chat/completions`.
+
+Provider differences are settings, not code. `--llm-auth` picks how the key is
+sent; environment variables cover the rest (they are env-only so CI, the fleet and
+containers pass them through unchanged):
+
+| Setting | Purpose |
+|---------|---------|
+| `--llm-auth key` | `Authorization: Bearer $ACHILLES_LLM_API_KEY` (or `OPENAI_API_KEY`). An **empty key sends no header**, so keyless local runtimes just work. |
+| `--llm-auth api-key` | same key, sent as an `api-key:` header (Azure OpenAI). |
+| `--llm-auth none` | never send a credential — local runtimes, or auth carried in `ACHILLES_LLM_HEADERS`. |
+| `ACHILLES_LLM_HEADERS` | extra headers on every request, `Name=Value,Name2=Value2` (OpenRouter's `HTTP-Referer` / `X-Title`, gateway routing headers). Values may contain `=` but not `,`. |
+| `ACHILLES_LLM_QUERY` | query string, `name=value,...` — Azure's `api-version=2024-10-21`. |
+| `ACHILLES_LLM_TIMEOUT` | per-request timeout as a Go duration (default `120s`). Raise it, e.g. `10m`, for slow CPU-bound local models. |
+| `ACHILLES_LLM_OMIT_TEMPERATURE` | `true` drops the `temperature` field. Needed for reasoning models (OpenAI o-series / GPT-5 class) that reject any explicit value. |
+| `ACHILLES_LLM_MAX_TOKENS` | cap output tokens. `ACHILLES_LLM_MAX_TOKENS_PARAM` names the wire field: `max_tokens` (default, widest support) or `max_completion_tokens` (newer OpenAI models). |
+| `ACHILLES_LLM_MAX_RETRIES` | retries on HTTP 429/502/503/504 with backoff, honoring `Retry-After` (default `2`; negative disables). |
+
+Examples:
+
+```bash
+# Local Ollama — no key, longer timeout
+ACHILLES_LLM_TIMEOUT=10m achilles --triage --llm-auth none \
+  --llm-base-url http://localhost:11434/v1 --llm-model qwen3:32b .
+
+# Azure OpenAI — the deployment is part of the base URL
+export ACHILLES_LLM_API_KEY=<azure-key>
+ACHILLES_LLM_QUERY=api-version=2024-10-21 achilles --triage --llm-auth api-key \
+  --llm-base-url https://<resource>.openai.azure.com/openai/deployments/<deployment> \
+  --llm-model <deployment> .
+
+# OpenRouter
+export ACHILLES_LLM_API_KEY=<openrouter-key>
+ACHILLES_LLM_HEADERS="HTTP-Referer=https://example.com,X-Title=achilles" achilles --triage \
+  --llm-base-url https://openrouter.ai/api/v1 --llm-model <vendor>/<model> .
+
+# OpenAI reasoning model
+ACHILLES_LLM_OMIT_TEMPERATURE=true ACHILLES_LLM_MAX_TOKENS_PARAM=max_completion_tokens \
+  achilles --triage --llm-model <reasoning-model> .
+```
+
+**What Achilles tolerates from imperfect servers.** Structured output is requested
+as `json_schema` and, if the server rejects the `response_format` (HTTP 400, 404,
+405, 415, 422, 500, 501, or a 200 with an unusable body), retried once as plain
+`json_object`; credential, rate-limit, timeout and network failures are *not*
+retried that way, since they would only fail again. The schema is sent as OpenAI
+`strict` only when it satisfies strict mode's rules. Replies are parsed after
+stripping `<think>…</think>` blocks and code fences; if `content` is empty, the
+server's `reasoning_content` / `reasoning` is used. Token usage is reported as 0
+when a server omits `usage`.
+
+**Quality is per-model, not per-protocol.** "Works" means wire-compatible; the
+measured triage accuracy differs a lot between models (see the eval harness in
+[`evals/`](../evals/README.md)). Run it against your own endpoint before trusting
+gating decisions to it.
+
+### Open models via Ollama Cloud
+
+Ollama Cloud is OpenAI-compatible, so you can mix open models per task. Achilles
+ships a bake-off-derived routing at [`configs/models.ollama.yaml`](../configs/models.ollama.yaml):
+
+```bash
+export ACHILLES_LLM_API_KEY=<ollama-key>
+achilles --triage --review --sca-advice --threat-model tm.otm.json \
+  --llm-base-url https://ollama.com/v1 \
+  --llm-model glm-5.2 \
+  --model-config configs/models.ollama.yaml \
+  --html-report report.html .
+```
+
+That config routes `triage`/`review`/`sca` → `minimax-m2.7` (fast, well-calibrated),
+`judge`/`remediation`/`threat-model` → `kimi-k2.6` (deepest reasoner), with
+`glm-5.2` as the fallback. Tune it freely.
+
+> **Note on open models.** They're looser than frontier models about JSON shape.
+> Achilles hardens for this (fence-stripping + a schema-validated repair retry), but
+> output quality still varies run-to-run — the agents are best-effort by design and
+> never block the scan.

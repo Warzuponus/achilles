@@ -1,0 +1,26 @@
+tools:
+  - id: opengrep
+    license: LGPL-2.1
+    commercialSafe: true
+    enabled: true
+    bespoke: true
+    languages: [python, javascript, go]
+    image: ghcr.io/opengrep/opengrep:latest
+    rules: configs/rules
+
+  - id: gosec
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: true
+    languages: [go]
+    image: ghcr.io/securego/gosec:latest
+    bin: gosec
+    format: sarif
+    argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "{src}/..."]
+    outputFile: "{out}/results.sarif"
+
+  - id: brakeman
+    license: CC-BY-NC-SA
+    commercialSafe: false
+    enabled: false
+    languages: [ruby]

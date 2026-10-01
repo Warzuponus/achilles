@@ -1,0 +1,14 @@
+# Gitleaks config for scanning this repository (Achilles honors a repo's own
+# .gitleaks.toml; see `localConfig` in configs/tools.yaml).
+title = "Achilles"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Obviously fake token used by the redaction test"
+# Matched on the secret VALUE, not the file, so a real secret added to the same file
+# would still be caught.
+regexes = [
+  '''abcdef0123456789abcdef0123456789abcd''', # the redaction test's must-be-masked input
+]

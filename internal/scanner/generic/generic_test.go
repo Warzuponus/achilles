@@ -1,0 +1,210 @@
+package generic
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/Warzuponus/achilles/internal/config"
+	xexec "github.com/Warzuponus/achilles/internal/exec"
+	"github.com/Warzuponus/achilles/internal/scanner"
+)
+
+// fakeRunner stands in for a real tool: it records the command it was given and
+// writes canned SARIF to whatever host path is mounted as "out". This lets us
+// exercise the full generic scan→read path without the actual binary.
+type fakeRunner struct {
+	sarif  []byte
+	gotCmd xexec.Command
+}
+
+func (f *fakeRunner) Run(_ context.Context, c xexec.Command) (xexec.Result, error) {
+	f.gotCmd = c
+	for _, m := range c.Mounts {
+		if m.Name == "out" {
+			_ = os.WriteFile(filepath.Join(m.HostPath, "results.sarif"), f.sarif, 0o644)
+		}
+	}
+	return xexec.Result{ExitCode: 1}, nil // non-zero exit == "found issues"
+}
+
+func testCfg() config.ToolConfig {
+	return config.ToolConfig{
+		ID:         "gosec",
+		Languages:  []string{"go"},
+		Bin:        "gosec",
+		Format:     "sarif",
+		Argv:       []string{"-fmt=sarif", "-out={out}/results.sarif", "{src}/..."},
+		OutputFile: "{out}/results.sarif",
+	}
+}
+
+func TestRun_ReadsToolOutput(t *testing.T) {
+	fr := &fakeRunner{sarif: []byte(`{"version":"2.1.0","runs":[]}`)}
+	s := New(fr, testCfg(), "")
+
+	raw, err := s.Run(context.Background(), scanner.Target{Path: "/some/src"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if string(raw.Data) != `{"version":"2.1.0","runs":[]}` {
+		t.Errorf("did not read back tool SARIF: %q", raw.Data)
+	}
+	if raw.Tool != "gosec" || raw.Format != "sarif" {
+		t.Errorf("raw meta wrong: tool=%q format=%q", raw.Tool, raw.Format)
+	}
+
+	// The src mount must be the target path and marked read-only.
+	var sawSrcRO bool
+	for _, m := range fr.gotCmd.Mounts {
+		if m.Name == "src" && m.HostPath == "/some/src" && m.ReadOnly {
+			sawSrcRO = true
+		}
+	}
+	if !sawSrcRO {
+		t.Errorf("expected read-only src mount at /some/src, got %+v", fr.gotCmd.Mounts)
+	}
+}
+
+func TestRun_NoOutputFileIsError(t *testing.T) {
+	// Runner that writes nothing → missing output file → error (not silent success).
+	nopRunner := &fakeRunner{sarif: nil}
+	cfg := testCfg()
+	// Point the tool at a file the fake won't create.
+	cfg.Argv = []string{"noop"}
+	s := New(nopRunner, cfg, "")
+	// Overwrite the "out" write by using a runner that writes nothing:
+	s.runner = writeNothingRunner{}
+	if _, err := s.Run(context.Background(), scanner.Target{Path: "/x"}); err == nil {
+		t.Error("want error when the tool produced no output file")
+	}
+}
+
+type writeNothingRunner struct{}
+
+func (writeNothingRunner) Run(context.Context, xexec.Command) (xexec.Result, error) {
+	return xexec.Result{ExitCode: 2, Stderr: []byte("boom")}, nil
+}
+
+func TestApplicable(t *testing.T) {
+	s := New(&fakeRunner{}, testCfg(), "") // languages: [go]
+
+	cases := []struct {
+		name string
+		tgt  scanner.Target
+		want bool
+	}{
+		{"empty path", scanner.Target{}, false},
+		{"matching lang", scanner.Target{Path: "/x", Languages: []string{"go"}}, true},
+		{"non-matching lang", scanner.Target{Path: "/x", Languages: []string{"python"}}, false},
+		{"unknown target langs", scanner.Target{Path: "/x"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := s.Applicable(tc.tgt); got != tc.want {
+				t.Errorf("Applicable=%v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// A language-agnostic tool (SCA/secrets/IaC) declares "generic" and must apply to
+// any target — otherwise populating Target.Languages would wrongly skip it.
+func TestApplicable_GenericIsWildcard(t *testing.T) {
+	cfg := testCfg()
+	cfg.ID = "trivy"
+	cfg.Languages = []string{"generic"}
+	s := New(&fakeRunner{}, cfg, "")
+
+	for _, langs := range [][]string{{"go"}, {"python", "ruby"}, nil} {
+		if !s.Applicable(scanner.Target{Path: "/x", Languages: langs}) {
+			t.Errorf("generic tool should apply to target langs %v", langs)
+		}
+	}
+}
+
+func TestRun_PassesNetworkPolicy(t *testing.T) {
+	fr := &fakeRunner{sarif: []byte(`{}`)}
+	cfg := testCfg()
+	cfg.Network = "default" // tool that needs egress (e.g. SCA/NuGet restore)
+	_, _ = New(fr, cfg, "").Run(context.Background(), scanner.Target{Path: "/x"})
+	if fr.gotCmd.Network != "default" {
+		t.Errorf("network policy not passed to runner: got %q", fr.gotCmd.Network)
+	}
+}
+
+func TestRun_ArgvPlaceholdersPreserved(t *testing.T) {
+	fr := &fakeRunner{sarif: []byte(`{}`)}
+	s := New(fr, testCfg(), "")
+	_, _ = s.Run(context.Background(), scanner.Target{Path: "/x"})
+	joined := strings.Join(fr.gotCmd.Args, " ")
+	if !strings.Contains(joined, "{out}") || !strings.Contains(joined, "{src}") {
+		t.Errorf("argv placeholders should reach the runner for resolution: %q", joined)
+	}
+}
+
+// A target's own ignore file is honored: the rule's arg is appended only when
+// the file is present in the target.
+func TestRun_LocalConfigAppendedWhenPresent(t *testing.T) {
+	cfg := testCfg()
+	cfg.LocalConfig = []config.LocalConfigRule{{File: ".trivyignore", Arg: "--ignorefile={src}/.trivyignore"}}
+
+	// Present → appended.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".trivyignore"), []byte("CVE-x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fr := &fakeRunner{sarif: []byte(`{}`)}
+	_, _ = New(fr, cfg, "").Run(context.Background(), scanner.Target{Path: dir})
+	if !strings.Contains(strings.Join(fr.gotCmd.Args, " "), "--ignorefile={src}/.trivyignore") {
+		t.Errorf("expected local-config arg when file present; args=%v", fr.gotCmd.Args)
+	}
+
+	// Absent → not appended.
+	fr2 := &fakeRunner{sarif: []byte(`{}`)}
+	_, _ = New(fr2, cfg, "").Run(context.Background(), scanner.Target{Path: t.TempDir()})
+	if strings.Contains(strings.Join(fr2.gotCmd.Args, " "), "ignorefile") {
+		t.Errorf("local-config arg must not be appended when file absent; args=%v", fr2.gotCmd.Args)
+	}
+}
+
+// checkingRunner is a fakeRunner that can also answer "is this binary on PATH?",
+// as the local runner does.
+type checkingRunner struct {
+	fakeRunner
+	have map[string]bool
+}
+
+func (c *checkingRunner) Has(bin string) bool { return c.have[bin] }
+
+// gosec exits 0 with an empty report when `go` is missing — the scan would look
+// clean. A declared prerequisite that is absent must be a loud tool failure.
+func TestRun_MissingPrerequisiteIsAToolFailure(t *testing.T) {
+	cfg := testCfg()
+	cfg.Requires = []string{"go"}
+	cr := &checkingRunner{fakeRunner: fakeRunner{sarif: []byte(`{"version":"2.1.0","runs":[]}`)}, have: map[string]bool{}}
+	_, err := New(cr, cfg, "").Run(context.Background(), scanner.Target{Path: "/some/src"})
+	if err == nil || !strings.Contains(err.Error(), "needs `go` on PATH") {
+		t.Fatalf("err = %v, want a missing-prerequisite failure", err)
+	}
+	if cr.gotCmd.Bin != "" {
+		t.Error("the tool must not be run when a prerequisite is missing")
+	}
+
+	cr.have["go"] = true
+	if _, err := New(cr, cfg, "").Run(context.Background(), scanner.Target{Path: "/some/src"}); err != nil {
+		t.Errorf("with the prerequisite present the tool should run: %v", err)
+	}
+}
+
+// Runners that cannot check (docker) are not asked: the image carries the tools.
+func TestRun_RunnerWithoutHasSkipsPrerequisiteCheck(t *testing.T) {
+	cfg := testCfg()
+	cfg.Requires = []string{"go"}
+	fr := &fakeRunner{sarif: []byte(`{"version":"2.1.0","runs":[]}`)}
+	if _, err := New(fr, cfg, "").Run(context.Background(), scanner.Target{Path: "/some/src"}); err != nil {
+		t.Errorf("docker-style runner must not be blocked: %v", err)
+	}
+}

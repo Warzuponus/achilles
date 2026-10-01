@@ -1,0 +1,69 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "opengrep",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "achilles.python.dangerous-eval",
+              "name": "dangerous-eval",
+              "properties": {
+                "tags": ["security", "CWE-95"]
+              }
+            },
+            {
+              "id": "achilles.python.subprocess-shell-true",
+              "name": "subprocess-shell-true",
+              "properties": {
+                "tags": ["security", "CWE-78"]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "achilles.python.dangerous-eval",
+          "level": "error",
+          "message": { "text": "Use of eval() on dynamic input can lead to arbitrary code execution." },
+          "fingerprints": { "matchBasedId/v1": "abc123def456" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "app/handlers.py" },
+                "region": {
+                  "startLine": 42,
+                  "startColumn": 5,
+                  "endLine": 42,
+                  "endColumn": 20,
+                  "snippet": { "text": "eval(user_input)" }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "achilles.python.subprocess-shell-true",
+          "level": "warning",
+          "message": { "text": "subprocess called with shell=True can enable command injection." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "app/tasks.py" },
+                "region": {
+                  "startLine": 17,
+                  "startColumn": 1,
+                  "snippet": { "text": "subprocess.run(cmd, shell=True)" }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

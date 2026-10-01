@@ -1,0 +1,65 @@
+# Publishes the all-in-one image to GitHub Container Registry for linux/amd64 and
+# linux/arm64 when a version tag is pushed (v1.2.3). Two variants:
+#   ghcr.io/<owner>/<repo>:<version>        full: scanners + Go toolchain
+#   ghcr.io/<owner>/<repo>:<version>-slim   scanners only; does not scan Go (gosec fails loudly)
+# Build provenance and an SBOM are attached by buildx. The image name derives from
+# the repository, so a rename or fork needs no edit here.
+name: Release images
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag to publish under (e.g. v0.1.0-rc1); manual runs are for dry runs of the pipeline"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write   # build provenance attestation
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: full
+            with_go: "true"
+            suffix: ""
+          - variant: slim
+            with_go: "false"
+            suffix: "-slim"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve image name and version
+        id: meta
+        run: |
+          set -euo pipefail
+          version="${{ github.event.inputs.version || github.ref_name }}"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push (${{ matrix.variant }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deployments/achilles/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            WITH_GO=${{ matrix.with_go }}
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}${{ matrix.suffix }}
+          provenance: true
+          sbom: true
+          push: true

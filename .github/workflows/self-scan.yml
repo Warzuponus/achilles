@@ -1,0 +1,58 @@
+# Achilles scans its own Go code (dogfooding), gating on findings NOT already in
+# .achilles/baseline.json. Regenerate the baseline after intentional changes:
+#   PATH="$(go env GOPATH)/bin:$PATH" ./bin/achilles \
+#     --config configs/selfscan.yaml --exclude evals,examples \
+#     --write-baseline .achilles/baseline.json .
+name: Self scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write # for code-scanning upload (needs GitHub Advanced Security on private repos)
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Install gosec (pinned)
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
+      - name: Build achilles
+        run: go build -o bin/achilles ./cmd/achilles
+      - name: Self-scan (gate on new findings)
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          # --exclude evals: evals/triage/testdata holds DELIBERATELY vulnerable
+          # fixtures that are the eval harness's ground truth. gosec does not skip
+          # testdata/ the way the go tool does, so without this the corpus reports
+          # ~11 high-severity findings and gates its own repo. The fixtures are
+          # never built or shipped; `make eval-gate` is what checks them.
+          # --exclude examples: examples/quickstart is a deliberately vulnerable
+          # sample for the compose quickstart (separate module, never shipped).
+          ./bin/achilles --config configs/selfscan.yaml \
+            --baseline .achilles/baseline.json --exclude evals,examples \
+            --sarif-report achilles.sarif --github --fail-on high .
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: achilles-sarif
+          path: achilles.sarif
+      # Best-effort: populate the Security tab. Requires GitHub Advanced Security
+      # on private repos; continue-on-error so a repo without it still gates via
+      # the step above.
+      - name: Upload to code scanning
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: achilles.sarif

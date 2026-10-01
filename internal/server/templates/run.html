@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Achilles — {{.RunID}}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; background: #1a1d21; color: #e6e6e6; }
+    header { background: #111316; padding: 16px 24px; border-bottom: 1px solid #2a2e34; }
+    h1 { margin: 0; font-size: 18px; }
+    .meta { color: #8b93a1; font-size: 13px; }
+    main { padding: 24px; max-width: 1000px; }
+    .finding { border: 1px solid #2a2e34; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; background: #202429; }
+    .sev { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; }
+    .critical, .high { background: #7f1d1d; color: #fecaca; }
+    .medium { background: #78350f; color: #fed7aa; }
+    .low, .info, .unknown { background: #334155; color: #cbd5e1; }
+    .rule { font-family: ui-monospace, monospace; color: #a78bfa; }
+    .loc { color: #8b93a1; font-size: 13px; }
+    .verdict { font-size: 13px; margin-top: 6px; }
+    pre { background: #14171a; padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+    button { background: #2a2e34; color: #e6e6e6; border: 1px solid #3a3f47; border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+    button:hover { background: #3a3f47; }
+    a { color: #a78bfa; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><a href="/">War Room</a> / {{.RunID}}</h1>
+    <div class="meta">project: {{.Tenant}} · {{len .Findings}} finding(s) · <a href="/runs/{{.RunID}}/audit">audit trail</a></div>
+  </header>
+  <main>
+    {{range .Findings}}
+    <div class="finding">
+      <span class="sev {{.Severity}}">{{.Severity}}</span>
+      <span class="rule">{{.RuleID}}</span>
+      <div class="loc">{{.Location.File}}:{{.Location.Region.StartLine}} · {{.Tool}}</div>
+      <p>{{.Message}}</p>
+      {{if .CodeContext}}<pre>{{.CodeContext}}</pre>{{end}}
+      {{with .Verdict}}
+      <div class="verdict">triage: <b>{{.Classification}}</b> · confidence {{printf "%.2f" .Confidence}} · {{.Exploitability}}{{if .Refuted}} · <i>refuted by judge</i>{{end}}</div>
+      {{end}}
+      <form hx-post="/runs/{{$.RunID}}/feedback" hx-swap="outerHTML" style="margin-top:8px">
+        <input type="hidden" name="fingerprint" value="{{.Fingerprint}}">
+        <button name="label" value="tp">Mark TP</button>
+        <button name="label" value="fp">Mark FP</button>
+      </form>
+    </div>
+    {{else}}
+    <p class="meta">No findings for this run.</p>
+    {{end}}
+  </main>
+</body>
+</html>

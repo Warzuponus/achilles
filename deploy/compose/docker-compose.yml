@@ -1,0 +1,116 @@
+# Achilles on any Docker host: PostgreSQL + the War Room + scans. No cloud account.
+#
+#   cp .env.example .env            # optional: every value has a default
+#   docker compose up -d --build    # postgres + War Room
+#   docker compose --profile scan run --rm scan     # scan ./examples/quickstart
+#   open http://localhost:8080
+#
+# Scan your own code:    TARGET=/path/to/repo docker compose --profile scan run --rm scan
+# A recurring fleet:     docker compose --profile fleet up -d      (see docs/containers.md)
+# Local models:          docker compose --profile ollama up -d
+#
+# SECURITY: the War Room has NO authentication. It is published on 127.0.0.1 only, so
+# only you (and processes on this machine) can reach it, and it refuses requests whose
+# Host header is not localhost and cross-site writes. Do not change the port mapping to
+# 0.0.0.0 or a LAN address. To share it, put your own authenticating reverse proxy in
+# front and add its host name to --allowed-hosts (docs/containers.md).
+
+name: achilles
+
+x-achilles: &achilles
+  image: ${ACHILLES_IMAGE:-achilles:local}
+  build:
+    context: ../..
+    dockerfile: deployments/achilles/Dockerfile
+    args:
+      WITH_GO: ${WITH_GO:-true}
+  environment: &env
+    # Compose-internal network only; the database port is not published.
+    ACHILLES_VAULT_DSN: postgres://${POSTGRES_USER:-achilles}:${POSTGRES_PASSWORD:-achilles-local-only}@postgres:5432/${POSTGRES_DB:-achilles}?sslmode=disable
+    # Optional LLM settings (docs/llm-and-agents.md); empty = no LLM features.
+    ACHILLES_LLM_BASE_URL: ${ACHILLES_LLM_BASE_URL:-}
+    ACHILLES_LLM_MODEL: ${ACHILLES_LLM_MODEL:-}
+    ACHILLES_LLM_AUTH: ${ACHILLES_LLM_AUTH:-key}
+    ACHILLES_LLM_API_KEY: ${ACHILLES_LLM_API_KEY:-}
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-achilles}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-achilles-local-only}
+      POSTGRES_DB: ${POSTGRES_DB:-achilles}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  warroom:
+    <<: *achilles
+    command:
+      - achillesd
+      - --addr=:8080          # inside the container; the host side is loopback-only (below)
+      - --allow-remote        # required to listen on 0.0.0.0 in the container
+      - --vault-backend=postgres
+    ports:
+      - "127.0.0.1:${WARROOM_PORT:-8080}:8080"
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 200"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # One-shot scan (run it; it exits). Findings land in the War Room's tenant
+  # "default" (override with TENANT=...). --strict-tools is on by default in the
+  # image, so a scan whose scanners could not run FAILS instead of looking clean.
+  scan:
+    <<: *achilles
+    profiles: ["scan"]
+    restart: "no"
+    depends_on:
+      postgres: {condition: service_healthy}
+    volumes:
+      - ${TARGET:-../../examples/quickstart}:/work:ro
+    command:
+      - achilles
+      - --runner=local
+      - --vault-backend=postgres
+      - --vault-tenant=${TENANT:-default}
+      - /work
+
+  # Recurring scans of many repos (git URLs or mounted paths). Mount your fleet
+  # definition at ./fleet.yaml (start from configs/fleet.example.yaml).
+  fleet:
+    <<: *achilles
+    profiles: ["fleet"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    volumes:
+      - ./fleet.yaml:/etc/achilles/fleet.yaml:ro
+    command:
+      - achilles-fleet
+      - --config=/etc/achilles/fleet.yaml
+      - --vault-backend=postgres
+      - --runner=local
+      - --every=${FLEET_EVERY:-24h}
+      - --workspace=/tmp/fleet
+
+  # Optional local LLM runtime. After it starts: docker compose exec ollama ollama pull <model>
+  # then point ACHILLES_LLM_BASE_URL at http://ollama:11434/v1 with ACHILLES_LLM_AUTH=none.
+  ollama:
+    image: ollama/ollama
+    profiles: ["ollama"]
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  ollama:

@@ -1,0 +1,39 @@
+# Achilles baseline rules - original, authored in-house (clean IP; not imported
+# from the Semgrep registry). These are a starter set for the Phase 0 skeleton;
+# real rule packs and the generated-rule repository (DESIGN.md sec. 9) come later.
+# Format is Semgrep/Opengrep-compatible. Keep this file ASCII-only: the Opengrep
+# config reader decodes rule files as ASCII and errors on non-ASCII bytes.
+rules:
+  - id: achilles.python.dangerous-eval
+    languages: [python]
+    severity: ERROR
+    message: >
+      Use of eval() on dynamic input can lead to arbitrary code execution.
+      Prefer ast.literal_eval() or an explicit parser.
+    metadata:
+      cwe: ["CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (Eval Injection)"]
+      category: security
+    pattern: eval(...)
+
+  - id: achilles.python.subprocess-shell-true
+    languages: [python]
+    severity: WARNING
+    message: >
+      subprocess called with shell=True can enable command injection when any
+      argument is attacker-influenced. Pass an argument list without a shell.
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)"]
+      category: security
+    patterns:
+      - pattern: subprocess.$FN(..., shell=True, ...)
+
+  - id: achilles.javascript.dangerous-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      Use of eval() can lead to arbitrary code execution. Avoid eval; use
+      JSON.parse or a safe alternative.
+    metadata:
+      cwe: ["CWE-95: Eval Injection"]
+      category: security
+    pattern: eval(...)

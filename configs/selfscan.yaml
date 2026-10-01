@@ -1,0 +1,15 @@
+# Self-scan config: Achilles scanning its own Go code (dogfooding, CI).
+# Only gosec is enabled here — it's the Go SAST engine. The default
+# configs/tools.yaml keeps the broader multi-language set for scanning targets.
+tools:
+  - id: gosec
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: true
+    languages: [go]
+    image: ghcr.io/securego/gosec:2.27.1@sha256:d0859f242774504d57b17442b2dc77d4ffd2f4d30fbdf92c7eb612b2a394f477
+    bin: gosec
+    requires: [go]   # gosec type-checks via the Go toolchain; fail loudly if absent
+    format: sarif
+    argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "{src}/..."]
+    outputFile: "{out}/results.sarif"

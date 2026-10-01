@@ -1,0 +1,11 @@
+# Verify-only config: enables just Railroader. Mirrors configs/tools.yaml.
+tools:
+  - id: railroader
+    license: MIT
+    commercialSafe: true
+    enabled: true
+    languages: [ruby]
+    image: achilles/railroader:4.3.8
+    format: railroader
+    argv: ["-f", "json", "-o", "{out}/results.json", "-q", "{src}"]
+    outputFile: "{out}/results.json"

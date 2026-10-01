@@ -1,0 +1,40 @@
+# Per-model token prices for cost estimation (--price-config).
+#
+# ⚠️  THE NUMBERS BELOW ARE PLACEHOLDERS, NOT REAL PRICES. ⚠️
+#
+# Achilles deliberately ships NO built-in price table. Prices change without
+# notice, differ per provider for the same model name (OpenAI vs Azure
+# vs Ollama Cloud vs your own vLLM box), and are often negotiated — so the only
+# trustworthy source is your provider's own pricing page or invoice. A --max-cost
+# guardrail computed from numbers we guessed would be worse than no guardrail.
+#
+# Fill this in yourself, then:
+#   achilles --triage --llm-model <m> --price-config configs/prices.yaml --dry-run .
+#   achilles --triage --llm-model <m> --price-config configs/prices.yaml --max-cost 5.00 .
+#
+# Units: USD per 1,000,000 tokens, matching how providers publish pricing.
+# Lookup is exact, then case-insensitive, then on the segment after the last "/"
+# — so one "gemini-3.6-flash" entry also matches "google/gemini-3.6-flash".
+#
+# A model with no entry here is reported as "unpriced": its tokens still appear
+# in the estimate, but it contributes no dollars, and --max-cost refuses to run
+# rather than enforce a cap it cannot compute.
+#
+# Self-hosted models (vLLM/Ollama on your own hardware) have no per-token price;
+# set both fields to 0 to declare them free and let --max-cost work.
+
+models:
+  # --- replace every value below with your provider's actual published price ---
+
+  example-cheap-model:
+    inputPerMTok: 0.15
+    outputPerMTok: 0.60
+
+  example-strong-model:
+    inputPerMTok: 2.50
+    outputPerMTok: 10.00
+
+  # Self-hosted: no metered cost, so the estimate is $0 and --max-cost still works.
+  example-local-model:
+    inputPerMTok: 0
+    outputPerMTok: 0

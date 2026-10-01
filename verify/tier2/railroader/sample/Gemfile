@@ -1,0 +1,6 @@
+source "https://rubygems.org"
+
+# Unpinned + no Gemfile.lock on purpose: Railroader's checks here are code-based
+# (it doesn't need bundle install), and an unpinned Gemfile with no lockfile
+# gives Dependabot nothing to flag.
+gem "rails"

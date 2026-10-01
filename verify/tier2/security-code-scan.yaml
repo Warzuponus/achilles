@@ -1,0 +1,12 @@
+# Verify-only config: enables just security-code-scan. Mirrors configs/tools.yaml.
+tools:
+  - id: security-code-scan
+    license: LGPL-3.0
+    commercialSafe: true
+    enabled: true
+    network: default
+    languages: [csharp, vbnet]
+    image: achilles/security-code-scan:5.6.7
+    format: sarif
+    argv: ["{src}", "--export={out}/results.sarif", "--ignore-msbuild-errors"]
+    outputFile: "{out}/results.sarif"

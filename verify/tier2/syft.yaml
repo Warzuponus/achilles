@@ -1,0 +1,11 @@
+# Verify-only config: the Syft SBOM generator (used by --sbom, not the registry).
+tools:
+  - id: syft
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: false
+    languages: [generic]
+    image: achilles/syft:1.46.0
+    format: cyclonedx
+    argv: ["scan", "dir:{src}", "-o", "cyclonedx-json={out}/sbom.json", "-q"]
+    outputFile: "{out}/sbom.json"

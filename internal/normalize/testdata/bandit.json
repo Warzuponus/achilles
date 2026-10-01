@@ -1,0 +1,33 @@
+{
+  "errors": [],
+  "generated_at": "2026-07-09T00:00:00Z",
+  "results": [
+    {
+      "code": "4 password = \"hunter2\"\n5 conn = connect(password)\n",
+      "col_offset": 11,
+      "filename": "app/db.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": { "id": 259, "link": "https://cwe.mitre.org/data/definitions/259.html" },
+      "issue_severity": "LOW",
+      "issue_text": "Possible hardcoded password: 'hunter2'",
+      "line_number": 4,
+      "line_range": [4],
+      "test_id": "B105",
+      "test_name": "hardcoded_password_string"
+    },
+    {
+      "code": "12 os.system(user_input)\n",
+      "col_offset": 0,
+      "filename": "app/run.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": { "id": 78, "link": "https://cwe.mitre.org/data/definitions/78.html" },
+      "issue_severity": "HIGH",
+      "issue_text": "Starting a process with a shell, possible injection detected.",
+      "line_number": 12,
+      "line_range": [12],
+      "test_id": "B605",
+      "test_name": "start_process_with_a_shell"
+    }
+  ],
+  "metrics": {}
+}

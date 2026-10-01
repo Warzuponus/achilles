@@ -1,0 +1,173 @@
+{
+  "mode": "context",
+  "cases": 18,
+  "casesComplete": 18,
+  "evidenceTotal": 49,
+  "evidenceVisible": 49,
+  "meanContextLines": 6.833333333333333,
+  "totalPromptTokens": 4194,
+  "results": [
+    {
+      "caseId": "go-exec-allowlisted",
+      "fixture": "testdata/go_exec_allowlist.go",
+      "label": "fp",
+      "contextLines": 8,
+      "promptTokens": 238,
+      "evidenceTotal": 4,
+      "evidenceVisible": 4
+    },
+    {
+      "caseId": "go-exec-request-arg",
+      "fixture": "testdata/go_exec_userinput.go",
+      "label": "tp",
+      "contextLines": 7,
+      "promptTokens": 237,
+      "evidenceTotal": 2,
+      "evidenceVisible": 2
+    },
+    {
+      "caseId": "go-md5-cache-key",
+      "fixture": "testdata/go_md5_cachekey.go",
+      "label": "fp",
+      "contextLines": 7,
+      "promptTokens": 217,
+      "evidenceTotal": 3,
+      "evidenceVisible": 3
+    },
+    {
+      "caseId": "go-md5-password-hash",
+      "fixture": "testdata/go_md5_password.go",
+      "label": "tp",
+      "contextLines": 7,
+      "promptTokens": 219,
+      "evidenceTotal": 2,
+      "evidenceVisible": 2
+    },
+    {
+      "caseId": "go-rand-retry-jitter",
+      "fixture": "testdata/go_rand_jitter.go",
+      "label": "fp",
+      "contextLines": 6,
+      "promptTokens": 238,
+      "evidenceTotal": 2,
+      "evidenceVisible": 2
+    },
+    {
+      "caseId": "go-rand-session-token",
+      "fixture": "testdata/go_rand_token.go",
+      "label": "tp",
+      "contextLines": 6,
+      "promptTokens": 220,
+      "evidenceTotal": 2,
+      "evidenceVisible": 2
+    },
+    {
+      "caseId": "go-readfile-contained",
+      "fixture": "testdata/go_readfile_validated.go",
+      "label": "fp",
+      "contextLines": 9,
+      "promptTokens": 263,
+      "evidenceTotal": 5,
+      "evidenceVisible": 5
+    },
+    {
+      "caseId": "go-readfile-request-path",
+      "fixture": "testdata/go_readfile_userpath.go",
+      "label": "tp",
+      "contextLines": 6,
+      "promptTokens": 219,
+      "evidenceTotal": 2,
+      "evidenceVisible": 2
+    },
+    {
+      "caseId": "go-sqli-allowlisted-table",
+      "fixture": "testdata/go_sqli_allowlist.go",
+      "label": "fp",
+      "contextLines": 10,
+      "promptTokens": 268,
+      "evidenceTotal": 5,
+      "evidenceVisible": 5
+    },
+    {
+      "caseId": "go-sqli-request-concat",
+      "fixture": "testdata/go_sqli_concat.go",
+      "label": "tp",
+      "contextLines": 6,
+      "promptTokens": 216,
+      "evidenceTotal": 2,
+      "evidenceVisible": 2
+    },
+    {
+      "caseId": "go-trap-md5-auth-compare",
+      "fixture": "testdata/go_trap_md5_auth_compare.go",
+      "label": "tp",
+      "contextLines": 8,
+      "promptTokens": 244,
+      "evidenceTotal": 2,
+      "evidenceVisible": 2
+    },
+    {
+      "caseId": "go-trap-readfile-allowlisted",
+      "fixture": "testdata/go_trap_readfile_allowlisted.go",
+      "label": "fp",
+      "contextLines": 9,
+      "promptTokens": 257,
+      "evidenceTotal": 5,
+      "evidenceVisible": 5
+    },
+    {
+      "caseId": "go-trap-sqli-request-table",
+      "fixture": "testdata/go_trap_sqli_request_table.go",
+      "label": "tp",
+      "contextLines": 6,
+      "promptTokens": 224,
+      "evidenceTotal": 2,
+      "evidenceVisible": 2
+    },
+    {
+      "caseId": "py-eval-module-literal",
+      "fixture": "testdata/py_eval_constant.py",
+      "label": "fp",
+      "contextLines": 6,
+      "promptTokens": 227,
+      "evidenceTotal": 2,
+      "evidenceVisible": 2
+    },
+    {
+      "caseId": "py-eval-request-body",
+      "fixture": "testdata/py_eval_request.py",
+      "label": "tp",
+      "contextLines": 6,
+      "promptTokens": 224,
+      "evidenceTotal": 3,
+      "evidenceVisible": 3
+    },
+    {
+      "caseId": "py-shell-fixed-command",
+      "fixture": "testdata/py_subprocess_literal.py",
+      "label": "fp",
+      "contextLines": 5,
+      "promptTokens": 221,
+      "evidenceTotal": 1,
+      "evidenceVisible": 1
+    },
+    {
+      "caseId": "py-shell-request-dir",
+      "fixture": "testdata/py_subprocess_userinput.py",
+      "label": "tp",
+      "contextLines": 5,
+      "promptTokens": 225,
+      "evidenceTotal": 2,
+      "evidenceVisible": 2
+    },
+    {
+      "caseId": "py-trap-shell-const",
+      "fixture": "testdata/py_trap_shell_const.py",
+      "label": "fp",
+      "contextLines": 6,
+      "promptTokens": 237,
+      "evidenceTotal": 3,
+      "evidenceVisible": 3
+    }
+  ]
+}

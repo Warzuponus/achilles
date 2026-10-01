@@ -1,0 +1,11 @@
+# Verify-only config: enables just findsecbugs. argv mirrors configs/tools.yaml.
+tools:
+  - id: findsecbugs
+    license: LGPL-2.1
+    commercialSafe: true
+    enabled: true
+    languages: [java, kotlin, scala, groovy]
+    image: achilles/findsecbugs:1.14.0
+    format: sarif
+    argv: ["-effort:max", "-sarif={out}/results.sarif", "{src}"]
+    outputFile: "{out}/results.sarif"

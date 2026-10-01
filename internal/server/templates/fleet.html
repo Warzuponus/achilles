@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Achilles — Fleet</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; background: #1a1d21; color: #e6e6e6; }
+    header { background: #111316; padding: 16px 24px; border-bottom: 1px solid #2a2e34; }
+    h1 { margin: 0; font-size: 18px; }
+    h2 { font-size: 15px; color: #cbd2dc; margin: 24px 0 10px; }
+    .meta { color: #8b93a1; font-size: 13px; }
+    main { padding: 24px; }
+    .totals { display: flex; gap: 32px; flex-wrap: wrap; margin: 8px 0 4px; }
+    .stat .n { font-size: 22px; font-weight: 700; }
+    .stat .l { color: #8b93a1; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2e34; font-size: 14px; }
+    th { color: #8b93a1; font-weight: 600; }
+    td.num, th.num { text-align: right; }
+    a { color: #a78bfa; text-decoration: none; }
+    .empty { color: #8b93a1; padding: 24px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Achilles — Fleet</h1>
+    <div class="meta">{{.Fleet.Tenants}} project(s) · <a href="/">War Room</a></div>
+  </header>
+  <main>
+    <h2>Fleet totals</h2>
+    <div class="totals">
+      <div class="stat"><div class="n">{{.Fleet.Totals.Runs}}</div><div class="l">runs</div></div>
+      <div class="stat"><div class="n">{{.Fleet.Totals.Targets}}</div><div class="l">targets</div></div>
+      <div class="stat"><div class="n">{{.Fleet.Totals.TotalFindings}}</div><div class="l">findings ({{.Fleet.Totals.UniqueFindings}} unique)</div></div>
+      <div class="stat"><div class="n">{{.Fleet.Totals.FPPercent}}%</div><div class="l">FP rate</div></div>
+      <div class="stat"><div class="n">{{.Fleet.Totals.LLMTokens}}</div><div class="l">LLM tokens</div></div>
+    </div>
+
+    <h2>By project</h2>
+    {{if .Fleet.ByTenant}}
+    <table>
+      <thead><tr>
+        <th>Project</th><th class="num">Runs</th><th class="num">Findings</th>
+        <th class="num">Critical</th><th class="num">High</th><th class="num">Medium</th><th class="num">Low</th>
+        <th class="num">FP rate</th>
+      </tr></thead>
+      <tbody>
+      {{range .Fleet.ByTenant}}
+        <tr>
+          <td>{{.Tenant}}</td>
+          <td class="num">{{.Summary.Runs}}</td>
+          <td class="num">{{.Summary.TotalFindings}}</td>
+          <td class="num">{{index .Summary.BySeverity "critical"}}</td>
+          <td class="num">{{index .Summary.BySeverity "high"}}</td>
+          <td class="num">{{index .Summary.BySeverity "medium"}}</td>
+          <td class="num">{{index .Summary.BySeverity "low"}}</td>
+          <td class="num">{{.Summary.FPPercent}}%</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="empty">No projects yet. Run scans into projects (see <code>achilles-fleet</code>).</p>
+    {{end}}
+  </main>
+</body>
+</html>

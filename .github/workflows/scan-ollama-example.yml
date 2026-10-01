@@ -1,0 +1,87 @@
+# Example: a full, LLM-assisted Achilles scan using open models on Ollama Cloud,
+# routed per task (triage/judge/remediation/review/sca/threat-model). Copy into a
+# consumer repo's .github/workflows/ and set the ACHILLES_LLM_API_KEY secret
+# (Settings → Secrets and variables → Actions).
+#
+# The routing lives in models.ollama.yaml, written inline below so this workflow
+# is self-contained; Achilles also ships it at configs/models.ollama.yaml.
+#
+# Full LLM scans are heavier than a plain gate, so this runs on a schedule /
+# manual dispatch rather than on every PR. For a fast per-PR gate, use
+# scan-example.yml instead (no LLM).
+name: Achilles full scan (Ollama)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+permissions:
+  contents: read
+  security-events: write # SARIF upload
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    env:
+      # The single key for every routed model. Never hard-code it — this reads a
+      # repo/org Actions secret. The models differ per task; the endpoint + key
+      # are shared (Ollama Cloud is OpenAI-compatible).
+      ACHILLES_LLM_API_KEY: ${{ secrets.ACHILLES_LLM_API_KEY }}
+      ACHILLES_LLM_BASE_URL: https://ollama.com/v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Write the per-task model routing
+        shell: bash
+        run: |
+          cat > models.ollama.yaml <<'YAML'
+          tasks:
+            triage:       { model: minimax-m2.7 }
+            judge:        { model: kimi-k2.6 }
+            remediation:  { model: kimi-k2.6 }
+            threat-model: { model: kimi-k2.6 }
+            review:       { model: minimax-m2.7 }
+            sca:          { model: minimax-m2.7 }
+          YAML
+
+      - name: Achilles full scan (routed)
+        uses: Warzuponus/achilles@main
+        with:
+          target: "."
+          mode: "commercial"
+          # Default fallback model = glm-5.2; per-task overrides from the routing
+          # file. The holistic agents (review/sca-advice/threat-model) are a few
+          # calls; add --triage --remediate for per-finding analysis (higher
+          # volume, slower on large finding sets).
+          args: >-
+            --llm-base-url https://ollama.com/v1
+            --llm-model glm-5.2
+            --model-config models.ollama.yaml
+            --review
+            --sca-advice
+            --threat-model achilles-threatmodel.otm.json
+            --sarif-report achilles.sarif
+            --markdown achilles-report.md
+            --html-report achilles-report.html
+            --github
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: achilles-reports
+          path: |
+            achilles-report.html
+            achilles.sarif
+            achilles-report.md
+            achilles-threatmodel.otm.json
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        continue-on-error: true # needs code scanning enabled on the repo
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: achilles.sarif

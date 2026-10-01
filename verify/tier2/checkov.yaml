@@ -1,0 +1,12 @@
+# Verify-only config: enables just Checkov. Mirrors configs/tools.yaml.
+tools:
+  - id: checkov
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: true
+    languages: [generic]
+    network: default
+    image: achilles/checkov:3.3.8
+    format: sarif
+    argv: ["-d", "{src}", "-o", "sarif", "--output-file-path", "{out}", "--compact", "--quiet"]
+    outputFile: "{out}/results_sarif.sarif"

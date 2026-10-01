@@ -1,0 +1,11 @@
+# Verify-only config: enables just clang-tidy. Mirrors configs/tools.yaml.
+tools:
+  - id: clang-tidy
+    license: Apache-2.0 WITH LLVM-exception
+    commercialSafe: true
+    enabled: true
+    languages: [c, cpp]
+    image: achilles/clang-tidy:18
+    format: sarif
+    argv: ["{src}", "{out}/results.sarif"]
+    outputFile: "{out}/results.sarif"

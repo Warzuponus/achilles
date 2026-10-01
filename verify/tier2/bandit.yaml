@@ -1,0 +1,11 @@
+# Verify-only config: enables just Bandit. Mirrors configs/tools.yaml.
+tools:
+  - id: bandit
+    license: Apache-2.0
+    commercialSafe: true
+    enabled: true
+    languages: [python]
+    image: achilles/bandit:1.9.4
+    format: bandit
+    argv: ["-r", "{src}", "-f", "json", "-o", "{out}/results.json"]
+    outputFile: "{out}/results.json"

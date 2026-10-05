@@ -7,7 +7,7 @@ This gets you from an empty shell to a scan you understand.
 Achilles is a single Go binary (Go 1.26, no cgo).
 
 ```bash
-git clone git@github.com:Warzuponus/achilles.git && cd achilles
+git clone https://github.com/Warzuponus/achilles.git && cd achilles
 make build            # -> bin/achilles
 sudo cp bin/achilles /usr/local/bin/   # optional: put it on PATH
 ```

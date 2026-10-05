@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -23,8 +26,8 @@ jobs:
     env:
       ACHILLES_TEST_POSTGRES_DSN: postgres://postgres:test@localhost:5432/vaulttest?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: '1.26'
       - name: Format check
@@ -47,3 +50,16 @@ jobs:
       # Integration tests need the real tools (opengrep, git); they self-skip when absent.
       - name: Test (integration, best-effort)
         run: go test -tags integration ./... || true
+
+  # The composite action from THIS checkout (not a published tag), so a change that
+  # breaks action.yml fails its own PR. --strict-tools turns a scanner that failed to
+  # install into a failed job instead of a quietly partial scan.
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Run the action against the bundled sample
+        uses: ./
+        with:
+          target: examples/quickstart
+          args: --strict-tools --sarif-report achilles.sarif

@@ -1,6 +1,6 @@
 # Example: run Achilles on pull requests, annotate the diff, upload SARIF to
 # GitHub code scanning, and fail only on newly-introduced high-severity findings.
-# Copy this into a consumer repo's .github/workflows/.
+# Copy this into a consumer repo's .github/workflows/ (it does not run here).
 name: Achilles scan (example)
 
 on:
@@ -15,26 +15,21 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # needed for --diff against the base ref
 
       - name: Achilles scan
-        uses: Warzuponus/achilles@main
+        uses: Warzuponus/achilles@v0.1.0
         with:
           target: "."
           mode: "commercial"
           # Diff-aware + baseline-aware gate; annotate the PR; emit SARIF.
           # To post a sticky PR summary comment, add `pull-requests: write` above,
           # set GITHUB_TOKEN in env, and add: --pr-comment ${{ github.event.pull_request.number }}
-          # NOTE: `--exclude evals` is specific to THIS repo — evals/triage/testdata
-          # holds deliberately vulnerable fixtures that are the eval harness's
-          # ground truth (see evals/README.md). Drop that flag when you copy this
-          # workflow into a consumer repo; keep the rest.
           args: >-
             --diff origin/${{ github.base_ref }}
             --baseline .achilles/baseline.json
-            --exclude evals
             --sarif-report achilles.sarif
             --github
             --fail-on high
@@ -48,6 +43,6 @@ jobs:
         # has it (private repos without Advanced Security, restricted default
         # tokens), so a failed upload must not fail the whole scan job.
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2
         with:
           sarif_file: achilles.sarif

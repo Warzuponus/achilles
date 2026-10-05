@@ -112,7 +112,7 @@ Later: precision/recall dashboards over a labeled fixture set; dedicated Reflect
 | Live E2E | manual: flask dep → cited issue → synth → **real Opengrep gate** → admitted rule with provenance in the repo | ✅ |
 
 Acceptance: no rule enters the corpus without passing the gate; a deliberately-overbroad rule is quarantined. ✅
-Follow-ups: feed admitted rules into scans; OSV.dev grounding; rule perf tracking via §8.
+Follow-ups: OSV.dev grounding; rule perf tracking via §8. (Feeding admitted rules into scans is done — DESIGN.md §9.4.)
 
 ---
 
@@ -129,7 +129,7 @@ Follow-ups: feed admitted rules into scans; OSV.dev grounding; rule perf trackin
 | Delivery | GitHub Action (action.yml), repo CI workflow, example scan workflow, `make release` | ✅ |
 
 Acceptance: hermetic suite green; CI fails only on newly-introduced findings. ✅
-Still backlogged: the AGPL-import CI guard (fail on AGPL/GPL module in `go.mod`).
+Copyleft-import guard: `license-check.yml` fails the build on any AGPL/GPL/LGPL Go dependency.
 
 ---
 

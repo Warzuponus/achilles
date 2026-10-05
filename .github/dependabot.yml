@@ -1,0 +1,19 @@
+# Keeps the SHA-pinned actions, the digest-pinned base images and Go modules current.
+# Updates are grouped per ecosystem so each week is one PR, not one per dependency.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: gomod
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      go: { patterns: ["*"] }
+  - package-ecosystem: docker
+    directory: /deployments/achilles
+    schedule: { interval: weekly }
+    groups:
+      docker: { patterns: ["*"] }

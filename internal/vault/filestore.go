@@ -105,7 +105,7 @@ func (fs *FileStore) reset() {
 // lock takes the cross-process write lock and brings memory up to date; the
 // returned func releases it. The caller holds fs.mu.
 func (fs *FileStore) lock() (func(), error) {
-	if err := os.MkdirAll(filepath.Dir(fs.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(fs.path), 0o700); err != nil {
 		return nil, fmt.Errorf("vault dir: %w", err)
 	}
 	lf, err := os.OpenFile(fs.path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
@@ -142,7 +142,8 @@ func (fs *FileStore) Append(r Record) (Record, error) {
 	// stay unique across processes.
 	r.ID = computeID(r, len(fs.records))
 
-	f, err := os.OpenFile(fs.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	// Owner-only: records hold raw scanner output, including any secrets found in code.
+	f, err := os.OpenFile(fs.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return Record{}, fmt.Errorf("open vault for append: %w", err)
 	}

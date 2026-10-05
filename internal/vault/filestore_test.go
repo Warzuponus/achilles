@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -33,6 +34,30 @@ func TestAppendAndGet(t *testing.T) {
 	got, ok := fs.Get(rec.ID)
 	if !ok || got.RunID != "run1" {
 		t.Errorf("Get: ok=%v run=%q", ok, got.RunID)
+	}
+}
+
+func TestAppendCreatesOwnerOnlyFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits")
+	}
+	dir := filepath.Join(t.TempDir(), "tenants", "acme")
+	path := filepath.Join(dir, "vault.jsonl")
+	fs, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("NewFileStore: %v", err)
+	}
+	if _, err := fs.Append(Record{RunID: "r", Kind: KindRawOutput}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	for p, want := range map[string]os.FileMode{dir: 0o700, path: 0o600} {
+		fi, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := fi.Mode().Perm(); got != want {
+			t.Errorf("%s: mode %o, want %o", p, got, want)
+		}
 	}
 }
 

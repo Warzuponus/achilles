@@ -20,7 +20,7 @@ Be explicit about the evidence behind each path:
 |------|----------|
 | CLI + file vault | Unit and integration tests in CI (`make test`); the repo scans itself on every PR ([self-scan.yml](.github/workflows/self-scan.yml)). |
 | Docker image + compose stack | [quickstart.yml](.github/workflows/quickstart.yml) runs the full compose quickstart (build, start, scan the bundled sample with `--strict-tools`, check the findings in the War Room, check the Host and cross-origin protections) on every relevant change. |
-| GitHub Action + per-PR gate | [scan-example.yml](.github/workflows/scan-example.yml) is the reference consumer workflow. |
+| GitHub Action + per-PR gate | [ci.yml](.github/workflows/ci.yml) runs the action from the checkout against the bundled sample with `--strict-tools` on every PR; [scan-example.yml](examples/workflows/scan-example.yml) is the reference consumer workflow. |
 | Scan hub | The workflow is in the repo, but CI does not exercise it: it needs a GitHub App you create (below). Treat the setup steps as a checklist to verify in your own organisation. |
 | Fleet on cron / Kubernetes | The fleet binary is tested ([fleet.md](docs/fleet.md)); the `CronJob` and cron snippets are **patterns, not tested manifests**. |
 | Multi-user / network exposure | **Not a supported configuration.** There is no authentication. See [Security model](docs/containers.md#security-model-no-authentication). |
@@ -106,7 +106,7 @@ Reference it as `uses: <owner>/achilles@<ref>`.
 
 ### Per-PR gate (no LLM, no secrets)
 
-Copy [`.github/workflows/scan-example.yml`](.github/workflows/scan-example.yml):
+Copy [`examples/workflows/scan-example.yml`](examples/workflows/scan-example.yml):
 inline annotations on the diff, a SARIF artifact, and a gate that fails only on
 **newly introduced** findings (`--diff` + `--baseline` + `--fail-on`).
 
@@ -120,7 +120,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }        # for --diff against the base ref
-      - uses: <owner>/achilles@main
+      - uses: <owner>/achilles@v0.1.0
         with:
           mode: commercial
           args: >-
@@ -141,7 +141,7 @@ Regenerate a baseline after intentional changes:
 
 ### Routed LLM scan
 
-[`scan-ollama-example.yml`](.github/workflows/scan-ollama-example.yml) is a scheduled,
+[`scan-ollama-example.yml`](examples/workflows/scan-ollama-example.yml) is a scheduled,
 LLM-assisted scan with per-task model routing (see
 [`configs/models.ollama.yaml`](configs/models.ollama.yaml)). Add **one** secret,
 `ACHILLES_LLM_API_KEY`, in the repository settings (never paste a key into a

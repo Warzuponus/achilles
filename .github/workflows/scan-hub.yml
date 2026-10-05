@@ -36,12 +36,12 @@ jobs:
       ACHILLES_LLM_BASE_URL: https://ollama.com/v1
     steps:
       # 1. This repo — provides the action, the tool registry, and the routing.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # 2. A short-lived token scoped to JUST the target repo (Contents: Read).
       - name: Mint target-scoped token
         id: tok
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.SCANNER_APP_ID }}
           private-key: ${{ secrets.SCANNER_APP_PRIVATE_KEY }}
@@ -50,7 +50,7 @@ jobs:
 
       # 3. Check the target out into ./target using that token.
       - name: Checkout target
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ github.repository_owner }}/${{ inputs.target_repo }}
           ref: ${{ inputs.ref }}
@@ -81,7 +81,7 @@ jobs:
       #    (findings + AI review/advice/threat-model) — open it in a browser.
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: achilles-${{ inputs.target_repo }}
           path: |

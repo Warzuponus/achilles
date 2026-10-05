@@ -66,7 +66,7 @@
 <p>This gets you from an empty shell to a scan you understand.</p>
 <h2>1. Install</h2>
 <p>Achilles is a single Go binary (Go 1.26, no cgo).</p>
-<pre><code class="language-bash">git clone git@github.com:Warzuponus/achilles.git &amp;&amp; cd achilles
+<pre><code class="language-bash">git clone https://github.com/Warzuponus/achilles.git &amp;&amp; cd achilles
 make build            # -&gt; bin/achilles
 sudo cp bin/achilles /usr/local/bin/   # optional: put it on PATH
 </code></pre>
@@ -1434,7 +1434,7 @@ cloud account. This guide covers the bundled image, the compose stack, and how t
 pieces are secured.</p>
 <h2>Five-minute quickstart</h2>
 <p>You need Docker with Compose v2 and ~2 GB of disk (the image bundles the scanners).</p>
-<pre><code class="language-bash">git clone &lt;this repository&gt; &amp;&amp; cd &lt;this repository&gt;/deploy/compose
+<pre><code class="language-bash">git clone https://github.com/Warzuponus/achilles.git &amp;&amp; cd achilles/deploy/compose
 docker compose up -d --build                    # PostgreSQL + War Room
 docker compose --profile scan run --rm scan     # scan the bundled vulnerable sample
 </code></pre>

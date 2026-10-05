@@ -9,7 +9,7 @@ pieces are secured.
 You need Docker with Compose v2 and ~2 GB of disk (the image bundles the scanners).
 
 ```bash
-git clone <this repository> && cd <this repository>/deploy/compose
+git clone https://github.com/Warzuponus/achilles.git && cd achilles/deploy/compose
 docker compose up -d --build                    # PostgreSQL + War Room
 docker compose --profile scan run --rm scan     # scan the bundled vulnerable sample
 ```

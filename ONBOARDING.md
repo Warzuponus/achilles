@@ -40,7 +40,7 @@ touches Go.
 ## Quickstart
 
 ```bash
-git clone git@github.com:Warzuponus/achilles.git && cd achilles
+git clone https://github.com/Warzuponus/achilles.git && cd achilles
 make build            # -> bin/achilles   (Go 1.26, no cgo)
 make test             # hermetic unit tests: no Docker, tools, network, or API keys
 make vet              # go vet

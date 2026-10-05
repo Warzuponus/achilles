@@ -278,9 +278,10 @@ configs/rules       in-house baseline rules (clean IP, ASCII-only)
 
 ## Roadmap complete — selected follow-ups
 
-Phases 0–6 are done. Remaining polish lives in [tasks/todo.md](tasks/todo.md):
-cobra CLI migration, feeding admitted generated rules back into scans, a
-SQLite-backed vault, and an AGPL-import CI guard. See [DESIGN.md](DESIGN.md) and [TEST_PLAN.md](TEST_PLAN.md).
+Phases 0–6 are done. Open follow-ups include a cobra CLI migration, a SQLite-backed
+vault, OSV.dev grounding for the research agents, and SARIF `baselineState` output.
+See [DESIGN.md](DESIGN.md) and [TEST_PLAN.md](TEST_PLAN.md); ideas and bugs are tracked
+in [GitHub issues](https://github.com/Warzuponus/achilles/issues).
 
 ## Acknowledgements
 

@@ -212,4 +212,4 @@ There is no authentication in the War Room; do not expose it beyond loopback.
 - [DESIGN.md](DESIGN.md) — architecture, the §-numbered rationale, roadmap status.
 - [DEPLOY.md](DEPLOY.md) — the ways to run it: CLI, Docker, GitHub Actions, scheduled scans.
 - [TEST_PLAN.md](TEST_PLAN.md) — per-phase verification matrix.
-- [tasks/todo.md](tasks/todo.md) — current state + backlog (start here for "what's next").
+- [GitHub issues](https://github.com/Warzuponus/achilles/issues) — backlog and bugs (start here for "what's next").

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Warzuponus/achilles/internal/config"
 	"github.com/Warzuponus/achilles/internal/correlate"
 	"github.com/Warzuponus/achilles/internal/cost"
 	"github.com/Warzuponus/achilles/internal/enrich"
@@ -15,6 +16,81 @@ import (
 	"github.com/Warzuponus/achilles/internal/triage/llm"
 	"github.com/Warzuponus/achilles/internal/vault"
 )
+
+// loadTaskRouting reads --model-config: per-task model routing, shared by triage
+// and the whole-repo agents. nil when no config is given.
+func loadTaskRouting(path string) (map[string]llm.TaskModel, error) {
+	if path == "" {
+		return nil, nil
+	}
+	mr, err := config.LoadModelRouting(path)
+	if err != nil {
+		return nil, err
+	}
+	tasks := map[string]llm.TaskModel{}
+	for name, tm := range mr.Tasks {
+		tasks[name] = llm.TaskModel{Model: tm.Model, BaseURL: tm.BaseURL}
+	}
+	return tasks, nil
+}
+
+// triageScan is the LLM cost pre-flight (--dry-run / --max-cost) followed by
+// triage of the surfaced findings when --triage or --remediate is set.
+func triageScan(ctx context.Context, o *options, ev vault.Store, runID string, scan *model.Scan, clusters []correlate.Cluster, tasks map[string]llm.TaskModel) (llm.Usage, error) {
+	var priceTable cost.Table
+	if o.priceConfig != "" {
+		pt, err := cost.LoadTable(o.priceConfig)
+		if err != nil {
+			return llm.Usage{}, err
+		}
+		priceTable = pt
+	}
+	if o.maxCost < 0 {
+		return llm.Usage{}, fmt.Errorf("--max-cost must not be negative")
+	}
+	if o.maxCost > 0 && o.priceConfig == "" {
+		return llm.Usage{}, fmt.Errorf("--max-cost needs --price-config: dollars require per-model prices, " +
+			"which Achilles does not ship (see configs/prices.example.yaml)")
+	}
+	// Other LLM work is not part of the per-finding estimate; name it rather than
+	// let a partial number read as the whole bill.
+	var excluded []string
+	if o.reviewOn {
+		excluded = append(excluded, "--review (one whole-repo call per scan)")
+	}
+	if o.scaAdvice {
+		excluded = append(excluded, "--sca-advice (one whole-repo call per scan)")
+	}
+	if o.threatModelOut != "" {
+		excluded = append(excluded, "--threat-model (one whole-repo call per scan)")
+	}
+	if o.researchOn && !o.dryRun {
+		excluded = append(excluded, fmt.Sprintf("--research (up to %d dependencies researched + rules synthesized)", o.maxTargets))
+	}
+	if o.mineRules && !o.dryRun {
+		excluded = append(excluded, fmt.Sprintf("--mine-rules (up to %d rules mined)", o.maxTargets))
+	}
+	if o.ragOn {
+		excluded = append(excluded, "--rag few-shot examples added to each triage prompt")
+	}
+
+	// Triage runs only on surfaced findings (cheaper: no LLM spend on known/unchanged).
+	if o.triageOn || o.remediateOn {
+		opts := triageOpts{
+			baseURL: o.llmBaseURL, triageModel: o.llmModel, judgeModel: o.llmJudge,
+			embedModel: o.llmEmbed, remediate: o.remediateOn, rag: o.ragOn, tasks: tasks,
+			dryRun: o.dryRun, maxCost: o.maxCost, prices: priceTable, excluded: excluded,
+		}
+		return runTriage(ctx, ev, runID, scan, clusters, opts)
+	}
+	if o.dryRun {
+		est := cost.Project(nil, priceTable)
+		est.Excluded = excluded
+		est.Write(os.Stderr)
+		fmt.Fprintf(os.Stderr, "achilles: dry run — no per-finding LLM work requested (add --triage to estimate it)\n")
+	}
+	return llm.Usage{}, nil
+}
 
 type triageOpts struct {
 	baseURL, triageModel, judgeModel, embedModel string

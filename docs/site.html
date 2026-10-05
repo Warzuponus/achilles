@@ -1008,10 +1008,10 @@ never block the scan.</p>
 <p>Three ways to run Achilles in GitHub Actions, from simplest to most powerful.
 For every way to run Achilles (workstation, containers, CI, scheduled), see <a href="../DEPLOY.md">DEPLOY.md</a>.</p>
 <h2>Option A — per-PR gate (in the repo being scanned)</h2>
-<p>Copy <a href="../.github/workflows/scan-example.yml"><code>.github/workflows/scan-example.yml</code></a>
+<p>Copy <a href="../examples/workflows/scan-example.yml"><code>examples/workflows/scan-example.yml</code></a>
 into a repo. It runs on pull requests, annotates the diff, uploads SARIF to code
 scanning, and fails only on newly-introduced high-severity findings. The core step:</p>
-<pre><code class="language-yaml">- uses: Warzuponus/achilles@main
+<pre><code class="language-yaml">- uses: Warzuponus/achilles@v0.1.0
   with:
     target: &quot;.&quot;
     mode: &quot;commercial&quot;
@@ -1025,7 +1025,7 @@ scanning, and fails only on newly-introduced high-severity findings. The core st
 <p>The composite action installs the binary + the baseline scanners
 (Opengrep, gosec, osv-scanner, Trivy, Gitleaks) for you. No LLM key needed.</p>
 <h2>Option B — routed LLM full scan</h2>
-<p>Copy <a href="../.github/workflows/scan-ollama-example.yml"><code>.github/workflows/scan-ollama-example.yml</code></a>
+<p>Copy <a href="../examples/workflows/scan-ollama-example.yml"><code>examples/workflows/scan-ollama-example.yml</code></a>
 for a scheduled, LLM-assisted scan using multi-model routing.</p>
 <ol>
 <li>Add <strong>one</strong> repo/org secret: <strong><code>ACHILLES_LLM_API_KEY</code></strong> (your Ollama Cloud key).
@@ -1053,14 +1053,14 @@ Workflow: <a href="../.github/workflows/scan-hub.yml"><code>.github/workflows/sc
 <li><strong>Create a GitHub App</strong> in the org: repository permission <strong>Contents: Read</strong>
    only, no webhook, "Only on this account."</li>
 <li><strong>Install it</strong> on the repos you want scannable — only those get read access.</li>
-<li>Add two secrets to <code>Warzuponus/achilles</code>:
+<li>Add two secrets to the repository that runs the hub (your fork or copy of Achilles):
    - <code>SCANNER_APP_ID</code> — the App's ID
    - <code>SCANNER_APP_PRIVATE_KEY</code> — the App's <strong>private key</strong> (the <code>.pem</code> contents,
      from the App's <em>Private keys</em> section — <strong>not</strong> the client secret)
    - (<code>ACHILLES_LLM_API_KEY</code> is already the scan-hub's LLM key.)</li>
 </ol>
 <p>Set the private key reliably with:</p>
-<pre><code class="language-bash">gh secret set SCANNER_APP_PRIVATE_KEY -R Warzuponus/achilles &lt; your-app.private-key.pem
+<pre><code class="language-bash">gh secret set SCANNER_APP_PRIVATE_KEY -R &lt;owner&gt;/achilles &lt; your-app.private-key.pem
 </code></pre>
 <h3>Running it</h3>
 <p>Actions → <strong>Achilles scan hub</strong> → <em>Run workflow</em> → enter the target repo name

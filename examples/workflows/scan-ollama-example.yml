@@ -1,6 +1,6 @@
 # Example: a full, LLM-assisted Achilles scan using open models on Ollama Cloud,
 # routed per task (triage/judge/remediation/review/sca/threat-model). Copy into a
-# consumer repo's .github/workflows/ and set the ACHILLES_LLM_API_KEY secret
+# consumer repo's .github/workflows/ (it does not run here) and set the ACHILLES_LLM_API_KEY secret
 # (Settings → Secrets and variables → Actions).
 #
 # The routing lives in models.ollama.yaml, written inline below so this workflow
@@ -48,7 +48,7 @@ jobs:
           YAML
 
       - name: Achilles full scan (routed)
-        uses: Warzuponus/achilles@main
+        uses: Warzuponus/achilles@v0.1.0
         with:
           target: "."
           mode: "commercial"

@@ -5,12 +5,12 @@ For every way to run Achilles (workstation, containers, CI, scheduled), see [DEP
 
 ## Option A — per-PR gate (in the repo being scanned)
 
-Copy [`.github/workflows/scan-example.yml`](../.github/workflows/scan-example.yml)
+Copy [`examples/workflows/scan-example.yml`](../examples/workflows/scan-example.yml)
 into a repo. It runs on pull requests, annotates the diff, uploads SARIF to code
 scanning, and fails only on newly-introduced high-severity findings. The core step:
 
 ```yaml
-- uses: Warzuponus/achilles@main
+- uses: Warzuponus/achilles@v0.1.0
   with:
     target: "."
     mode: "commercial"
@@ -27,7 +27,7 @@ The composite action installs the binary + the baseline scanners
 
 ## Option B — routed LLM full scan
 
-Copy [`.github/workflows/scan-ollama-example.yml`](../.github/workflows/scan-ollama-example.yml)
+Copy [`examples/workflows/scan-ollama-example.yml`](../examples/workflows/scan-ollama-example.yml)
 for a scheduled, LLM-assisted scan using multi-model routing.
 
 1. Add **one** repo/org secret: **`ACHILLES_LLM_API_KEY`** (your Ollama Cloud key).
@@ -60,7 +60,7 @@ Workflow: [`.github/workflows/scan-hub.yml`](../.github/workflows/scan-hub.yml).
 1. **Create a GitHub App** in the org: repository permission **Contents: Read**
    only, no webhook, "Only on this account."
 2. **Install it** on the repos you want scannable — only those get read access.
-3. Add two secrets to `Warzuponus/achilles`:
+3. Add two secrets to the repository that runs the hub (your fork or copy of Achilles):
    - `SCANNER_APP_ID` — the App's ID
    - `SCANNER_APP_PRIVATE_KEY` — the App's **private key** (the `.pem` contents,
      from the App's *Private keys* section — **not** the client secret)
@@ -68,7 +68,7 @@ Workflow: [`.github/workflows/scan-hub.yml`](../.github/workflows/scan-hub.yml).
 
 Set the private key reliably with:
 ```bash
-gh secret set SCANNER_APP_PRIVATE_KEY -R Warzuponus/achilles < your-app.private-key.pem
+gh secret set SCANNER_APP_PRIVATE_KEY -R <owner>/achilles < your-app.private-key.pem
 ```
 
 ### Running it

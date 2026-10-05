@@ -237,7 +237,7 @@ a partial scan.
 
 `--fail-on` is baseline/diff-aware: it gates on the *surfaced* set, so CI fails
 only on newly-introduced (or changed-file) findings. See
-[.github/workflows/scan-example.yml](.github/workflows/scan-example.yml) and
+[examples/workflows/scan-example.yml](examples/workflows/scan-example.yml) and
 [action.yml](action.yml).
 
 ## Layout

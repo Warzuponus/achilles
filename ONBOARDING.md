@@ -168,7 +168,9 @@ not.
 | `license-check.yml` | push/PR | fails if any Go dep is copyleft (AGPL/GPL/LGPL) — `go-licenses` |
 | `tier2-verify.yml` | on demand / tool changes | end-to-end verify of the heavy tools (Docker) |
 | `quickstart.yml` | compose / image changes | the docker compose quickstart, end to end |
-| `scan-example.yml` | example | template consumer workflow (SARIF upload + PR gate) |
+
+Copy-paste consumer templates (they do not run here) live in `examples/workflows/`:
+`scan-example.yml` (SARIF upload + PR gate) and `scan-ollama-example.yml` (routed LLM scan).
 
 ## Conventions & gotchas
 

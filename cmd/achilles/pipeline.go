@@ -115,7 +115,7 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 		fmt.Fprintf(os.Stderr, "achilles: skipping %d tool(s) not applicable to %v: %v\n", len(skipped), tgt.Languages, skipped)
 	}
 	if o.sarifOut != "" {
-		if err := os.MkdirAll(o.sarifOut, 0o755); err != nil {
+		if err := os.MkdirAll(o.sarifOut, 0o700); err != nil {
 			return model.Scan{}, nil, err
 		}
 	}

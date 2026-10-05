@@ -30,7 +30,7 @@ jobs:
       ACHILLES_LLM_API_KEY: ${{ secrets.ACHILLES_LLM_API_KEY }}
       ACHILLES_LLM_BASE_URL: https://ollama.com/v1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -70,7 +70,7 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: achilles-reports
           path: |
@@ -82,6 +82,6 @@ jobs:
       - name: Upload SARIF to code scanning
         if: always()
         continue-on-error: true # needs code scanning enabled on the repo
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2
         with:
           sarif_file: achilles.sarif

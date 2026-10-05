@@ -22,13 +22,13 @@
 # configs/tools.yaml). Build with --build-arg WITH_GO=false for a ~250 MB smaller
 # image that does not scan Go.
 ARG WITH_GO=true
-FROM golang:1.26 AS go-true
-FROM debian:bookworm-slim AS go-false
+FROM golang:1.26@sha256:0f063af2d465d8dcae54cce04278ada488b96f77b42449c8d071e47d016cc65a AS go-true
+FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS go-false
 RUN mkdir -p /usr/local/go
 FROM go-${WITH_GO} AS gotoolchain
 
 # ---- build the Go binaries and the two Go-based scanners ------------------------
-FROM --platform=$BUILDPLATFORM golang:1.26 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26@sha256:0f063af2d465d8dcae54cce04278ada488b96f77b42449c8d071e47d016cc65a AS build
 ARG TARGETOS=linux
 ARG TARGETARCH
 ARG GOSEC_VERSION=v2.27.1
@@ -55,7 +55,7 @@ RUN set -eux; \
     done
 
 # ---- download + verify the non-Go scanners --------------------------------------
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim AS fetch
+FROM --platform=$BUILDPLATFORM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS fetch
 ARG TARGETARCH
 ARG TRIVY_VERSION=0.72.0
 ARG GITLEAKS_VERSION=8.30.1
@@ -84,8 +84,7 @@ RUN set -eux; \
 
 # ---- runtime ---------------------------------------------------------------------
 # glibc base: the Opengrep release binary is a manylinux build.
-FROM debian:bookworm-slim
-# TODO: pin the base image by digest before release.
+FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates git \
  && rm -rf /var/lib/apt/lists/* \

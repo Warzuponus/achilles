@@ -14,3 +14,4 @@
 
 # goreleaser output
 /dist/
+/achilles

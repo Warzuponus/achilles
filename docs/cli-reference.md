@@ -77,6 +77,10 @@ Needs `--llm-model` and an API key in `ACHILLES_LLM_API_KEY` (or `OPENAI_API_KEY
 | `--llm-concurrency` | `4` | findings triaged in parallel, most severe first |
 | `--llm-no-code` | `false` | privacy mode: send the model only rule, message and location, never source. The AI then never dismisses findings |
 | `--keep-dismissed` | `false` | keep findings the AI confidently dismissed in the gate, issues and counts (default: list them separately) |
+| `--llm-samples` | `1` | ask the model this many times on borderline verdicts and keep the majority; a verdict the samples disagree on is never dismissed. The cost estimate becomes an upper bound |
+| `--deep-verify` | `0` | let the model read and search the repository (bounded, read-only, secrets-blocked) to settle the N highest-priority findings; see [Deep verification](deep-verify.md) |
+| `--deep-max-steps` | `6` | with `--deep-verify`: most tool calls per finding |
+| `--verify-fixes` | `true` | with `--remediate`: re-scan each proposed patch in a temp copy; `--fix-pr` applies only verified ones; see [Verifying fixes](verifying-fixes.md) |
 | `--triage` | `false` | LLM triage + adversarial judge on each finding; confident false positives leave the gate (see [Reports & Gating](reports-and-gating.md#the-gate-and-the-ai-review)) |
 | `--remediate` | `false` | propose fixes for high-confidence findings (implies `--triage`) |
 | `--rag` | `false` | RAG few-shot from past feedback (needs `--llm-embed-model`) |

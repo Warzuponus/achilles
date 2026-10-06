@@ -10,6 +10,9 @@ scheduled scans) see [DEPLOY.md](../DEPLOY.md); for contributing see [ONBOARDING
 | [CLI Reference](cli-reference.md) | look up every flag, grouped by task, with copy-paste examples |
 | [Reports & Gating](reports-and-gating.md) | choose an output format (HTML/SARIF/JUnit/Markdown), gate CI on new findings, and cut noise with baselines + diff-aware scans |
 | [LLM Triage & Agents](llm-and-agents.md) | turn on LLM triage/judge/remediation, run the review / SCA-advice / threat-model agents, and route each task to a different model (any OpenAI-compatible endpoint, incl. Ollama) |
+| [Deep Verification](deep-verify.md) | let the model read the repository (bounded, read-only) to settle the findings a single-file review could not |
+| [Verifying Fixes](verifying-fixes.md) | understand how proposed patches are re-scanned before `--fix-pr` or an issue calls them verified |
+| [Benchmarking Detection](benchmarking.md) | measure how much of a known-vulnerable codebase Achilles actually finds, and where each miss was lost |
 | [CI & the Scan Hub](ci-and-hub.md) | wire Achilles into GitHub Actions — a per-PR gate, a routed full scan, or a central hub that scans other repos |
 | [Fleet](fleet.md) | scan many of your repos from one command into per-project vaults |
 | [Running in containers](containers.md) | run Achilles with Docker Compose or Kubernetes: the all-in-one image, PostgreSQL, the War Room (and its no-authentication security model), recurring scans, and local models |

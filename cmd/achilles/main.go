@@ -156,6 +156,12 @@ func run(argv []string) error {
 		return err
 	}
 
+	// Re-scan each proposed patch before anything (reports, --fix-pr, issues) presents
+	// it as a fix; a no-op unless --remediate produced diffs and --verify-fixes is on.
+	if err := verifyRemediations(ctx, o, absTarget, reg, &scan, ev, runID); err != nil {
+		return err
+	}
+
 	for _, d := range diags {
 		scan.FailedTools = append(scan.FailedTools, d.Tool)
 	}

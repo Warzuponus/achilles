@@ -139,25 +139,68 @@ func issuesReconcile(o *options) (bool, string) {
 // the PR reviewable and bounding the git work per run.
 const maxFixesPerPR = 25
 
-// runFixPR opens a review PR carrying Achilles's high-confidence auto-fixes: it
-// applies each remediation's unified diff to a fresh branch, commits, pushes, and
-// opens a PR. It NEVER merges (DESIGN §1 Non-Goals; the confirmed auto-fix
-// guardrail). The branch name is derived from the fingerprints being fixed, so a
-// re-run reuses the same branch/PR rather than spawning duplicates. Patches that
-// don't apply cleanly are skipped, not fatal. Outward-facing + opt-in.
-func runFixPR(ctx context.Context, dir, repo, remote, base string, scan model.Scan) error {
-	type fix struct{ fp, rule, diff string }
-	var fixes []fix
-	for _, f := range scan.Findings {
+// proposedFix is one remediation diff selected for the auto-fix PR.
+type proposedFix struct {
+	fp, rule, diff string
+	verified       bool
+}
+
+// selectFixes picks the remediation diffs runFixPR may apply and returns one
+// message for every diff it declines or caveats, so nothing is skipped silently. A
+// diff is applied only if a re-scan verified it (Remediation.Verification). When
+// verification did not run at all (--verify-fixes=false) the diff is applied as it
+// always was, with a note that it is unverified.
+func selectFixes(findings []model.Finding) (fixes []proposedFix, notes []string) {
+	unverified := 0
+	for _, f := range findings {
 		if f.Shadow || f.Remediation == nil {
 			continue
 		}
 		if strings.TrimSpace(f.Remediation.Diff) == "" {
 			continue // prose-only guidance — no machine-applicable patch
 		}
-		fixes = append(fixes, fix{f.Fingerprint, f.RuleID, f.Remediation.Diff})
+		v := f.Remediation.Verification
+		switch {
+		case v == nil:
+			unverified++
+		case v.Status != model.FixVerified:
+			notes = append(notes, fmt.Sprintf("achilles: fix-pr — skip %s (%s): fix not verified (%s)%s",
+				f.RuleID, f.Fingerprint, v.Status, detailSuffix(v.Detail)))
+			continue
+		}
+		fixes = append(fixes, proposedFix{fp: f.Fingerprint, rule: f.RuleID, diff: f.Remediation.Diff, verified: v != nil})
+	}
+	if unverified > 0 {
+		notes = append(notes, fmt.Sprintf("achilles: fix-pr — note: %d diff(s) were not re-scanned (verification did not run; see --verify-fixes); applying them unverified", unverified))
+	}
+	return fixes, notes
+}
+
+func detailSuffix(d string) string {
+	d = strings.Join(strings.Fields(d), " ")
+	if d == "" {
+		return ""
+	}
+	return ": " + d
+}
+
+// runFixPR opens a review PR carrying Achilles's high-confidence auto-fixes: it
+// applies each remediation's unified diff to a fresh branch, commits, pushes, and
+// opens a PR. It NEVER merges (DESIGN §1 Non-Goals; the confirmed auto-fix
+// guardrail). The branch name is derived from the fingerprints being fixed, so a
+// re-run reuses the same branch/PR rather than spawning duplicates. Only diffs
+// whose re-scan verified them are applied (see selectFixes); patches that don't
+// apply cleanly are skipped, not fatal. Outward-facing + opt-in.
+func runFixPR(ctx context.Context, dir, repo, remote, base string, scan model.Scan) error {
+	fixes, held := selectFixes(scan.Findings)
+	for _, msg := range held {
+		fmt.Fprintln(os.Stderr, msg)
 	}
 	if len(fixes) == 0 {
+		if len(held) > 0 {
+			fmt.Fprintln(os.Stderr, "achilles: fix-pr — no proposed diff passed verification; opened no PR")
+			return nil
+		}
 		fmt.Fprintln(os.Stderr, "achilles: fix-pr — no remediation carried a concrete diff; opened no PR (run with --remediate)")
 		return nil
 	}
@@ -205,7 +248,11 @@ func runFixPR(ctx context.Context, dir, repo, remote, base string, scan model.Sc
 			continue
 		}
 		applied++
-		fmt.Fprintf(&body, "- `%s` (fingerprint `%s`)\n", fx.rule, fx.fp)
+		status := "not re-scanned"
+		if fx.verified {
+			status = "re-scan: finding gone, nothing new"
+		}
+		fmt.Fprintf(&body, "- `%s` (fingerprint `%s`; %s)\n", fx.rule, fx.fp, status)
 	}
 	if applied == 0 {
 		return fmt.Errorf("no proposed diff applied cleanly; opened no PR")

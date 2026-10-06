@@ -88,6 +88,22 @@ func sarifResult(f model.Finding, suppressed bool) model.SarifResult {
 		if v.SuggestedFix != "" && !f.IsSecret() {
 			props["achilles/suggestedFix"] = v.SuggestedFix
 		}
+		if v.Gates != nil {
+			props["achilles/gates"] = v.Gates
+		}
+		if v.Stability != nil && v.Stability.Samples > 1 {
+			props["achilles/stability"] = map[string]any{
+				"samples": v.Stability.Samples, "agreeing": v.Stability.Agreeing, "unanimous": v.Stability.Unanimous(),
+			}
+		}
+	}
+	if r := f.Remediation; r != nil && r.Verification != nil {
+		props["achilles/fixVerification"] = string(r.Verification.Status)
+	}
+	if d := f.Deep; d != nil && d.Aborted == "" {
+		props["achilles/deepVerdict"] = map[string]any{
+			"conclusion": string(d.Conclusion), "confidence": d.Confidence, "steps": d.Steps,
+		}
 	}
 	if len(props) > 0 {
 		r.Properties = props

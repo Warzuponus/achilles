@@ -49,11 +49,19 @@ func ExtractJSON(s string) string {
 // credential, a rate limit, a timeout or a cancelled context would fail the same
 // way a second time, so retrying them just doubles load on an unhappy endpoint.
 func CompleteJSON(ctx context.Context, c Client, msgs []Message, schema *Schema) (Response, error) {
-	resp, err := c.Complete(ctx, Request{Messages: msgs, Temperature: 0, Schema: schema})
+	return CompleteJSONAt(ctx, c, msgs, schema, 0)
+}
+
+// CompleteJSONAt is CompleteJSON at an explicit sampling temperature. Self-
+// consistency sampling needs the extra samples to differ; the default is 0. A
+// client that cannot vary temperature (OpenAIClient with OmitTemperature, i.e.
+// reasoning models) simply ignores it.
+func CompleteJSONAt(ctx context.Context, c Client, msgs []Message, schema *Schema, temperature float64) (Response, error) {
+	resp, err := c.Complete(ctx, Request{Messages: msgs, Temperature: temperature, Schema: schema})
 	if err == nil || schema == nil || !formatRejected(ctx, err) {
 		return resp, err
 	}
-	return c.Complete(ctx, Request{Messages: msgs, Temperature: 0, JSON: true})
+	return c.Complete(ctx, Request{Messages: msgs, Temperature: temperature, JSON: true})
 }
 
 // formatRejected reports whether err plausibly means "this server does not
@@ -95,7 +103,14 @@ func formatRejected(ctx context.Context, err error) bool {
 // validate lets a caller reject a decode that parsed but is unusable (e.g. an
 // empty summary or a missing required field) — pass nil to skip.
 func CompleteAndDecode(ctx context.Context, c Client, msgs []Message, schema *Schema, out any, validate func() error) (Response, error) {
-	resp, err := CompleteJSON(ctx, c, msgs, schema)
+	return CompleteAndDecodeAt(ctx, c, msgs, schema, out, validate, 0)
+}
+
+// CompleteAndDecodeAt is CompleteAndDecode with the first request at an explicit
+// temperature. The repair round-trip stays at 0: it is a mechanical "fix your
+// JSON", not another opinion.
+func CompleteAndDecodeAt(ctx context.Context, c Client, msgs []Message, schema *Schema, out any, validate func() error, temperature float64) (Response, error) {
+	resp, err := CompleteJSONAt(ctx, c, msgs, schema, temperature)
 	if err != nil {
 		return resp, err
 	}

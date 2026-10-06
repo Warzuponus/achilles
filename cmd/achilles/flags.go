@@ -88,6 +88,12 @@ type options struct {
 	keepDismissed  bool          // --keep-dismissed: do not move AI-dismissed findings out of the gate
 	showVersion    bool          // --version
 
+	// Verification depth (ideas adapted from the VulnHunter project's methodology).
+	verifyFixes  bool // --verify-fixes: re-scan each proposed patch in a temp copy and record whether the finding is gone
+	deepVerify   int  // --deep-verify N: let the model read/grep the repo to settle the N most important findings
+	deepMaxSteps int  // --deep-max-steps: tool-call budget per deep-verified finding
+	llmSamples   int  // --llm-samples K: ask K times on borderline verdicts and keep the majority
+
 	// Issue filing (see internal/issues).
 	issuesMinSeverity string // --issues-min-severity
 	issuesMax         int    // --issues-max
@@ -173,6 +179,10 @@ func parseFlags(argv []string) (*options, error) {
 	fs.BoolVar(&o.llmNoCode, "llm-no-code", false, "privacy mode: send the model only rule, message and location, never source code")
 	fs.BoolVar(&o.keepDismissed, "keep-dismissed", false, "keep findings the AI review confidently dismissed in the gate, issues and counts (default: list them separately)")
 	fs.BoolVar(&o.showVersion, "version", false, "print the version and exit")
+	fs.BoolVar(&o.verifyFixes, "verify-fixes", true, "with --remediate: apply each proposed patch to a temp copy and re-run the scanner that reported it; the fix is marked verified only if the finding is gone and nothing new appeared")
+	fs.IntVar(&o.deepVerify, "deep-verify", 0, "let the model read and search the repository (bounded, read-only) to settle the N highest-priority findings the single-file review could not (0 = off)")
+	fs.IntVar(&o.deepMaxSteps, "deep-max-steps", 6, "with --deep-verify: most tool calls per finding")
+	fs.IntVar(&o.llmSamples, "llm-samples", 1, "ask the model this many times on borderline verdicts and keep the majority (1 = single answer)")
 	fs.StringVar(&o.issuesMinSeverity, "issues-min-severity", "medium", "with --file-issues: lowest severity to file (critical|high|medium|low)")
 	fs.IntVar(&o.issuesMax, "issues-max", 25, "with --file-issues: most NEW issues to open in one run (highest severity first)")
 	fs.StringVar(&o.issuesGroup, "issues-group", "finding", "with --file-issues: one issue per finding | rule | one rollup issue")
@@ -240,6 +250,14 @@ func (o *options) llmWanted() bool {
 func (o *options) validateLLM() error {
 	if !o.llmWanted() || o.dryRun {
 		return nil
+	}
+	if o.deepVerify > 0 {
+		if !o.triageOn && !o.remediateOn {
+			return fmt.Errorf("--deep-verify settles findings the AI review left open, so it needs --triage (or --ai)")
+		}
+		if o.llmNoCode {
+			return fmt.Errorf("--deep-verify reads source code, so it cannot be combined with --llm-no-code")
+		}
 	}
 	if o.llmModel == "" && o.modelConfig == "" {
 		return fmt.Errorf("AI features need a model: set --llm-model (or ACHILLES_LLM_MODEL), e.g. " +

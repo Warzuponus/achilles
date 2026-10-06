@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Warzuponus/achilles/internal/inventory"
 	"github.com/Warzuponus/achilles/internal/model"
 )
 
@@ -31,6 +32,10 @@ type Enricher struct {
 	// function. Both 0 disables that half. See references.go for why they exist.
 	MaxRefLines  int
 	MaxCallSites int
+	// MaxEntryHints caps how many attacker-facing entry points detected in the
+	// finding's own file are listed ahead of the code (see entrypoints.go); 0
+	// disables them.
+	MaxEntryHints int
 	// IncludeBlame appends git-blame attribution to Context (best-effort).
 	IncludeBlame bool
 }
@@ -46,6 +51,7 @@ func New(radius int) *Enricher {
 		MaxScopeLines: defaultMaxScopeLines,
 		MaxRefLines:   defaultMaxRefLines,
 		MaxCallSites:  defaultMaxCallSites,
+		MaxEntryHints: defaultMaxEntryHints,
 	}
 }
 
@@ -160,6 +166,7 @@ func (e *Enricher) Context(f model.Finding, root string) string {
 	}
 
 	var b strings.Builder
+	writeEntryHints(&b, inventory.DetectEntryPoints(f.Location.File, data), start, e.MaxEntryHints)
 	// Declarations first: they establish what the flagged code's operands are
 	// before the model reads the code that uses them.
 	writeRefSection(&b, lines, refs, "decl", "referenced at file scope")

@@ -3,6 +3,8 @@ package triage
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -85,6 +87,28 @@ func TestPrompts_TellTheModelCodeIsUntrusted(t *testing.T) {
 	} {
 		if !strings.Contains(msgs[0].Content, "UNTRUSTED DATA") {
 			t.Errorf("%s system prompt lacks the untrusted-input instruction", name)
+		}
+	}
+}
+
+func TestTriage_NoCodeModeSendsNoEntryPointHints(t *testing.T) {
+	dir := t.TempDir()
+	src := "package a\nfunc init() { http.HandleFunc(\"/secret-route\", h) }\n"
+	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tf := &llmtest.Fake{Responses: []string{`{"classification":"uncertain","confidence":0.5}`}}
+	eng := NewEngine(llm.NewRouter(tf), nil, enrich.New(2), dir).SetNoCode(true)
+	f := newFinding()
+	f.Location.File = "a.go"
+	if err := eng.Triage(context.Background(), "r", f); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range tf.Calls {
+		for _, m := range c.Messages {
+			if strings.Contains(m.Content, "secret-route") {
+				t.Errorf("--llm-no-code must withhold file-derived hints too:\n%s", m.Content)
+			}
 		}
 	}
 }

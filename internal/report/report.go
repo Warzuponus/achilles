@@ -112,8 +112,25 @@ func WriteHuman(w io.Writer, s model.Scan) {
 				fmt.Fprintf(w, "    fix: %s\n", v.SuggestedFix)
 			}
 		}
+		if d := f.Deep; d != nil {
+			if d.Aborted != "" {
+				fmt.Fprintf(w, "    deep check stopped after %d step(s): %s\n", d.Steps, d.Aborted)
+			} else {
+				fmt.Fprintf(w, "    deep check (%d step(s)): %s, confidence=%.2f\n", d.Steps, d.Conclusion, d.Confidence)
+			}
+		}
+		if v := f.Verdict; v != nil && v.Stability != nil && v.Stability.Samples > 1 && !v.Stability.Unanimous() {
+			fmt.Fprintf(w, "    the model's %d answers disagreed; not dismissed automatically\n", v.Stability.Samples)
+		}
 		if r := f.Remediation; r != nil {
 			fmt.Fprintf(w, "    remediation: %s\n", r.Summary)
+			if vf := r.Verification; vf != nil {
+				if vf.Status == model.FixVerified {
+					fmt.Fprintln(w, "    fix verified by re-scan (the finding is gone, nothing new appeared)")
+				} else {
+					fmt.Fprintf(w, "    fix NOT verified: %s\n", vf.Status)
+				}
+			}
 			if r.Diff != "" {
 				fmt.Fprintln(w, "    (patch available in the Evidence Vault)")
 			}

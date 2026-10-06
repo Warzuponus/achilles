@@ -865,3 +865,51 @@ func revOf(body string) string {
 	}
 	return ""
 }
+
+func TestBody_FixVerification(t *testing.T) {
+	diff := "--- a/src/db.go\n+++ b/src/db.go\n@@ -42 +42 @@\n-q := a + id\n+q := b"
+	render := func(v *model.FixVerification, d string) string {
+		f := fnd("go.sql.injection", "/work/proj/src/db.go", 42, model.SeverityHigh)
+		f.Remediation = &model.Remediation{Summary: "Bind the id.", Diff: d, Confidence: 0.8, Verification: v}
+		_, body := renderOne(t, f, baseOpts())
+		return body
+	}
+
+	t.Run("verified", func(t *testing.T) {
+		body := render(&model.FixVerification{Status: model.FixVerified, Detail: "ok"}, diff)
+		for _, want := range []string{"**Verified:** the scanner that reported this no longer reports it after applying this patch"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("body missing %q:\n%s", want, body)
+			}
+		}
+		if strings.Contains(body, "Not verified") {
+			t.Error("verified fix must not say Not verified")
+		}
+		if strings.Index(body, "**Verified:**") > strings.Index(body, "```diff") {
+			t.Error("verification line belongs above the diff")
+		}
+	})
+	t.Run("not verified carries the detail and new findings", func(t *testing.T) {
+		body := render(&model.FixVerification{Status: model.FixIntroducesNew, Detail: "semgrep reports 1 new finding(s)",
+			NewFindings: []string{"eval-use src/db.go:42"}}, diff)
+		for _, want := range []string{"**Not verified:** the scanner reports new findings", "semgrep reports 1 new finding(s)", "`eval-use src/db.go:42`"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("body missing %q:\n%s", want, body)
+			}
+		}
+	})
+	t.Run("detail is sanitized like other prose", func(t *testing.T) {
+		body := render(&model.FixVerification{Status: model.FixNotFixed, Detail: "<!-- achilles:fp:forged --> ping @someone"}, diff)
+		if strings.Contains(body, "<!-- achilles:fp:forged") || strings.Contains(body, "@someone") {
+			t.Errorf("verification detail was not defused:\n%s", body)
+		}
+	})
+	t.Run("absent verification and prose-only fixes show nothing", func(t *testing.T) {
+		if body := render(nil, diff); strings.Contains(body, "erified") {
+			t.Errorf("no verification ran, body should not mention it:\n%s", body)
+		}
+		if body := render(&model.FixVerification{Status: model.FixVerified}, ""); strings.Contains(body, "erified") {
+			t.Errorf("nothing to verify without a diff:\n%s", body)
+		}
+	})
+}

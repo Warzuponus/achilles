@@ -57,6 +57,10 @@ First public release (`v0.1.0`) is pending.
 - Opengrep under `--runner docker` asked Docker for an empty image; it now runs as the
   local binary, as documented.
 - Opengrep crashed under a non-UTF-8 locale when reading non-ASCII community rules.
+- Release binaries reported a "-dirty" commit: goreleaser's untracked `dist/` made Go stamp
+  the build as modified. A commit injected by the release process is now trusted, and
+  `/dist/` is git-ignored.
+- The full container image build ran the runner out of disk; the workflow now frees space first.
 - osv-scanner exiting with "No package sources found" (a tree with no dependency
   manifests) was reported as a failed tool, marking every such scan "incomplete" and
   failing it under `--strict-tools`. It is now an empty result (`nothingToScan` in the

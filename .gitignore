@@ -11,3 +11,6 @@
 
 # Claude Code worktrees / local state
 .claude/
+
+# goreleaser output
+/dist/

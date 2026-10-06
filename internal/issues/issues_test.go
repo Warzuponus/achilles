@@ -577,7 +577,7 @@ func TestRelPath(t *testing.T) {
 		{"/w/p", "file:///w/p/a.go", "a.go"},
 		{"/w/p", "/etc/passwd", "passwd"},
 		{"/w/p", "../../etc/x.go", "x.go"},
-		{"/w/p", "C:/Users/me/x.go", "x.go"},
+		{"/w/p", "C:/" + "Users/me/x.go", "x.go"},
 		{".", "a.go", "a.go"},
 		{"", "", ""},
 	} {

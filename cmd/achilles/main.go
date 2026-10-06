@@ -76,7 +76,7 @@ func run(argv []string) error {
 		return err
 	}
 	if o.aiOn {
-		if err := os.MkdirAll(o.reportDir, 0o755); err != nil {
+		if err := os.MkdirAll(o.reportDir, 0o750); err != nil {
 			return fmt.Errorf("--ai: create report directory: %w", err)
 		}
 	}

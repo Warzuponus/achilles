@@ -246,7 +246,7 @@ func ensureDir(bin string) error {
 			}
 		}
 	}
-	if err := os.MkdirAll(bin, 0o755); err != nil {
+	if err := os.MkdirAll(bin, 0o750); err != nil {
 		return fmt.Errorf("create %s: %w", bin, err)
 	}
 	return nil
@@ -352,7 +352,7 @@ func extractZip(src *os.File, member string, dst io.Writer, max int64) error {
 		if !f.Mode().IsRegular() {
 			return fmt.Errorf("archive entry %q is not a regular file", f.Name)
 		}
-		if f.UncompressedSize64 > uint64(max) {
+		if max < 0 || f.UncompressedSize64 > uint64(max) {
 			return fmt.Errorf("archive entry %q is %d bytes, over the %d byte limit", f.Name, f.UncompressedSize64, max)
 		}
 		if target != nil {

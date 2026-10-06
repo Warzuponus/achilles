@@ -6,7 +6,7 @@ tool that quietly misses things is worse than none. The habits below exist for t
 ## Getting set up
 
 ```bash
-go version          # Go 1.26
+go version          # Go 1.27
 make build          # -> bin/achilles (and friends: go build ./cmd/...)
 go test ./...       # hermetic; no network, no API keys, no database required
 ```

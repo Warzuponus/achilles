@@ -41,7 +41,7 @@ touches Go.
 
 ```bash
 git clone https://github.com/Warzuponus/achilles.git && cd achilles
-make build            # -> bin/achilles   (Go 1.26, no cgo)
+make build            # -> bin/achilles   (Go 1.27, no cgo)
 make test             # hermetic unit tests: no Docker, tools, network, or API keys
 make vet              # go vet
 ./bin/achilles --from-sarif internal/normalize/testdata/sample.sarif   # spine, no tools needed

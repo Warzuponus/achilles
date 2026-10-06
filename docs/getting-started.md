@@ -4,7 +4,7 @@ This gets you from an empty shell to a scan you understand.
 
 ## 1. Install
 
-Achilles is a single static Go binary (Go 1.26, no cgo). Its tool registry
+Achilles is a single static Go binary (Go 1.27, no cgo). Its tool registry
 (`configs/tools.yaml`) and baseline Opengrep rules are **embedded in the binary**, so
 it runs from any directory with no repository checkout. Pick one:
 

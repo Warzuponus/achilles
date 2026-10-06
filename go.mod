@@ -1,14 +1,13 @@
 module github.com/Warzuponus/achilles
 
-go 1.26
+go 1.27
 
-toolchain go1.26.8
-
-require gopkg.in/yaml.v3 v3.0.1
+toolchain go1.27.1
 
 require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/philippgille/chromem-go v0.7.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

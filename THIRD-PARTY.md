@@ -55,7 +55,7 @@ run only as a separate process:
 | Gitleaks | 8.30.1 | MIT | <https://github.com/gitleaks/gitleaks> |
 | gosec | v2.27.1 | Apache-2.0 | <https://github.com/securego/gosec> |
 | OSV-Scanner | v2.4.0 | Apache-2.0 | <https://github.com/google/osv-scanner> |
-| Go toolchain (full variant) | 1.26 | BSD-3-Clause | <https://go.dev> |
+| Go toolchain (full variant) | 1.27 | BSD-3-Clause | <https://go.dev> |
 
 Their complete corresponding source is available at the upstream locations above for
 the pinned versions; the image also carries this file and `LICENSE` under

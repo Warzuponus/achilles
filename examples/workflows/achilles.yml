@@ -1,0 +1,42 @@
+# The 10-minute setup: an AI-verified scan of THIS repository, a report you can
+# download, and GitHub issues (with suggested fixes) for what it finds.
+#
+# 1. Copy this file to .github/workflows/achilles.yml
+# 2. Settings → Secrets and variables → Actions:
+#      secret   LLM_API_KEY   your provider's API key (OpenRouter, OpenAI, ...)
+#      variable LLM_MODEL     a model your provider serves, e.g. an OpenRouter model slug
+# 3. Actions → Achilles → Run workflow
+#
+# No extra token is needed: the workflow's own GITHUB_TOKEN files the issues.
+# Issues are opened only in private repositories unless you add
+# `allow-public-issues: "true"`, because an issue publishes the vulnerability.
+name: Achilles
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  push:
+    branches: [main]
+  # Do not add `pull_request` from forks to this workflow: forks cannot read the
+  # LLM_API_KEY secret, and `pull_request_target` would hand it to untrusted code.
+
+permissions:
+  contents: read
+  issues: write          # to open and update issues
+  security-events: write # only for upload-sarif below; drop both if you don't use it
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: Warzuponus/achilles@v0.1.0
+        with:
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+          llm-provider: openrouter
+          llm-model: ${{ vars.LLM_MODEL }}
+          issues: "true"
+          upload-sarif: "false" # "true" also fills the Security tab (private repos need Advanced Security)

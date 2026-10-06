@@ -1,0 +1,70 @@
+# Builds and publishes the downloadable `achilles` binaries (and checksums.txt, signed
+# keylessly with cosign) to a GitHub Release when a version tag is pushed:
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Run manually (Actions -> Release -> Run workflow) for a SNAPSHOT dry run: it builds
+# every archive exactly as a release would, signs and publishes nothing, and uploads
+# dist/ as a workflow artifact you can download and inspect.
+#
+# The container images are published by release-images.yml on the same tag.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write   # create the release and upload assets
+      id-token: write   # keyless cosign signature over checksums.txt
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0   # goreleaser builds the changelog from tag history
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '1.26'
+      - name: Test before publishing
+        run: |
+          go vet ./...
+          go test ./...
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: v2.18.2
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  snapshot:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '1.26'
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: v2.18.2
+          # --snapshot publishes nothing and skips signing, so cosign is not needed.
+          args: release --snapshot --clean --skip=sign
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: achilles-snapshot-dist
+          path: dist/
+          retention-days: 7

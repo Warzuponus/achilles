@@ -5,8 +5,9 @@
 #
 # Cross-repo READ is granted by a GitHub App (Contents: Read) installed on the
 # target repos; the workflow mints a short-lived installation token to check the
-# target out. Results are uploaded as artifacts of THIS run (read-only; nothing is
-# written back to the target). See DEPLOY.md → "Central scan hub" for setup.
+# target out. Results are uploaded as artifacts of THIS run. Nothing is written back
+# to the target unless you tick `file_issues`, which mints a second token that also
+# carries Issues: Write and files issues there. See DEPLOY.md → "Central scan hub".
 #
 # Prereqs (one-time, done by a repo/org admin — see DEPLOY.md):
 #   secrets.ACHILLES_LLM_API_KEY      — API key for the LLM endpoint below
@@ -24,6 +25,11 @@ on:
         description: "Branch/tag/SHA to scan (blank = default branch)"
         required: false
         default: ""
+      file_issues:
+        description: "Also open GitHub issues (with suggested fixes) in the target repo. Needs the App to have Issues: Write there."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read # only this repo; target access comes from the App token
@@ -58,34 +64,35 @@ jobs:
           path: target
           fetch-depth: 1
 
-      # 4. Routed LLM scan of the target. Uses the in-repo action (./) so it always
-      #    matches this checkout; routing = configs/models.ollama.yaml (this repo).
-      - name: Achilles routed scan
+      # 3b. Only when asked to file issues: a second short-lived token that can also
+      #     write issues on JUST the target repo. Needs Issues: Write on the App.
+      - name: Mint issues-scoped token
+        id: issues_tok
+        if: ${{ inputs.file_issues }}
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        with:
+          app-id: ${{ secrets.SCANNER_APP_ID }}
+          private-key: ${{ secrets.SCANNER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ inputs.target_repo }}
+          permission-contents: read
+          permission-issues: write
+
+      # 4. AI-verified scan of the target. Uses the in-repo action (./) at this
+      #    checkout; routing = configs/models.ollama.yaml (this repo). The action
+      #    uploads the report directory as the `achilles-report` artifact.
+      - name: Achilles scan
         uses: ./
         with:
+          version: source
           target: "target"
           mode: "commercial"
+          llm-api-key: ${{ secrets.ACHILLES_LLM_API_KEY }}
+          llm-base-url: https://ollama.com/v1
+          llm-model: glm-5.2
+          issues: ${{ inputs.file_issues }}
+          github-token: ${{ steps.issues_tok.outputs.token || github.token }}
           args: >-
-            --llm-base-url https://ollama.com/v1
-            --llm-model glm-5.2
             --model-config configs/models.ollama.yaml
-            --review
-            --sca-advice
-            --threat-model achilles-threatmodel.otm.json
-            --sarif-report achilles.sarif
-            --markdown achilles-report.md
-            --html-report achilles-report.html
-
-      # 5. Central results — artifacts of THIS run. Nothing written to the target.
-      #    achilles-report.html is the self-contained, human-readable report
-      #    (findings + AI review/advice/threat-model) — open it in a browser.
-      - name: Upload reports
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: achilles-${{ inputs.target_repo }}
-          path: |
-            achilles-report.html
-            achilles.sarif
-            achilles-report.md
-            achilles-threatmodel.otm.json
+            --threat-model achilles-report/threatmodel.otm.json
+            --repo ${{ github.repository_owner }}/${{ inputs.target_repo }}

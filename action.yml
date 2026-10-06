@@ -1,8 +1,23 @@
 name: "Achilles SAST"
-description: "LLM-assisted open-source SAST harness — scan a codebase and emit SARIF"
+description: "AI-verified security scan: open-source scanners, LLM review of every finding, a report, and GitHub issues with suggested fixes"
 branding:
   icon: "shield"
   color: "purple"
+
+# Smallest useful workflow (see examples/workflows/achilles.yml):
+#
+#   permissions: { contents: read, issues: write }
+#   steps:
+#     - uses: actions/checkout@v4
+#     - uses: Warzuponus/achilles@v0.1.0
+#       with:
+#         llm-api-key: ${{ secrets.LLM_API_KEY }}
+#         llm-provider: openrouter
+#         llm-model: ${{ vars.LLM_MODEL }}
+#         issues: "true"
+#
+# The action downloads a signed-checksum release binary and the pinned scanners; it
+# does not compile anything unless you ask for `version: source`.
 
 inputs:
   target:
@@ -10,103 +25,251 @@ inputs:
     required: false
     default: "."
   mode:
-    description: "License mode: oss | commercial"
+    description: >-
+      License mode: `oss` (default; the CLI's default too) or `commercial`. `commercial`
+      refuses any tool that is not commercial-safe, and also skips the downloaded
+      community Opengrep rules, whose licence adds a Commons Clause: choose it when you
+      scan other people's code as a paid service, and expect baseline-rule coverage only.
     required: false
-    default: "commercial"
+    default: "oss"
+  version:
+    description: >-
+      Achilles release to run: a tag such as v0.1.0, `latest`, or `source` (build from
+      this action's checkout with Go; for testing the action itself). Empty uses the
+      tag you pinned the action at, else `latest`.
+    required: false
+    default: ""
+
+  # --- AI verification ---
+  llm-api-key:
+    description: "API key for the LLM provider. Pass it from a secret. Empty runs scanners only."
+    required: false
+    default: ""
+  llm-provider:
+    description: "LLM endpoint preset: openai | openrouter | ollama | anthropic. Or set llm-base-url."
+    required: false
+    default: ""
+  llm-base-url:
+    description: "OpenAI-compatible base URL (overrides llm-provider)."
+    required: false
+    default: ""
+  llm-model:
+    description: "Model name to use for the AI review (required when llm-api-key is set)."
+    required: false
+    default: ""
+  ai:
+    description: "Run the AI review: `auto` (when llm-api-key is set), `true`, or `false`."
+    required: false
+    default: "auto"
+  llm-no-code:
+    description: "Privacy mode: send the model rule names and locations only, never source code."
+    required: false
+    default: "false"
+
+  # --- GitHub issues ---
+  issues:
+    description: "Open and maintain GitHub issues for findings, with suggested fixes. Needs `issues: write`."
+    required: false
+    default: "false"
+  issues-min-severity:
+    description: "Lowest severity to file: critical | high | medium | low"
+    required: false
+    default: "medium"
+  issues-max:
+    description: "Most new issues to open per run (highest severity first)."
+    required: false
+    default: "25"
+  allow-public-issues:
+    description: "Allow filing vulnerability details as issues in a PUBLIC repository."
+    required: false
+    default: "false"
+  github-token:
+    description: "Token used to file issues. The default works for the repository running the workflow."
+    required: false
+    default: ${{ github.token }}
+
+  # --- gating and outputs ---
+  fail-on:
+    description: "Fail the job if a finding at or above this severity remains: critical | high | medium | low. Empty never fails on findings."
+    required: false
+    default: ""
+  upload-report:
+    description: "Upload the report directory as a workflow artifact."
+    required: false
+    default: "true"
+  upload-sarif:
+    description: "Upload SARIF to GitHub code scanning (needs `security-events: write`, and Advanced Security on private repos)."
+    required: false
+    default: "false"
   args:
-    description: "Extra achilles flags (e.g. --baseline .achilles/baseline.json --fail-on high)"
+    description: "Extra achilles flags, appended last so they override the defaults (e.g. --diff origin/main --baseline .achilles/baseline.json)"
     required: false
-    default: "--sarif-report achilles.sarif --github"
-  opengrep-version:
-    description: "Pinned Opengrep version to install"
-    required: false
-    default: "v1.25.0"
+    default: ""
 
 outputs:
+  report-dir:
+    description: "Directory holding report.html, report.md and achilles.sarif"
+    value: ${{ steps.run.outputs.report-dir }}
   sarif:
     description: "Path to the SARIF report"
-    value: "achilles.sarif"
+    value: ${{ steps.run.outputs.sarif }}
+  exit-code:
+    description: "achilles exit code: 0 clean, 1 gated by --fail-on, 2 error"
+    value: ${{ steps.run.outputs.exit-code }}
 
 runs:
   using: "composite"
   steps:
+    - name: Check inputs
+      shell: bash
+      env:
+        INPUT_AI: ${{ inputs.ai }}
+        INPUT_KEY: ${{ inputs.llm-api-key }}
+        INPUT_MODEL: ${{ inputs.llm-model }}
+        INPUT_ISSUES: ${{ inputs.issues }}
+        RUNNER_OS_NAME: ${{ runner.os }}
+      run: |
+        set -euo pipefail
+        if [ "$RUNNER_OS_NAME" = "Windows" ]; then
+          echo "::error::The Achilles action supports Linux and macOS runners. On Windows, run the release binary or the Docker image directly."
+          exit 1
+        fi
+        if [ "$INPUT_AI" = "true" ] && [ -z "$INPUT_KEY" ]; then
+          echo "::error::ai is true but llm-api-key is empty. Pass the key from a secret (secrets are not available to workflows triggered by forked pull requests)."
+          exit 1
+        fi
+        if [ -n "$INPUT_KEY" ] && [ "$INPUT_AI" != "false" ] && [ -z "$INPUT_MODEL" ]; then
+          echo "::error::llm-api-key is set but llm-model is empty. Set llm-model to a model your provider serves."
+          exit 1
+        fi
+        if [ -z "$INPUT_KEY" ] && [ "$INPUT_AI" = "auto" ]; then
+          echo "::notice::No llm-api-key: running the scanners only. Add llm-api-key (and llm-model) for AI-verified results."
+        fi
+        if [ "$INPUT_ISSUES" = "true" ]; then
+          echo "::notice::issues is on: make sure the job has 'permissions: issues: write'."
+        fi
+
     - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      if: ${{ inputs.version == 'source' }}
       with:
         go-version: "1.26"
-    - name: Build achilles
+
+    - name: Install Achilles
       shell: bash
-      run: |
-        cd "$GITHUB_ACTION_PATH"
-        go build -o /usr/local/bin/achilles ./cmd/achilles
-    - name: Install baseline scanners (Go)
-      shell: bash
-      # The default profile expects gosec (Go SAST) + osv-scanner (SCA/dep vulns)
-      # alongside Opengrep. Without these, --runner local silently degrades to an
-      # Opengrep-only scan.
-      run: |
-        GOBIN=/usr/local/bin go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
-        GOBIN=/usr/local/bin go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.4.0
-    - name: Install baseline scanners (Trivy + Gitleaks)
-      shell: bash
-      # Non-Go baseline tools: Trivy (IaC/misconfig/secrets/SCA) + Gitleaks (secret
-      # scanning). Same versions and sha256 pins as deployments/achilles/Dockerfile and
-      # configs/tools.yaml; bump all three together.
       env:
-        TRIVY_VERSION: "0.72.0"
-        GITLEAKS_VERSION: "8.30.1"
+        INPUT_VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
       run: |
         set -euo pipefail
-        case "${RUNNER_OS}-${RUNNER_ARCH}" in
-          Linux-X64)   TRIVY_ASSET=Linux-64bit; TRIVY_SHA=bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea
-                       GL_ASSET=x64;   GL_SHA=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb ;;
-          Linux-ARM64) TRIVY_ASSET=Linux-ARM64; TRIVY_SHA=2ca2c023109c2db6b2b77366b6717291452d4531167377d95c79547f0c8e3467
-                       GL_ASSET=arm64; GL_SHA=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080 ;;
-          *) echo "::error::Achilles action supports Linux X64/ARM64 runners, not ${RUNNER_OS}-${RUNNER_ARCH}" >&2; exit 1 ;;
-        esac
-        dl="$(mktemp -d)"
-        fetch() { curl -fsSL --retry 3 -o "$dl/$1" "$2"; echo "$3  $dl/$1" | sha256sum -c -; }
-        fetch trivy.tgz    "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ASSET}.tar.gz" "$TRIVY_SHA"
-        fetch gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GL_ASSET}.tar.gz" "$GL_SHA"
-        tar -xzf "$dl/trivy.tgz"    -C /usr/local/bin trivy
-        tar -xzf "$dl/gitleaks.tgz" -C /usr/local/bin gitleaks
-    - name: Install Opengrep (pinned)
+        bindir="${RUNNER_TEMP}/achilles-bin"
+        mkdir -p "$bindir"
+        version="$INPUT_VERSION"
+        if [ -z "$version" ]; then
+          if printf '%s' "$ACTION_REF" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$'; then
+            version="$ACTION_REF"
+          else
+            version="latest"
+          fi
+        fi
+        if [ "$version" = "source" ]; then
+          (cd "$GITHUB_ACTION_PATH" && go build -trimpath -o "$bindir/achilles" ./cmd/achilles)
+        else
+          VERSION="$version" INSTALL_DIR="$bindir" sh "$GITHUB_ACTION_PATH/scripts/install.sh"
+        fi
+        echo "$bindir" >> "$GITHUB_PATH"
+        echo "$HOME/.achilles/bin" >> "$GITHUB_PATH"
+
+    - name: Install scanners
       shell: bash
-      env:
-        OPENGREP_VERSION: ${{ inputs.opengrep-version }}
       run: |
         set -euo pipefail
-        # Retry: the upstream install.sh resolves versions via an UNAUTHENTICATED
-        # call to api.github.com (60 req/hour per IP). Actions runners share egress
-        # IPs, so a burst elsewhere makes this fail with "Failed to fetch available
-        # versions from GitHub" — a flake, not a broken build. Observed ~1 in 100
-        # runs; a re-run always succeeded, so a short backoff covers it.
-        for attempt in 1 2 3; do
-          if curl -fsSL "https://raw.githubusercontent.com/opengrep/opengrep/${OPENGREP_VERSION}/install.sh" \
-               | bash -s -- -v "${OPENGREP_VERSION}"; then
-            break
-          fi
-          if [ "$attempt" = 3 ]; then
-            echo "::error::Opengrep install failed 3x (likely GitHub API rate limiting)." >&2
-            exit 1
-          fi
-          echo "Opengrep install attempt $attempt failed; retrying in $((attempt * 20))s" >&2
-          sleep $((attempt * 20))
-        done
-        # install.sh drops the binary at ~/.opengrep/cli/latest/opengrep
-        echo "$HOME/.opengrep/cli/latest" >> "$GITHUB_PATH"
-    - name: Verify Opengrep
+        # Hash-pinned downloads; fails closed on a checksum mismatch.
+        achilles tools install
+        achilles doctor || true
+
+    - name: Run Achilles
+      id: run
       shell: bash
-      run: opengrep --version # fails the job loudly if the install didn't land
-    - name: Run achilles
-      shell: bash
-      # NOTE: flags must precede the target path (stdlib flag parsing).
-      # Inputs arrive through env, never spliced into the script, so an input holding
-      # shell syntax can't run commands. `args` is split on whitespace (newlines
-      # included) without glob expansion; shell quoting inside it is not interpreted.
+      # Inputs reach the script through the environment only, never spliced into it,
+      # so an input holding shell syntax cannot run commands. `args` is split on
+      # whitespace without glob expansion; shell quoting inside it is not interpreted.
+      # The step always exits 0 and reports achilles' exit code as an output, so the
+      # upload steps below run even when the scan gates; the last step enforces it.
       env:
-        INPUT_MODE: ${{ inputs.mode }}
-        INPUT_ARGS: ${{ inputs.args }}
         INPUT_TARGET: ${{ inputs.target }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_AI: ${{ inputs.ai }}
+        INPUT_PROVIDER: ${{ inputs.llm-provider }}
+        INPUT_BASE_URL: ${{ inputs.llm-base-url }}
+        INPUT_MODEL: ${{ inputs.llm-model }}
+        INPUT_NO_CODE: ${{ inputs.llm-no-code }}
+        INPUT_ISSUES: ${{ inputs.issues }}
+        INPUT_ISSUES_MIN: ${{ inputs.issues-min-severity }}
+        INPUT_ISSUES_MAX: ${{ inputs.issues-max }}
+        INPUT_ALLOW_PUBLIC: ${{ inputs.allow-public-issues }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_ARGS: ${{ inputs.args }}
+        ACHILLES_LLM_API_KEY: ${{ inputs.llm-api-key }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
+        set -uo pipefail
+        report_dir="achilles-report"
+        mkdir -p "$report_dir"
+        flags=(--mode "$INPUT_MODE"
+               --html-report "$report_dir/report.html"
+               --markdown "$report_dir/report.md"
+               --sarif-report "$report_dir/achilles.sarif"
+               --github)
+        if [ "$INPUT_AI" = "true" ] || { [ "$INPUT_AI" = "auto" ] && [ -n "$ACHILLES_LLM_API_KEY" ]; }; then
+          flags+=(--ai --report-dir "$report_dir" --llm-model "$INPUT_MODEL")
+          [ -n "$INPUT_PROVIDER" ] && flags+=(--llm-provider "$INPUT_PROVIDER")
+          [ -n "$INPUT_BASE_URL" ] && flags+=(--llm-base-url "$INPUT_BASE_URL")
+          [ "$INPUT_NO_CODE" = "true" ] && flags+=(--llm-no-code)
+        fi
+        if [ "$INPUT_ISSUES" = "true" ]; then
+          flags+=(--file-issues --repo "$GITHUB_REPOSITORY"
+                  --issues-min-severity "$INPUT_ISSUES_MIN" --issues-max "$INPUT_ISSUES_MAX")
+          [ "$INPUT_ALLOW_PUBLIC" = "true" ] && flags+=(--allow-public-issues)
+        fi
+        [ -n "$INPUT_FAIL_ON" ] && flags+=(--fail-on "$INPUT_FAIL_ON")
+        # shellcheck disable=SC2162
         read -r -d '' -a extra <<< "$INPUT_ARGS" || true
-        achilles --mode "$INPUT_MODE" "${extra[@]}" "$INPUT_TARGET"
+        # Flags must precede the target path (stdlib flag parsing); extras come last
+        # among the flags so they override the defaults above.
+        achilles "${flags[@]}" ${extra[@]+"${extra[@]}"} "$INPUT_TARGET"
+        code=$?
+        {
+          echo "exit-code=$code"
+          echo "report-dir=$report_dir"
+          echo "sarif=$report_dir/achilles.sarif"
+        } >> "$GITHUB_OUTPUT"
+        if [ -f "$report_dir/report.md" ]; then
+          { echo "## Achilles"; echo; cat "$report_dir/report.md"; } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit 0
+
+    - name: Upload report
+      if: ${{ always() && inputs.upload-report == 'true' }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: achilles-report
+        path: achilles-report
+        if-no-files-found: ignore
+
+    - name: Upload SARIF to code scanning
+      if: ${{ always() && inputs.upload-sarif == 'true' }}
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2
+      with:
+        sarif_file: achilles-report/achilles.sarif
+
+    - name: Enforce result
+      shell: bash
+      env:
+        CODE: ${{ steps.run.outputs.exit-code }}
+      run: |
+        case "${CODE:-2}" in
+          0) ;;
+          1) echo "::error::Achilles: findings at or above the fail-on severity remain (see the report artifact and job summary)."; exit 1 ;;
+          *) echo "::error::Achilles exited with code ${CODE:-unknown}; see the log above."; exit 1 ;;
+        esac

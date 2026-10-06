@@ -61,5 +61,7 @@ jobs:
       - name: Run the action against the bundled sample
         uses: ./
         with:
+          version: source # build from this checkout, not a published release
           target: examples/quickstart
-          args: --strict-tools --sarif-report achilles.sarif
+          upload-report: "false"
+          args: --strict-tools

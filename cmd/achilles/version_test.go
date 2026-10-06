@@ -27,6 +27,7 @@ func TestResolveVersion(t *testing.T) {
 		{"go install module version", "", "", "", bi("v0.1.0"), "v0.1.0", "unknown", "unknown"},
 		{"checkout build uses vcs stamp", "", "", "", bi("(devel)", "vcs.revision", "deadbeef", "vcs.time", "2026-02-02T00:00:00Z"), "dev", "deadbeef", "2026-02-02T00:00:00Z"},
 		{"dirty tree", "", "", "", bi("(devel)", "vcs.revision", "deadbeef", "vcs.modified", "true"), "dev", "deadbeef-dirty", "unknown"},
+		{"ldflags commit is trusted even when the VCS stamp says modified", "0.2.0", "abc123", "2026-01-02T03:04:05Z", bi("v9.9.9", "vcs.revision", "deadbeef", "vcs.modified", "true"), "v0.2.0", "abc123", "2026-01-02T03:04:05Z"},
 		{"no build info", "", "", "", nil, "dev", "unknown", "unknown"},
 		{"git describe stays as is", "6e842d6-dirty", "", "", nil, "6e842d6-dirty", "unknown", "unknown"},
 		{"v prefix kept", "v1.0.0", "c", "d", nil, "v1.0.0", "c", "d"},

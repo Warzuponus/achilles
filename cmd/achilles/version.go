@@ -67,7 +67,10 @@ func resolveVersion(ldVersion, ldCommit, ldDate string, bi *debug.BuildInfo) ver
 	}
 	if v.Commit == "" {
 		v.Commit = "unknown"
-	} else if dirty && !strings.HasSuffix(v.Commit, "-dirty") {
+	} else if dirty && ldCommit == "" && !strings.HasSuffix(v.Commit, "-dirty") {
+		// Only a commit read from the build's VCS stamp can be "dirty". A commit
+		// injected with -ldflags was chosen by the release process (goreleaser's own
+		// untracked dist/ directory makes Go stamp vcs.modified=true), so it is trusted.
 		v.Commit += "-dirty"
 	}
 	if v.Date == "" {

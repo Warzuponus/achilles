@@ -36,6 +36,15 @@ jobs:
             suffix: "-slim"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # The full multi-arch build (Go toolchain, two platforms under QEMU) filled the
+      # runner's disk on v0.1.0-rc1 ("No space left on device"). Remove preinstalled
+      # SDKs this job never uses before building.
+      - name: Free disk space
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force >/dev/null || true
+          df -h / | tail -1
       - name: Resolve image name and version
         id: meta
         run: |

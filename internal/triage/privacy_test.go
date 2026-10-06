@@ -1,0 +1,90 @@
+package triage
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/Warzuponus/achilles/internal/enrich"
+	"github.com/Warzuponus/achilles/internal/model"
+	"github.com/Warzuponus/achilles/internal/triage/llm"
+	"github.com/Warzuponus/achilles/internal/triage/llm/llmtest"
+)
+
+const tpVerdict = `{"classification":"true_positive","confidence":0.9,"exploitability":"reachable","reasoning":"r"}`
+
+func allPrompts(f *llmtest.Fake) string {
+	var sb strings.Builder
+	for _, c := range f.Calls {
+		for _, m := range c.Messages {
+			sb.WriteString(m.Content)
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
+}
+
+func TestTriage_CredentialFindingNeverReachesTheModel(t *testing.T) {
+	fake := &llmtest.Fake{Responses: []string{tpVerdict}}
+	eng := NewEngine(llm.NewRouter(fake), nil, enrich.New(2), "")
+	f := newFinding()
+	f.Tool, f.RuleID = "gitleaks", "generic-api-key"
+	f.Message = `key = "AKIAIOSFODNN7EXAMPLE"`
+
+	err := eng.Triage(context.Background(), "r", f)
+	if !errors.Is(err, ErrWithheld) {
+		t.Fatalf("err = %v, want ErrWithheld", err)
+	}
+	if len(fake.Calls) != 0 {
+		t.Errorf("model was called %d time(s) for a credential finding", len(fake.Calls))
+	}
+	if f.Verdict != nil {
+		t.Error("a withheld finding must have no verdict")
+	}
+}
+
+func TestTriage_MasksCredentialsInPrompts(t *testing.T) {
+	fake := &llmtest.Fake{Responses: []string{tpVerdict, `{"refuted":false}`}}
+	eng := NewEngine(llm.NewRouter(fake), nil, enrich.New(2), "")
+	f := newFinding()
+	f.Message = `eval of config token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"`
+
+	if err := eng.Triage(context.Background(), "r", f); err != nil {
+		t.Fatal(err)
+	}
+	if p := allPrompts(fake); strings.Contains(p, "ghp_abcdefghijklmnopqrstuvwxyz0123456789") {
+		t.Errorf("a credential reached the model:\n%s", p)
+	}
+}
+
+func TestTriage_NoCodeModeSendsNoSource(t *testing.T) {
+	fake := &llmtest.Fake{Responses: []string{tpVerdict, `{"refuted":false}`}}
+	eng := NewEngine(llm.NewRouter(fake), nil, enrich.New(2), "").SetNoCode(true)
+	f := newFinding() // CodeContext: eval(user_input)
+
+	if err := eng.Triage(context.Background(), "r", f); err != nil {
+		t.Fatal(err)
+	}
+	p := allPrompts(fake)
+	if strings.Contains(p, "eval(user_input)") {
+		t.Errorf("source code reached the model in --llm-no-code mode:\n%s", p)
+	}
+	if !strings.Contains(p, "withheld by --llm-no-code") {
+		t.Error("the prompt should tell the model the source was withheld")
+	}
+}
+
+func TestPrompts_TellTheModelCodeIsUntrusted(t *testing.T) {
+	f := newFinding()
+	v := model.Verdict{Classification: model.ClassFalsePositive, Confidence: 0.9}
+	for name, msgs := range map[string][]llm.Message{
+		"triage":      triageMessages(*f, "code", nil),
+		"judge":       judgeMessages(*f, "code", v),
+		"remediation": remediationMessages(*f, "code"),
+	} {
+		if !strings.Contains(msgs[0].Content, "UNTRUSTED DATA") {
+			t.Errorf("%s system prompt lacks the untrusted-input instruction", name)
+		}
+	}
+}

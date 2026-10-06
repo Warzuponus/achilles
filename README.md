@@ -1,70 +1,103 @@
 # Achilles
 
-LLM-assisted harness that orchestrates open-source SAST tools, normalizes their
-findings, and uses LLMs to interpret, verify, and prioritize them — improving over
-time from analyst feedback.
-
-**New here? Start with the [User Guides](docs/README.md)** (or `docker compose up` — see
-[Running in containers](docs/containers.md)) — getting started, the
-CLI reference, reports & gating, LLM triage & agents, CI & the scan hub, and the
-fleet. See [DESIGN.md](DESIGN.md) for the full architecture and roadmap, and
-[DEPLOY.md](DEPLOY.md) for how to run it (a workstation, Docker, GitHub Actions, scheduled scans).
+Point it at a repository and an LLM API key. It runs open-source security scanners,
+has a model review every finding the way a human triager would, and gives you back a
+report and (on GitHub) issues with suggested fixes. Free, Apache-2.0, runs on your own
+machine or in your own GitHub Actions. No service to sign up for.
 
 > Independently implemented from public SAST concepts and standards. See
 > [Acknowledgements](#acknowledgements).
 
-## Status
+## Quickstart
 
-**The build roadmap is complete** (Phases 0–6, backlog Tiers A–F). Achilles is
-**local-first**: it runs on your own machine, in Docker, or in your own GitHub
-Actions, with no cloud service and no authentication layer. It is meant for someone
-scanning their **own** repositories.
+**On GitHub** (recommended). Add one secret (`LLM_API_KEY`) and one variable
+(`LLM_MODEL`), then copy [`examples/workflows/achilles.yml`](examples/workflows/achilles.yml)
+to `.github/workflows/`:
 
-What you can run today:
-- **CLI + GitHub Actions** — per-PR gate, or a routed full scan with LLM analysis.
-- **Central scan hub** — scan *other* org repos from this repo via a GitHub App;
-  targets need no secrets and no workflow of their own. Results are workflow
-  artifacts (HTML, SARIF, Markdown); there is no cloud vault.
-- **Docker / docker compose** — one image with the scanners, plus PostgreSQL, the
-  War Room, and optional `scan`, `fleet` and local-model (`ollama`) profiles. See
-  [Running in containers](docs/containers.md).
-- **Fleet** — `achilles-fleet` scans many of your repos (paths or git URLs) into
-  per-project vaults, once or on an interval.
-- **Multi-model LLM routing** — per-task models over any OpenAI-compatible
-  endpoint (OpenAI, Azure OpenAI, Ollama, vLLM, LiteLLM, OpenRouter, gateways).
-
-`achillesd` is a server-rendered War Room (HTMX/Alpine) over the Evidence Vault
-with **per-project vault isolation** and **secret redaction**. Analyst verdicts
-submitted in the UI feed straight back into calibration, closing the learning loop.
-
-```bash
-achillesd --vault-root .achilles/tenants   # War Room on http://127.0.0.1:8080
+```yaml
+permissions: { contents: read, issues: write }
+steps:
+  - uses: actions/checkout@v4
+  - uses: Warzuponus/achilles@v0.1.0
+    with:
+      llm-api-key: ${{ secrets.LLM_API_KEY }}
+      llm-provider: openrouter     # or openai | ollama | anthropic
+      llm-model: ${{ vars.LLM_MODEL }}
+      issues: "true"
 ```
 
-Endpoints: `/` (dashboard), `/runs/{id}` (findings + verdicts + feedback),
-`POST /runs/{id}/feedback`, `/runs/{id}/audit` (JSON audit trail), `/events`
-(SSE), and `GET/POST /admin/tenants` + `POST /admin/tenants/{id}/purge`
-(retention) + `GET /admin/fleet` (cross-project rollup). A **project switcher**
-in the dashboard header lists every project that holds data — discovered from the
-vault backend, not just the registry, since scans write to their project vault
-without registering — and the choice persists in a cookie so navigating into a run
-stays in that project. `GET /healthz` is a liveness probe.
+Run it from the Actions tab. You get an `achilles-report` artifact (HTML, Markdown,
+SARIF), a summary on the job page, and one issue per confirmed finding with the AI's
+reasoning and a suggested fix. Re-runs update those issues rather than duplicating
+them. Details: [CI & the Scan Hub](docs/ci-and-hub.md).
 
-**Security model — there is no authentication.** Anyone who can reach the War Room's
-port can read every finding and can submit feedback, create projects, purge data and
-view the fleet rollup. It is therefore built to be reachable only from your own
-machine: it listens on loopback by default and refuses another address without
-`--allow-remote`; the compose stack publishes it on `127.0.0.1` only; the `Host`
-header must be `localhost`/`127.0.0.1`/`::1` or listed in `--allowed-hosts` (this
-defeats DNS rebinding); and cross-origin state-changing requests are rejected. To
-share it, put your own authenticating reverse proxy in front (and add its hostname
-to `--allowed-hosts`) or don't share it. Details:
-[Running in containers](docs/containers.md#security-model-no-authentication).
+**On your machine**, as a single binary (Linux and macOS; a Windows build is
+published too but only cross-compiled and untested):
 
-The vault backend is `--vault-backend file|postgres`. PostgreSQL is the shared
-backend that lets scans and the War Room (possibly in different containers) see the
-same data; the file backend is safe to share between a scan and a running
-`achillesd` on one host (local filesystem only).
+```bash
+curl -fsSLO https://raw.githubusercontent.com/Warzuponus/achilles/main/scripts/install.sh
+sh install.sh                      # verifies the release checksum; installs to ~/.local/bin
+achilles tools install             # downloads the pinned scanners, verified by sha256
+achilles doctor                    # what is installed, what is missing, how to fix it
+
+export ACHILLES_LLM_API_KEY=...    # your provider's key
+achilles --ai --llm-provider openrouter --llm-model <model> .
+open achilles-report/report.html
+```
+
+**In Docker**, which already contains the scanners:
+`docker run --rm -v "$PWD":/work ghcr.io/warzuponus/achilles achilles --ai ... /work`
+(see [Running in containers](docs/containers.md)).
+
+Every path above needs a **release**, and none exists yet; until then build from source
+(`make build`) or use `version: source` in the action.
+
+## What you get
+
+- **Scanners, one report.** Opengrep (many languages), gosec, osv-scanner (dependency
+  CVEs), Trivy (IaC, misconfiguration, secrets) and Gitleaks, normalized into one set
+  of findings. A scanner that failed to run is called out in every report; a partial
+  scan is never presented as a clean one.
+- **AI verification.** Each finding goes to a model with the code around it, then a
+  second adversarial pass tries to refute the verdict. Confident false positives drop
+  out of the gate, the counts and the issues, and are listed separately so you can audit
+  them. Reports say how many findings the review actually covered.
+- **Fix suggestions** for confirmed findings, a repo-level security review, a
+  dependency-upgrade plan, and an optional threat model.
+- **Gating for CI:** fail only on new findings (`--baseline`, `--diff`) at or above a
+  severity.
+- **Privacy controls:** credentials are masked before anything is sent to the model,
+  findings about credentials are never sent, `--llm-no-code` sends no source at all,
+  and a local model (`--llm-provider ollama`) keeps everything on your machine.
+
+## Know the limits
+
+- **The AI review is a judgment, not a proof.** The model sees one file's worth of
+  context per finding, not the whole program. A repository you do not trust can try to
+  talk it into dismissing a real finding: for that case use `--keep-dismissed`. See
+  [SECURITY.md](SECURITY.md).
+- **Coverage depends on the scanners.** The default set covers Go, dependencies, IaC
+  and secrets well. Code-level coverage for Python, JavaScript, Java, Ruby and PHP comes
+  mostly from Opengrep rules: Achilles ships a small baseline set, and
+  `achilles tools install` adds the community rules (a Commons Clause licence applies;
+  they are skipped under `--mode commercial`, see [THIRD-PARTY.md](THIRD-PARTY.md)). The
+  heavier per-language analyzers (`--profile full`) need Docker.
+- **Accuracy is only lightly measured:** an 18-case labeled corpus, not real-repository
+  precision and recall. See [evals/](evals/README.md).
+- **You choose the model and pay the provider.** `--dry-run` prints a cost estimate
+  first. There is no default model.
+- **Issues publish vulnerabilities** to everyone who can read the repo, so Achilles
+  refuses to file them in a public repository unless you pass `--allow-public-issues`.
+
+## Local-first, no authentication
+
+Achilles has no cloud service and no login. The optional War Room (`achillesd`) is a
+local web view over the Evidence Vault, reachable only from your own machine; it has
+**no authentication**, and anyone who can reach its port can read every finding. See
+[Running in containers](docs/containers.md#security-model-no-authentication). The
+[User Guides](docs/README.md) cover the rest: getting started, every flag, reports and
+gating, LLM triage and agents, CI and the scan hub, and the fleet. [DESIGN.md](DESIGN.md)
+has the architecture; [DEPLOY.md](DEPLOY.md) every way to run it.
 
 ### Everything through Phase 5
 
@@ -173,67 +206,21 @@ a partial scan.
 
 ### Flags
 
-| Flag | Default | Purpose |
-|------|---------|---------|
-| `--config` | `configs/tools.yaml` | tool registry file |
-| `--profile` | `default` | `default` (baseline tools) or `full` (also the heavy per-language tools) |
-| `--mode` | `oss` | `oss` (all tools) or `commercial` (only license-clean tools) |
-| `--attest` | — | comma-separated tool IDs with a supplied license attestation (e.g. `codeql`) |
-| `--runner` | `local` | `local` (binaries on PATH) or `docker` (per-tool images from config) |
-| `--vault` | `.achilles/vault.jsonl` | Evidence Vault path (file backend) |
-| `--vault-backend` | `file` | `file` or `postgres` (any PostgreSQL; DSN from `$ACHILLES_VAULT_DSN`) |
-| `--vault-tenant` | `default` | the project these results belong to; postgres stores them under `tenant-<id>`, which the War Room reads |
-| `--sarif-out` | — | write each tool's SARIF into this directory |
-| `--from-sarif` | — | skip scanning; normalize an existing SARIF file |
-| `--fail-on` | — | exit non-zero at/above a severity (`critical\|high\|medium\|low`) |
-| `--timeout` | `5m` | scan timeout |
-| `--triage` | `false` | run LLM triage + adversarial judge on findings |
-| `--remediate` | `false` | propose fixes for high-confidence findings (implies `--triage`) |
-| `--review` | `false` | run the holistic full-repo security review agent (systemic risks; needs `--llm-model`) |
-| `--sca-advice` | `false` | run the SCA dependency-upgrade advisor (merge-safety-scored plan; needs `--llm-model`) |
-| `--threat-model` | — | infer an OTM threat model (trust zones/components/STRIDE threats) and write it to this file (needs `--llm-model`) |
-| `--llm-base-url` | `https://api.openai.com/v1` | OpenAI-compatible endpoint (or `$ACHILLES_LLM_BASE_URL`) |
-| `--llm-model` | `$ACHILLES_LLM_MODEL` | model for triage (required with `--triage`) |
-| `--llm-judge-model` | — | separate model for the judge pass (model routing) |
-| `--llm-auth` | `key` | credential: `key` (Bearer, from `ACHILLES_LLM_API_KEY`), `api-key` (`api-key:` header, Azure OpenAI) or `none` (local runtimes) |
-| `--model-config` | — | YAML routing each step (triage/judge/remediation) to a model/endpoint; see `configs/models.example.yaml` |
-| `--rag` | `false` | inject similar past-feedback findings as few-shot (needs `--llm-embed-model`) |
-| `--llm-embed-model` | `$ACHILLES_LLM_EMBED_MODEL` | embeddings model for `--rag` |
-| `--feedback` | — | record analyst feedback for a finding fingerprint, then exit |
-| `--label` | — | `tp` or `fp` (with `--feedback`) |
-| `--note` | — | optional note (with `--feedback`) |
-| `--rule-health` | `false` | print per-rule TP/FP health from accumulated feedback (noisy vs. high-yield), then exit |
-| `--metrics` | `false` | print a fleet rollup over the vault (findings by severity/tool/rule/target, FP rate, LLM spend), then exit |
-| `--research` | `false` | research inventory deps → synthesize + gate-validate new rules |
-| `--mine-rules` | `false` | mine Opengrep rules from analyst-confirmed findings (validated + admitted; needs `--llm-model`) |
-| `--rule-repo` | `.achilles/generated-rules` | generated-rule repository directory (admitted rules load into scans) |
-| `--rule-shadow-days` | `7` | admitted generated rules are report-only (don't gate) until this old |
-| `--research-max` | `20` | max dependencies to research per run (budget cap) |
-| `--diff` | — | diff-aware: keep only findings in files changed vs this git ref |
-| `--exclude` | — | extra noise patterns (comma-sep): a path segment (`tests`) or glob (`*.gen.go`) |
-| `--no-default-excludes` | `false` | disable the built-in vendored/generated/minified noise filter |
-| `--no-correlate` | `false` | disable cross-tool correlation (triage every duplicate report separately) |
-| `--dry-run` | `false` | scan, print the LLM cost estimate, and stop before any model call or outward action |
-| `--max-cost` | `0` | refuse to start LLM work if estimated spend exceeds this many USD (needs `--price-config`) |
-| `--price-config` | — | YAML per-model token prices for estimation (see [configs/prices.example.yaml](configs/prices.example.yaml)) |
-| `--baseline` | — | suppress findings present in this baseline file |
-| `--pr-mini` | — | auto seed-vs-delta: seed the baseline if absent (no gate), else delta-scan against it |
-| `--write-baseline` | — | write current findings' fingerprints as a baseline |
-| `--sarif-report` | — | write a unified SARIF report (GitHub code scanning) |
-| `--junit` | — | write a JUnit XML report |
-| `--markdown` | — | write a Markdown summary (PR comment) |
-| `--html-report` | — | write a self-contained HTML report: findings + AI review, upgrade advice, and threat model. Open in a browser |
-| `--github` | `false` | emit GitHub Actions annotations to stdout |
-| `--pr-comment` | `0` | post/update a sticky summary comment on this PR number (needs `GITHUB_TOKEN` + `--repo`) |
-| `--pr-review` | `0` | post findings as inline review comments on this PR (needs `--pr-head-sha`; deduped, diff-line-only) |
-| `--pr-head-sha` | — | PR head commit SHA for `--pr-review` (`github.event.pull_request.head.sha`) |
-| `--file-issues` | `false` | file/reconcile GitHub issues for kept findings (dedupe by fingerprint; a closed issue suppresses; resolved issues auto-close). Full-repo scans only — skips auto-close under `--diff` |
-| `--fix-pr` | `false` | open a review PR with high-confidence auto-fixes (needs `--remediate`): applies each remediation diff to a fresh branch, pushes, opens a PR — **never merges** |
-| `--fix-remote` | `origin` | git remote to push the auto-fix branch to (with `--fix-pr`) |
-| `--fix-base` | current branch | base branch for the auto-fix PR (with `--fix-pr`) |
-| `--repo` | `$GITHUB_REPOSITORY` | `owner/name` for GitHub integrations |
-| `--diagnostics` | — | write a sidecar JSON: tool/parse failures (coverage gaps) + LLM token usage |
-| `--sbom` | — | generate a CycloneDX SBOM of the target (via Syft) and write it to this file |
+The complete, current list is in the **[CLI Reference](docs/cli-reference.md)**
+(`achilles --help` prints the same). The ones most people need:
+
+| Flag | Purpose |
+|------|---------|
+| `--ai` | the full AI-verified scan and all three reports (`--report-dir`) |
+| `--llm-provider`, `--llm-model` | which LLM endpoint and model; key from `ACHILLES_LLM_API_KEY` |
+| `--llm-no-code`, `--keep-dismissed` | privacy mode; gate on raw scanner severity instead of AI-filtered |
+| `--fail-on` | exit non-zero at or above a severity |
+| `--baseline`, `--diff` | only new findings, only changed files |
+| `--file-issues` | open and maintain GitHub issues (`--issues-*` options) |
+| `--dry-run`, `--max-cost` | cost estimate before any model call |
+| `--html-report`, `--sarif-report`, `--markdown` | write a report |
+
+Subcommands: `achilles doctor`, `achilles tools install|list`, `achilles version`.
 
 `--fail-on` is baseline/diff-aware: it gates on the *surfaced* set, so CI fails
 only on newly-introduced (or changed-file) findings. See

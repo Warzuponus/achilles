@@ -1,52 +1,76 @@
 # CI & the Scan Hub
 
-Three ways to run Achilles in GitHub Actions, from simplest to most powerful.
-For every way to run Achilles (workstation, containers, CI, scheduled), see [DEPLOY.md](../DEPLOY.md).
+Ways to run Achilles in GitHub Actions, from simplest to most powerful. For every
+way to run it (workstation, containers, CI, scheduled), see [DEPLOY.md](../DEPLOY.md).
 
-## Option A — per-PR gate (in the repo being scanned)
+## Option A — AI-verified scan of your repo, with issues (start here)
 
-Copy [`examples/workflows/scan-example.yml`](../examples/workflows/scan-example.yml)
-into a repo. It runs on pull requests, annotates the diff, uploads SARIF to code
-scanning, and fails only on newly-introduced high-severity findings. The core step:
+Copy [`examples/workflows/achilles.yml`](../examples/workflows/achilles.yml) to
+`.github/workflows/achilles.yml`, then set one **secret** (`LLM_API_KEY`, your
+provider's key) and one **variable** (`LLM_MODEL`). That is the whole setup:
+
+```yaml
+permissions:
+  contents: read
+  issues: write
+steps:
+  - uses: actions/checkout@v4
+  - uses: Warzuponus/achilles@v0.1.0
+    with:
+      llm-api-key: ${{ secrets.LLM_API_KEY }}
+      llm-provider: openrouter          # or openai | ollama | anthropic, or llm-base-url
+      llm-model: ${{ vars.LLM_MODEL }}
+      issues: "true"
+```
+
+What it does, in order: downloads the release binary and the hash-pinned scanners
+(no compiling), scans, has the model review every finding, writes `report.html`,
+`report.md` and `achilles.sarif`, uploads them as the `achilles-report` artifact,
+adds a summary to the job page, and opens one GitHub issue per confirmed finding.
+Re-runs update those issues instead of duplicating them, close them when the finding
+is fixed, and reopen them if it comes back. A finding you close by hand stays closed.
+
+Each issue carries the AI's reasoning and a suggested fix (a patch when one could be
+made safely). Issue filing is capped (`issues-max`, default 25 new per run, most
+severe first) and never publishes vulnerability details in a **public** repository
+unless you set `allow-public-issues: "true"`. Findings about credentials get an issue
+that names only the rule and location, never the secret.
+
+| Input | Default | Meaning |
+|-------|---------|---------|
+| `llm-api-key`, `llm-model` | — | both are needed for the AI review; with neither, only the scanners run |
+| `llm-provider` / `llm-base-url` | — | which endpoint; see [LLM Triage & Agents](llm-and-agents.md) |
+| `issues`, `issues-min-severity`, `issues-max` | `false`, `medium`, `25` | issue filing |
+| `fail-on` | — | fail the job if a finding at or above this severity remains after the AI review |
+| `upload-sarif` | `false` | also fill the Security tab (private repos need GitHub Advanced Security) |
+| `llm-no-code` | `false` | send the model no source code |
+| `version` | the tag you pinned | a release tag, `latest`, or `source` |
+| `args` | — | extra `achilles` flags, appended last |
+
+**Run it on `push`, `schedule` or `workflow_dispatch`, not on pull requests from
+forks.** A forked PR cannot read your secrets (the AI review would not run), and
+`pull_request_target` would give the key and a write token to code you have not
+reviewed, which the scanners and the model would then read. Pin the action to a tag
+or commit, as above. The action supports Linux and macOS runners.
+
+## Option B — per-PR gate (no LLM, no secrets)
+
+[`examples/workflows/scan-example.yml`](../examples/workflows/scan-example.yml) runs
+on pull requests, annotates the diff, and fails only on newly introduced
+high-severity findings. It needs no secret, so it works on fork PRs:
 
 ```yaml
 - uses: Warzuponus/achilles@v0.1.0
   with:
-    target: "."
-    mode: "commercial"
-    args: >-
-      --diff origin/${{ github.base_ref }}
-      --baseline .achilles/baseline.json
-      --sarif-report achilles.sarif
-      --github
-      --fail-on high
+    fail-on: high
+    args: --diff origin/${{ github.base_ref }} --baseline .achilles/baseline.json
 ```
 
-The composite action installs the binary + the baseline scanners
-(Opengrep, gosec, osv-scanner, Trivy, Gitleaks) for you. No LLM key needed.
+## Option B2 — routed open models
 
-## Option B — routed LLM full scan
-
-Copy [`examples/workflows/scan-ollama-example.yml`](../examples/workflows/scan-ollama-example.yml)
-for a scheduled, LLM-assisted scan using multi-model routing.
-
-1. Add **one** repo/org secret: **`ACHILLES_LLM_API_KEY`** (your Ollama Cloud key).
-   *Do this yourself — never hard-code a key in a workflow.*
-2. The workflow sets `ACHILLES_LLM_BASE_URL=https://ollama.com/v1`, writes the
-   routing inline (mirrors [`configs/models.ollama.yaml`](../configs/models.ollama.yaml)),
-   and runs the agents + HTML report:
-
-```yaml
-env:
-  ACHILLES_LLM_API_KEY: ${{ secrets.ACHILLES_LLM_API_KEY }}
-  ACHILLES_LLM_BASE_URL: https://ollama.com/v1
-# ... args: --model-config models.ollama.yaml --review --sca-advice
-#           --threat-model tm.otm.json --html-report achilles-report.html
-```
-
-It uploads `achilles-report.html` (and SARIF/threat-model) as run artifacts.
-Because full LLM scans are heavier than a gate, it runs on a schedule /
-`workflow_dispatch`, not every PR.
+[`examples/workflows/scan-ollama-example.yml`](../examples/workflows/scan-ollama-example.yml)
+shows per-task model routing (a cheaper model to triage, a stronger one to judge) over
+Ollama Cloud, via `--model-config`. Same inputs as Option A.
 
 ## Option C — the central scan hub
 
@@ -97,9 +121,12 @@ and `ref` (optional branch/tag/SHA; blank = the default branch). Secrets:
 `SCANNER_APP_ID`, `SCANNER_APP_PRIVATE_KEY`, and the LLM key `ACHILLES_LLM_API_KEY`.
 
 **Least privilege by design:** a per-run token scoped to exactly the target repo
-(not a personal PAT), and results are artifacts of the hub run — nothing is written
-back to the target. To also post SARIF to a target's Security tab, grant the App
-**Code scanning: Write** on that repo and add an upload-sarif step.
+(not a personal PAT). By default results are artifacts of the hub run and nothing is
+written back to the target. Tick **`file_issues`** when you run the hub to also open
+issues in the target: the workflow then mints a second token that adds Issues: Write
+on that one repo, so grant the App **Issues: Write** first (it is not needed
+otherwise). To also post SARIF to a target's Security tab, grant **Code scanning:
+Write** and add an upload-sarif step.
 
 Download the report from **the run → Artifacts → `achilles-<repo>` → `achilles-report.html`**
 (the same artifact also holds `achilles.sarif`, `achilles-report.md` and the threat
@@ -130,7 +157,8 @@ the run exits non-zero rather than silently reporting success.
 
 | You want… | Use |
 |-----------|-----|
-| Block risky PRs, no LLM | A (per-repo gate) |
-| Deep AI analysis on a schedule, per repo | B (routed full scan) |
+| AI-verified results and issues for one repo | A |
+| Block risky PRs, no LLM, no secrets | B (per-PR gate) |
+| Deep AI analysis with per-task models | B2 (routed full scan) |
 | One place to scan many repos, no per-repo setup | C (scan hub) |
 | Many repos on a schedule, from one machine | [Fleet](fleet.md) |

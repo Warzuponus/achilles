@@ -65,58 +65,97 @@
     <section id="getting-started"><h1>Getting Started</h1>
 <p>This gets you from an empty shell to a scan you understand.</p>
 <h2>1. Install</h2>
-<p>Achilles is a single Go binary (Go 1.26, no cgo).</p>
-<pre><code class="language-bash">git clone https://github.com/Warzuponus/achilles.git &amp;&amp; cd achilles
-make build            # -&gt; bin/achilles
-sudo cp bin/achilles /usr/local/bin/   # optional: put it on PATH
+<p>Achilles is a single static Go binary (Go 1.26, no cgo). Its tool registry
+(<code>configs/tools.yaml</code>) and baseline Opengrep rules are <strong>embedded in the binary</strong>, so
+it runs from any directory with no repository checkout. Pick one:</p>
+<p><strong>Install script</strong> (Linux and macOS; verifies the release checksum, and the cosign
+signature if <code>cosign</code> is installed):</p>
+<pre><code class="language-bash">curl -fsSLO https://raw.githubusercontent.com/Warzuponus/achilles/main/scripts/install.sh
+less install.sh                                   # read it first
+sh install.sh                                     # latest -&gt; ~/.local/bin
+VERSION=v0.1.0 INSTALL_DIR=/usr/local/bin sh install.sh
 </code></pre>
-<p>Verify the spine without installing any scanners — this ingests an existing SARIF
-file and runs the normalize → report path:</p>
-<pre><code class="language-bash">achilles --from-sarif internal/normalize/testdata/sample.sarif
+<p><strong>Release binary</strong> — download <code>achilles_&lt;version&gt;_&lt;os&gt;_&lt;arch&gt;.tar.gz</code> (<code>.zip</code> on
+Windows) and <code>checksums.txt</code> from the
+<a href="https://github.com/Warzuponus/achilles/releases">Releases page</a>, check it with
+<code>sha256sum --check --ignore-missing checksums.txt</code>, and put <code>achilles</code> on your <code>PATH</code>.</p>
+<p><strong>Docker</strong> — the all-in-one image already contains the scanners:
+<code>docker run --rm -v "$PWD":/work:ro ghcr.io/warzuponus/achilles achilles --runner local /work</code>
+(see <a href="#containers">Running in containers</a>).</p>
+<p><strong><code>go install</code></strong> — <code>go install github.com/Warzuponus/achilles/cmd/achilles@latest</code>
+(or <code>@v0.1.0</code>; <code>achilles --version</code> reports the module version).</p>
+<p><strong>From source</strong> — <code>git clone https://github.com/Warzuponus/achilles.git &amp;&amp; cd achilles &amp;&amp; make build</code>
+(binary at <code>bin/achilles</code>). <em>Homebrew and Scoop packages are planned; they need a tap
+repository (see the commented blocks in <code>.goreleaser.yaml</code>).</em></p>
+<p>Check it:</p>
+<pre><code class="language-bash">achilles --version
+achilles --from-sarif internal/normalize/testdata/sample.sarif   # needs a checkout; no scanners needed
 </code></pre>
-<h2>2. Get the scanners on PATH</h2>
-<p>A real scan shells out to scanner tools. The <strong>default profile</strong> uses five:</p>
+<h2>2. Get the scanners</h2>
+<p>A real scan shells out to scanner tools. The <strong>default profile</strong> uses five. Let
+Achilles fetch them — it downloads the pinned upstream release for your platform,
+verifies its sha256 (and refuses to install on a mismatch) and puts it in
+<code>~/.achilles/bin</code> (override with <code>$ACHILLES_HOME</code>):</p>
+<pre><code class="language-bash">achilles tools install      # all five scanners + the community Opengrep rules
+achilles doctor             # what is found where, versions vs the pinned ones, fixes
+achilles tools list         # pinned versions and what is installed
+</code></pre>
 <table>
 <thead>
 <tr>
 <th>Tool</th>
 <th>Covers</th>
-<th>Install</th>
+<th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Opengrep</td>
 <td>multi-language patterns</td>
-<td><code>curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh \| bash</code></td>
+<td>upstream publishes no checksums; the pinned digests were computed at pin time</td>
 </tr>
 <tr>
 <td>gosec</td>
 <td>Go SAST</td>
-<td><code>go install github.com/securego/gosec/v2/cmd/gosec@latest</code></td>
+<td>needs <code>go</code> on PATH to type-check packages</td>
 </tr>
 <tr>
 <td>osv-scanner</td>
 <td>dependency CVEs (SCA)</td>
-<td><code>go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest</code></td>
+<td>needs network access to the OSV database</td>
 </tr>
 <tr>
 <td>Trivy</td>
 <td>IaC / misconfig / secrets / SCA</td>
-<td><a href="https://github.com/aquasecurity/trivy">install script</a></td>
+<td></td>
 </tr>
 <tr>
 <td>Gitleaks</td>
 <td>secret scanning</td>
-<td><a href="https://github.com/gitleaks/gitleaks/releases">release binary</a></td>
+<td></td>
 </tr>
 </tbody>
 </table>
-<p>Missing tools <strong>degrade gracefully</strong> — Achilles skips them and scans with what's
-present (it doesn't fail the run). To avoid installing anything, run everything in
-containers instead: add <code>--runner docker</code> (uses the pinned images in
-<code>configs/tools.yaml</code>). <em>Exception:</em> Opengrep has no public image and always runs
-as a local binary, so keep it on PATH even in docker mode.</p>
+<p><strong>Lookup order.</strong> For each scanner Achilles uses <code>~/.achilles/bin</code> first (the pinned,
+verified copy), then <code>PATH</code>. <code>achilles doctor</code> shows which one it found and exits
+non-zero if a default-profile scanner is missing, printing the exact fix command.
+If upstream publishes no download for your platform, doctor says so and points at the
+manual install or the Docker image.</p>
+<p><strong>Rules.</strong> Opengrep's <code>-f</code> rules are, in order: the <code>rules:</code> directory from your tool
+config if it exists on disk (a repo checkout uses <code>configs/rules</code>), otherwise the
+baseline rules embedded in the binary (materialized into your user cache). The
+community rule pack from <code>achilles tools install rules</code>
+(<a href="https://github.com/opengrep/opengrep-rules">opengrep-rules</a>, pinned commit, security
+rules for the main languages only, in <code>~/.achilles/rules/</code>) is loaded <strong>in addition</strong>
+as a second <code>-f</code>; the embedded baseline is always the offline fallback. Extra rule
+YAML dropped directly into <code>~/.achilles/rules/</code> is merged into the embedded baseline.
+The community pack is LGPL-2.1 with a <strong>Commons Clause</strong> (no selling), so it is
+downloaded on demand, never bundled, and <strong>not loaded under <code>--mode commercial</code></strong>.</p>
+<p>A missing scanner is reported, not hidden: the scan prints <code>N tool(s) FAILED to run</code>
+and lists them (add <code>--strict-tools</code> to make that exit 2). To avoid installing
+anything, run the tools in containers instead: <code>--runner docker</code> (uses the pinned
+images in <code>configs/tools.yaml</code>). <em>Exception:</em> Opengrep has no public image and always
+runs as a local binary.</p>
 <h2>3. Your first scan</h2>
 <pre><code class="language-bash">achilles /path/to/code
 </code></pre>
@@ -163,6 +202,39 @@ baseline or a diff — see <a href="#reports-and-gating">Reports &amp; Gating</a
 <code>flag</code> stops at the first positional, so a flag after the path is ignored.
 The target defaults to <code>.</code> if omitted.</p>
 </blockquote>
+<h2>Subcommands</h2>
+<p>These run instead of a scan. (A scan target literally named <code>version</code>, <code>doctor</code> or
+<code>tools</code> must be written <code>./version</code> etc.)</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>achilles version</code></td>
+<td>same as <code>--version</code></td>
+</tr>
+<tr>
+<td><code>achilles doctor</code></td>
+<td>per default-profile scanner: where it was found (<code>~/.achilles/bin</code> first, then <code>PATH</code>), its version vs the pinned one, <code>ok</code>/<code>missing</code>/<code>outdated</code>/<code>no-asset</code>, and the exact fix command; also whether <code>go</code> (needed by gosec) and Docker are available, whether an LLM key is set (<code>set</code>/<code>not set</code> only — the key is never printed) and the resolved base URL, and whether the community rules are installed. Exits non-zero (2) if a required scanner is missing.</td>
+</tr>
+<tr>
+<td><code>achilles tools list</code></td>
+<td>pinned versions, whether upstream publishes a download for this platform, and what is installed</td>
+</tr>
+<tr>
+<td><code>achilles tools install [--force] [name...]</code></td>
+<td>download, sha256-verify (fail closed) and install pinned scanners into <code>$ACHILLES_HOME/bin</code> (default <code>~/.achilles/bin</code>). Names: <code>opengrep gosec osv-scanner trivy gitleaks rules</code>. No names = all five plus the community rules. Skips tools already at the pinned version unless <code>--force</code>.</td>
+</tr>
+<tr>
+<td><code>achilles tools doctor</code></td>
+<td>same as <code>achilles doctor</code></td>
+</tr>
+</tbody>
+</table>
 <h2>Scan setup</h2>
 <table>
 <thead>
@@ -175,8 +247,8 @@ The target defaults to <code>.</code> if omitted.</p>
 <tbody>
 <tr>
 <td><code>--config</code></td>
-<td><code>configs/tools.yaml</code></td>
-<td>tool registry file</td>
+<td><em>(embedded <code>configs/tools.yaml</code>)</em></td>
+<td>tool registry file; empty uses the registry built into the binary</td>
 </tr>
 <tr>
 <td><code>--profile</code></td>
@@ -202,6 +274,11 @@ The target defaults to <code>.</code> if omitted.</p>
 <td><code>--timeout</code></td>
 <td><code>5m</code></td>
 <td>overall scan timeout</td>
+</tr>
+<tr>
+<td><code>--version</code></td>
+<td>—</td>
+<td>print version, commit, build date, Go version and platform, then exit</td>
 </tr>
 <tr>
 <td><code>--from-sarif</code></td>
@@ -334,9 +411,44 @@ The target defaults to <code>.</code> if omitted.</p>
 </thead>
 <tbody>
 <tr>
+<td><code>--ai</code></td>
+<td><code>false</code></td>
+<td>one-flag AI scan: <code>--triage --remediate --review --sca-advice</code>, and write <code>report.html</code>, <code>report.md</code>, <code>achilles.sarif</code> into <code>--report-dir</code></td>
+</tr>
+<tr>
+<td><code>--report-dir</code></td>
+<td><code>achilles-report</code></td>
+<td>where <code>--ai</code> writes its reports (an explicit <code>--html-report</code>/<code>--markdown</code>/<code>--sarif-report</code> wins)</td>
+</tr>
+<tr>
+<td><code>--llm-provider</code></td>
+<td><code>$ACHILLES_LLM_PROVIDER</code></td>
+<td>endpoint preset: <code>openai</code>, <code>openrouter</code>, <code>ollama</code>, <code>anthropic</code> (experimental). Sets <code>--llm-base-url</code>; <code>ollama</code> also sets <code>--llm-auth none</code></td>
+</tr>
+<tr>
+<td><code>--llm-budget</code></td>
+<td><code>45m</code></td>
+<td>time allowed for all AI phases combined (separate from <code>--timeout</code>, which bounds the scanners)</td>
+</tr>
+<tr>
+<td><code>--llm-concurrency</code></td>
+<td><code>4</code></td>
+<td>findings triaged in parallel, most severe first</td>
+</tr>
+<tr>
+<td><code>--llm-no-code</code></td>
+<td><code>false</code></td>
+<td>privacy mode: send the model only rule, message and location, never source. The AI then never dismisses findings</td>
+</tr>
+<tr>
+<td><code>--keep-dismissed</code></td>
+<td><code>false</code></td>
+<td>keep findings the AI confidently dismissed in the gate, issues and counts (default: list them separately)</td>
+</tr>
+<tr>
 <td><code>--triage</code></td>
 <td><code>false</code></td>
-<td>LLM triage + adversarial judge on each finding</td>
+<td>LLM triage + adversarial judge on each finding; confident false positives leave the gate (see <a href="#reports-and-gating">Reports &amp; Gating</a>)</td>
 </tr>
 <tr>
 <td><code>--remediate</code></td>
@@ -544,7 +656,7 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--file-issues</code></td>
 <td><code>false</code></td>
-<td>file/reconcile issues (dedupe by fingerprint; closed suppresses; resolved auto-close)</td>
+<td>open/maintain GitHub Issues with fix suggestions for kept findings; see <a href="#filing-issues">Filing issues</a> below</td>
 </tr>
 <tr>
 <td><code>--fix-pr</code></td>
@@ -563,6 +675,83 @@ The target defaults to <code>.</code> if omitted.</p>
 </tr>
 </tbody>
 </table>
+<h3>Filing issues</h3>
+<p><code>--file-issues</code> opens one GitHub Issue per finding (or per rule, or one rollup), labelled
+<code>achilles</code>, with the message, a permalink to the code, the AI review, and the suggested
+fix/diff. It reads <code>GITHUB_TOKEN</code> (or <code>GH_TOKEN</code>); <code>--repo</code> defaults to
+<code>$GITHUB_REPOSITORY</code>, permalinks use <code>$GITHUB_SHA</code> and <code>$GITHUB_SERVER_URL</code>. It is skipped
+under the global <code>--dry-run</code>. Only findings that survived AI review are filed (dismissed and
+shadow findings never are).</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--issues-min-severity</code></td>
+<td><code>medium</code></td>
+<td>lowest severity to file (<code>critical</code>, <code>high</code>, <code>medium</code>, <code>low</code>, <code>info</code>)</td>
+</tr>
+<tr>
+<td><code>--issues-max</code></td>
+<td><code>25</code></td>
+<td>most <strong>new</strong> issues per run, highest severity first; the rest are filed on later runs</td>
+</tr>
+<tr>
+<td><code>--issues-group</code></td>
+<td><code>finding</code></td>
+<td><code>finding</code> (one issue per fingerprint), <code>rule</code> (one per tool+rule, with a table of locations) or <code>rollup</code> (a single issue). Each mode tracks only its own issues; switching modes leaves old issues untouched</td>
+</tr>
+<tr>
+<td><code>--issues-label</code></td>
+<td><code>achilles</code></td>
+<td>label that marks (and scopes) the issues Achilles manages</td>
+</tr>
+<tr>
+<td><code>--issues-dry-run</code></td>
+<td><code>false</code></td>
+<td>print the issues that would be created/updated/reopened/closed and call no write API</td>
+</tr>
+<tr>
+<td><code>--issues-strict</code></td>
+<td><code>false</code></td>
+<td>exit non-zero if any GitHub call failed or filing was refused (otherwise failures only warn)</td>
+</tr>
+<tr>
+<td><code>--allow-public-issues</code></td>
+<td><code>false</code></td>
+<td>allow filing in a <strong>public</strong> repository (see below)</td>
+</tr>
+</tbody>
+</table>
+<p>Behavior across runs:</p>
+<ul>
+<li><strong>Dedupe</strong>: a hidden marker in each issue body identifies the finding. Findings that share a
+  fingerprint (the same snippet in several files) are merged into one issue listing every
+  location. An issue is only edited when its content (severity, location, AI review, fix)
+  changed, not merely because the commit moved.</li>
+<li><strong>Human close = suppress.</strong> Close an issue to stop Achilles filing that finding again.</li>
+<li><strong>Auto-close and reopen.</strong> When a <em>full</em> scan no longer reports a finding, Achilles closes
+  its issue with a comment and the <code>achilles:resolved</code> label. If the finding returns, the
+  issue is reopened with a comment. Issues closed without that label (by a person) are never
+  reopened. Auto-close is skipped, and the summary says why, when the scan is narrowed by
+  <code>--diff</code>, <code>--baseline</code> or <code>--pr-mini</code>, or when any scanner failed. A finding the AI review
+  now confidently dismisses also closes its open issue (with the reasoning).</li>
+<li><strong>Public repositories are refused</strong> unless <code>--allow-public-issues</code> is set: issue bodies describe
+  unfixed vulnerabilities. If visibility cannot be determined it is treated as public.
+  Use <code>--sarif-report</code> and upload to the Security tab instead.</li>
+<li><strong>Secrets are never echoed.</strong> For secret-scanner findings (gitleaks, secret/key/token/password
+  rules, CWE-798/259/321) the issue has only rule, severity, <code>file:line</code> and rotation guidance:
+  no matched text, code or diff. Other text is passed through the secret redactor, local paths
+  are made repo-relative, and bodies are capped below GitHub's size limit (the diff is cut first).</li>
+<li><strong>Rate limits</strong>: new issues are paced about a second apart and 429/secondary-rate-limit
+  responses are retried a few times (honoring <code>Retry-After</code>) before giving up.</li>
+<li>Paths are made relative to the scan target, so scan the repository root for correct permalinks.</li>
+</ul>
 <h2>Common recipes</h2>
 <pre><code class="language-bash"># Local dev: fast scan, HTML report, don't fail
 achilles --html-report report.html .
@@ -632,7 +821,9 @@ write a file (they compose — ask for several at once):</p>
 </tr>
 </tbody>
 </table>
-<p>The <strong>HTML report</strong> is the showcase: it folds in the LLM agents' output when they
+<p>Every report says whether the scan was <strong>complete</strong> (a banner names any scanner that
+failed to run) and how much of it the AI review <strong>covered</strong>. Findings the AI
+confirmed are listed first within each severity. The <strong>HTML report</strong> is the showcase: it folds in the LLM agents' output when they
 ran (systemic-risk review, dependency upgrade plan, STRIDE threat model) plus each
 finding's triage verdict and suggested fix. See <a href="#llm-and-agents">LLM Triage &amp; Agents</a>.</p>
 <pre><code class="language-bash">achilles --html-report report.html --sarif-report achilles.sarif .
@@ -643,6 +834,23 @@ finding's triage verdict and suggested fix. See <a href="#llm-and-agents">LLM Tr
 </code></pre>
 <p>Severity order: <code>critical &gt; high &gt; medium &gt; low</code>. The gate runs <em>after</em> all
 filtering below, so it only ever considers findings you didn't suppress.</p>
+<h3>The gate and the AI review</h3>
+<p>With <code>--triage</code> (or <code>--ai</code>), a finding the AI review is <strong>confident is a false
+positive</strong> (confidence at least 0.7, and the adversarial second pass did not
+overturn it) is moved out of the gate, out of the issues Achilles files, and out of
+the headline counts. It is not hidden: every report lists these findings in their own
+section ("Ruled out by the AI review", with the model's reason), and SARIF carries
+them as <em>suppressed</em> results so code scanning shows them as dismissed. These are
+never dismissed: uncertain or low-confidence verdicts, verdicts the judge overturned,
+findings about credentials (the model never sees those), and anything the review did
+not reach.</p>
+<pre><code class="language-bash">achilles --ai --fail-on high .                  # gate on what survived the AI review
+achilles --ai --keep-dismissed --fail-on high . # gate on raw scanner severity instead
+</code></pre>
+<p>Use <code>--keep-dismissed</code> when the code's authors are not trusted: a hostile repository
+can try to talk the model into dismissing a real finding (see
+<a href="../SECURITY.md">SECURITY.md</a>). Every report states how many findings the AI
+review covered, so a partial review is visible.</p>
 <h3>One other thing fails the run</h3>
 <p>Independent of <code>--fail-on</code>: if <strong>Evidence Vault writes fail</strong>, the run exits
 non-zero even when no finding would have gated it. The vault is the audit trail,
@@ -704,16 +912,89 @@ gates on what's new. It's mutually exclusive with <code>--baseline</code>/<code>
 and produce holistic analysis — and it can route each task to a different model.
 All of it is <strong>opt-in</strong>; with no LLM configured, Achilles is a pure scanner.</p>
 <h2>Setup</h2>
-<p>Achilles talks to any <strong>OpenAI-compatible</strong> endpoint. You need a model and a key:</p>
-<pre><code class="language-bash">export ACHILLES_LLM_API_KEY=...        # or OPENAI_API_KEY
-achilles --triage --llm-model gpt-4o /path/to/code
+<p>Achilles talks to any <strong>OpenAI-compatible</strong> endpoint. You need a key and a model.
+The shortest path is <code>--ai</code>, which turns on triage, fix suggestions, the repo
+review and the dependency advisor, and writes <code>report.html</code>, <code>report.md</code> and
+<code>achilles.sarif</code> into <code>--report-dir</code> (default <code>achilles-report/</code>):</p>
+<pre><code class="language-bash">export ACHILLES_LLM_API_KEY=...        # your provider's key (or OPENAI_API_KEY)
+achilles --ai --llm-provider openrouter --llm-model &lt;model&gt; /path/to/code
 </code></pre>
-<p>Point <code>--llm-base-url</code> elsewhere for a self-hosted or alternative provider
-(Ollama, vLLM, LiteLLM, OpenRouter, Azure OpenAI, a gateway, etc.):</p>
-<pre><code class="language-bash">achilles --triage --llm-base-url https://ollama.com/v1 --llm-model glm-5.2 .
-</code></pre>
+<p><code>--llm-provider</code> is a shortcut for the base URL:</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th><code>--llm-provider</code></th>
+<th>Base URL</th>
+<th>Key</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OpenAI</td>
+<td><code>openai</code> (default)</td>
+<td><code>https://api.openai.com/v1</code></td>
+<td>required</td>
+</tr>
+<tr>
+<td>OpenRouter</td>
+<td><code>openrouter</code></td>
+<td><code>https://openrouter.ai/api/v1</code></td>
+<td>required</td>
+</tr>
+<tr>
+<td>Ollama (local)</td>
+<td><code>ollama</code></td>
+<td><code>http://localhost:11434/v1</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td>Anthropic (experimental)</td>
+<td><code>anthropic</code></td>
+<td><code>https://api.anthropic.com/v1</code></td>
+<td>required</td>
+</tr>
+</tbody>
+</table>
+<p>Anything else (vLLM, LiteLLM, Azure OpenAI, a gateway) is <code>--llm-base-url</code>. An
+explicit <code>--llm-base-url</code> always wins over a provider preset. There is deliberately
+no default model: model names change faster than this project, so pick one that
+your provider serves and pass it with <code>--llm-model</code> (or <code>ACHILLES_LLM_MODEL</code>).</p>
+<p>Achilles checks the setup <strong>before it scans</strong>: a missing key for a hosted endpoint, a
+key that plainly belongs to a different provider than the endpoint (it will not send
+an OpenRouter or Anthropic key to OpenAI), an API key over plain <code>http</code>, or a missing
+model all stop the run immediately with the fix. If the provider rejects the key or
+has no credits mid-run, the run stops after the first rejection instead of failing
+every finding in turn.</p>
 <p>The key is read from the environment only — it never appears on a command line or
 in the vault.</p>
+<h3>What leaves your machine</h3>
+<p>With AI features on, the code around each finding (the enclosing function, a few
+callers in the same file, and git-blame author and date) is sent to the LLM endpoint,
+and Achilles prints the destination host before it starts. Before sending:</p>
+<ul>
+<li>credentials in the code and messages are masked (cloud keys, tokens, private keys,
+  <code>password = "..."</code> style assignments);</li>
+<li>findings <strong>about</strong> credentials (Gitleaks and other secret rules) are never sent to the
+  model at all, and are never dismissed by it;</li>
+<li><code>--llm-no-code</code> sends only rule names, messages and file locations. Verdicts made
+  without seeing code are weak, so in this mode the AI never dismisses a finding;</li>
+<li>a local model (<code>--llm-provider ollama</code>) keeps everything on your machine.</li>
+</ul>
+<h3>Time and parallelism</h3>
+<p><code>--timeout</code> (default 5m) bounds the scanners. The AI phases have their own
+<code>--llm-budget</code> (default 45m) and review <code>--llm-concurrency</code> findings (default 4) at a
+time, most severe first, so if the budget runs out what was reviewed is what matters
+most. Whatever was not reached is reported as such, in the log and in every report,
+and stays in the gate: an unreviewed finding is never treated as a dismissed one.</p>
+<h3>What the AI review can and cannot tell you</h3>
+<p>Be honest about it when you read the verdicts. The model sees one file's worth of
+context per finding, not the whole program: "reachable" is its judgment from that
+context, not a proof. <code>--review</code> and <code>--threat-model</code> reason from scan statistics
+(languages, dependencies, which rules fired), not by reading your source. On the
+project's own small labeled corpus the shipped routing scores well, but the corpus is
+18 synthetic Go and Python cases, so treat accuracy numbers as indicative.
+Findings the AI dismissed are always listed so you can audit them.</p>
 <h2>Measuring whether triage actually works</h2>
 <p>Everything below is only worth having if it is <em>measurably</em> better than the
 scanner's raw output. <code>achilles-eval</code> scores the triage layer against a labeled
@@ -1005,44 +1286,104 @@ output quality still varies run-to-run — the agents are best-effort by design 
 never block the scan.</p>
 </blockquote></section>
 <section id="ci-and-hub"><h1>CI & the Scan Hub</h1>
-<p>Three ways to run Achilles in GitHub Actions, from simplest to most powerful.
-For every way to run Achilles (workstation, containers, CI, scheduled), see <a href="../DEPLOY.md">DEPLOY.md</a>.</p>
-<h2>Option A — per-PR gate (in the repo being scanned)</h2>
-<p>Copy <a href="../examples/workflows/scan-example.yml"><code>examples/workflows/scan-example.yml</code></a>
-into a repo. It runs on pull requests, annotates the diff, uploads SARIF to code
-scanning, and fails only on newly-introduced high-severity findings. The core step:</p>
+<p>Ways to run Achilles in GitHub Actions, from simplest to most powerful. For every
+way to run it (workstation, containers, CI, scheduled), see <a href="../DEPLOY.md">DEPLOY.md</a>.</p>
+<h2>Option A — AI-verified scan of your repo, with issues (start here)</h2>
+<p>Copy <a href="../examples/workflows/achilles.yml"><code>examples/workflows/achilles.yml</code></a> to
+<code>.github/workflows/achilles.yml</code>, then set one <strong>secret</strong> (<code>LLM_API_KEY</code>, your
+provider's key) and one <strong>variable</strong> (<code>LLM_MODEL</code>). That is the whole setup:</p>
+<pre><code class="language-yaml">permissions:
+  contents: read
+  issues: write
+steps:
+  - uses: actions/checkout@v4
+  - uses: Warzuponus/achilles@v0.1.0
+    with:
+      llm-api-key: ${{ secrets.LLM_API_KEY }}
+      llm-provider: openrouter          # or openai | ollama | anthropic, or llm-base-url
+      llm-model: ${{ vars.LLM_MODEL }}
+      issues: &quot;true&quot;
+</code></pre>
+<p>What it does, in order: downloads the release binary and the hash-pinned scanners
+(no compiling), scans, has the model review every finding, writes <code>report.html</code>,
+<code>report.md</code> and <code>achilles.sarif</code>, uploads them as the <code>achilles-report</code> artifact,
+adds a summary to the job page, and opens one GitHub issue per confirmed finding.
+Re-runs update those issues instead of duplicating them, close them when the finding
+is fixed, and reopen them if it comes back. A finding you close by hand stays closed.</p>
+<p>Each issue carries the AI's reasoning and a suggested fix (a patch when one could be
+made safely). Issue filing is capped (<code>issues-max</code>, default 25 new per run, most
+severe first) and never publishes vulnerability details in a <strong>public</strong> repository
+unless you set <code>allow-public-issues: "true"</code>. Findings about credentials get an issue
+that names only the rule and location, never the secret.</p>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>llm-api-key</code>, <code>llm-model</code></td>
+<td>—</td>
+<td>both are needed for the AI review; with neither, only the scanners run</td>
+</tr>
+<tr>
+<td><code>llm-provider</code> / <code>llm-base-url</code></td>
+<td>—</td>
+<td>which endpoint; see <a href="#llm-and-agents">LLM Triage &amp; Agents</a></td>
+</tr>
+<tr>
+<td><code>issues</code>, <code>issues-min-severity</code>, <code>issues-max</code></td>
+<td><code>false</code>, <code>medium</code>, <code>25</code></td>
+<td>issue filing</td>
+</tr>
+<tr>
+<td><code>fail-on</code></td>
+<td>—</td>
+<td>fail the job if a finding at or above this severity remains after the AI review</td>
+</tr>
+<tr>
+<td><code>upload-sarif</code></td>
+<td><code>false</code></td>
+<td>also fill the Security tab (private repos need GitHub Advanced Security)</td>
+</tr>
+<tr>
+<td><code>llm-no-code</code></td>
+<td><code>false</code></td>
+<td>send the model no source code</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td>the tag you pinned</td>
+<td>a release tag, <code>latest</code>, or <code>source</code></td>
+</tr>
+<tr>
+<td><code>args</code></td>
+<td>—</td>
+<td>extra <code>achilles</code> flags, appended last</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Run it on <code>push</code>, <code>schedule</code> or <code>workflow_dispatch</code>, not on pull requests from
+forks.</strong> A forked PR cannot read your secrets (the AI review would not run), and
+<code>pull_request_target</code> would give the key and a write token to code you have not
+reviewed, which the scanners and the model would then read. Pin the action to a tag
+or commit, as above. The action supports Linux and macOS runners.</p>
+<h2>Option B — per-PR gate (no LLM, no secrets)</h2>
+<p><a href="../examples/workflows/scan-example.yml"><code>examples/workflows/scan-example.yml</code></a> runs
+on pull requests, annotates the diff, and fails only on newly introduced
+high-severity findings. It needs no secret, so it works on fork PRs:</p>
 <pre><code class="language-yaml">- uses: Warzuponus/achilles@v0.1.0
   with:
-    target: &quot;.&quot;
-    mode: &quot;commercial&quot;
-    args: &gt;-
-      --diff origin/${{ github.base_ref }}
-      --baseline .achilles/baseline.json
-      --sarif-report achilles.sarif
-      --github
-      --fail-on high
+    fail-on: high
+    args: --diff origin/${{ github.base_ref }} --baseline .achilles/baseline.json
 </code></pre>
-<p>The composite action installs the binary + the baseline scanners
-(Opengrep, gosec, osv-scanner, Trivy, Gitleaks) for you. No LLM key needed.</p>
-<h2>Option B — routed LLM full scan</h2>
-<p>Copy <a href="../examples/workflows/scan-ollama-example.yml"><code>examples/workflows/scan-ollama-example.yml</code></a>
-for a scheduled, LLM-assisted scan using multi-model routing.</p>
-<ol>
-<li>Add <strong>one</strong> repo/org secret: <strong><code>ACHILLES_LLM_API_KEY</code></strong> (your Ollama Cloud key).
-   <em>Do this yourself — never hard-code a key in a workflow.</em></li>
-<li>The workflow sets <code>ACHILLES_LLM_BASE_URL=https://ollama.com/v1</code>, writes the
-   routing inline (mirrors <a href="../configs/models.ollama.yaml"><code>configs/models.ollama.yaml</code></a>),
-   and runs the agents + HTML report:</li>
-</ol>
-<pre><code class="language-yaml">env:
-  ACHILLES_LLM_API_KEY: ${{ secrets.ACHILLES_LLM_API_KEY }}
-  ACHILLES_LLM_BASE_URL: https://ollama.com/v1
-# ... args: --model-config models.ollama.yaml --review --sca-advice
-#           --threat-model tm.otm.json --html-report achilles-report.html
-</code></pre>
-<p>It uploads <code>achilles-report.html</code> (and SARIF/threat-model) as run artifacts.
-Because full LLM scans are heavier than a gate, it runs on a schedule /
-<code>workflow_dispatch</code>, not every PR.</p>
+<h2>Option B2 — routed open models</h2>
+<p><a href="../examples/workflows/scan-ollama-example.yml"><code>examples/workflows/scan-ollama-example.yml</code></a>
+shows per-task model routing (a cheaper model to triage, a stronger one to judge) over
+Ollama Cloud, via <code>--model-config</code>. Same inputs as Option A.</p>
 <h2>Option C — the central scan hub</h2>
 <p>Scan <strong>other</strong> repos from the Achilles repo, so the key + routing live in one place
 and targets need <strong>no secret and no workflow</strong>. This is the GitHub-Actions
@@ -1083,9 +1424,12 @@ Workflow: <a href="../.github/workflows/scan-hub.yml"><code>.github/workflows/sc
 and <code>ref</code> (optional branch/tag/SHA; blank = the default branch). Secrets:
 <code>SCANNER_APP_ID</code>, <code>SCANNER_APP_PRIVATE_KEY</code>, and the LLM key <code>ACHILLES_LLM_API_KEY</code>.</p>
 <p><strong>Least privilege by design:</strong> a per-run token scoped to exactly the target repo
-(not a personal PAT), and results are artifacts of the hub run — nothing is written
-back to the target. To also post SARIF to a target's Security tab, grant the App
-<strong>Code scanning: Write</strong> on that repo and add an upload-sarif step.</p>
+(not a personal PAT). By default results are artifacts of the hub run and nothing is
+written back to the target. Tick <strong><code>file_issues</code></strong> when you run the hub to also open
+issues in the target: the workflow then mints a second token that adds Issues: Write
+on that one repo, so grant the App <strong>Issues: Write</strong> first (it is not needed
+otherwise). To also post SARIF to a target's Security tab, grant <strong>Code scanning:
+Write</strong> and add an upload-sarif step.</p>
 <p>Download the report from <strong>the run → Artifacts → <code>achilles-&lt;repo&gt;</code> → <code>achilles-report.html</code></strong>
 (the same artifact also holds <code>achilles.sarif</code>, <code>achilles-report.md</code> and the threat
 model). There is no cloud vault: the artifacts are the record.</p>
@@ -1118,12 +1462,16 @@ the run exits non-zero rather than silently reporting success.</p>
 </thead>
 <tbody>
 <tr>
-<td>Block risky PRs, no LLM</td>
-<td>A (per-repo gate)</td>
+<td>AI-verified results and issues for one repo</td>
+<td>A</td>
 </tr>
 <tr>
-<td>Deep AI analysis on a schedule, per repo</td>
-<td>B (routed full scan)</td>
+<td>Block risky PRs, no LLM, no secrets</td>
+<td>B (per-PR gate)</td>
+</tr>
+<tr>
+<td>Deep AI analysis with per-task models</td>
+<td>B2 (routed full scan)</td>
 </tr>
 <tr>
 <td>One place to scan many repos, no per-repo setup</td>

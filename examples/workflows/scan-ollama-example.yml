@@ -18,17 +18,11 @@ on:
 
 permissions:
   contents: read
-  security-events: write # SARIF upload
+  issues: write # drop this and `issues: "true"` below to skip filing issues
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    env:
-      # The single key for every routed model. Never hard-code it — this reads a
-      # repo/org Actions secret. The models differ per task; the endpoint + key
-      # are shared (Ollama Cloud is OpenAI-compatible).
-      ACHILLES_LLM_API_KEY: ${{ secrets.ACHILLES_LLM_API_KEY }}
-      ACHILLES_LLM_BASE_URL: https://ollama.com/v1
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -47,41 +41,12 @@ jobs:
             sca:          { model: minimax-m2.7 }
           YAML
 
-      - name: Achilles full scan (routed)
-        uses: Warzuponus/achilles@v0.1.0
+      - uses: Warzuponus/achilles@v0.1.0
         with:
-          target: "."
-          mode: "commercial"
-          # Default fallback model = glm-5.2; per-task overrides from the routing
-          # file. The holistic agents (review/sca-advice/threat-model) are a few
-          # calls; add --triage --remediate for per-finding analysis (higher
-          # volume, slower on large finding sets).
+          llm-api-key: ${{ secrets.ACHILLES_LLM_API_KEY }}
+          llm-base-url: https://ollama.com/v1
+          llm-model: glm-5.2 # fallback for any task the routing file does not name
+          issues: "true"
           args: >-
-            --llm-base-url https://ollama.com/v1
-            --llm-model glm-5.2
             --model-config models.ollama.yaml
-            --review
-            --sca-advice
-            --threat-model achilles-threatmodel.otm.json
-            --sarif-report achilles.sarif
-            --markdown achilles-report.md
-            --html-report achilles-report.html
-            --github
-
-      - name: Upload reports
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: achilles-reports
-          path: |
-            achilles-report.html
-            achilles.sarif
-            achilles-report.md
-            achilles-threatmodel.otm.json
-
-      - name: Upload SARIF to code scanning
-        if: always()
-        continue-on-error: true # needs code scanning enabled on the repo
-        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2
-        with:
-          sarif_file: achilles.sarif
+            --threat-model achilles-report/threatmodel.otm.json

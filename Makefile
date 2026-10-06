@@ -11,11 +11,21 @@ build:
 install:
 	go install ./cmd/achilles
 
-# Cross-compile release binaries into bin/.
+# Cross-compile release binaries into bin/ with the same flags as .goreleaser.yaml:
+# static (CGO off), -trimpath, stripped, version/commit/date injected. Windows gets
+# an .exe suffix. (Tagged releases are built by goreleaser; this is for local use.)
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT  ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
+RELEASE_PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+
 release:
-	GOOS=linux  GOARCH=amd64 go build -trimpath -o $(BINDIR)/$(BINARY)-linux-amd64   ./cmd/achilles
-	GOOS=linux  GOARCH=arm64 go build -trimpath -o $(BINDIR)/$(BINARY)-linux-arm64   ./cmd/achilles
-	GOOS=darwin GOARCH=arm64 go build -trimpath -o $(BINDIR)/$(BINARY)-darwin-arm64  ./cmd/achilles
+	@set -e; for p in $(RELEASE_PLATFORMS); do \
+	  os=$${p%/*}; arch=$${p#*/}; ext=""; [ "$$os" = windows ] && ext=".exe"; \
+	  out="$(BINDIR)/$(BINARY)-$$os-$$arch$$ext"; echo "building $$out"; \
+	  CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags '$(LDFLAGS)' -o "$$out" ./cmd/achilles; \
+	done
 
 test:
 	go test ./...

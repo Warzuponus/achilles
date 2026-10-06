@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"github.com/Warzuponus/achilles/internal/scanner"
 	"github.com/Warzuponus/achilles/internal/scanner/generic"
 	"github.com/Warzuponus/achilles/internal/scanner/opengrep"
+	"github.com/Warzuponus/achilles/internal/toolchain"
 )
 
 func runFromSARIF(path, failOn string) error {
@@ -121,11 +121,13 @@ func runScanners(ctx context.Context, scanners []scanner.Scanner, tgt scanner.Ta
 func buildScanner(tc config.ToolConfig, runner xexec.Runner, opengrepRules string) (scanner.Scanner, error) {
 	rulesHost := ""
 	if tc.Rules != "" {
-		abs, err := filepath.Abs(tc.Rules)
+		// An on-disk directory wins; the default "configs/rules" falls back to the
+		// rules embedded in the binary (config.ResolveRulesDir has the precedence).
+		dir, err := config.ResolveRulesDir(tc.Rules)
 		if err != nil {
 			return nil, err
 		}
-		rulesHost = abs
+		rulesHost = dir
 	}
 
 	switch {
@@ -144,12 +146,44 @@ func buildScanner(tc config.ToolConfig, runner xexec.Runner, opengrepRules strin
 		if tc.Image != "" {
 			opts = append(opts, opengrep.WithImage(tc.Image))
 		}
+		// Rule precedence for Opengrep: the primary rules (an on-disk dir, else
+		// the baseline embedded in the binary — always the offline fallback) are
+		// ALWAYS loaded; the community pack installed by `achilles tools install`
+		// is loaded IN ADDITION via a second -f when present.
+		if dir := communityRulesDir(); dir != "" {
+			opts = append(opts, opengrep.WithExtraRules(dir))
+		}
+		// Opengrep has no public container image, so under --runner docker it still
+		// runs as the local binary (as docs/getting-started.md says) rather than
+		// asking Docker for an empty image.
+		if _, isDocker := runner.(xexec.DockerRunner); isDocker && tc.Image == "" {
+			runner = xexec.LocalRunner{}
+		}
 		return opengrep.New(runner, rulesHost, opts...), nil
 	case tc.Bespoke:
 		return nil, fmt.Errorf("tool %q marked bespoke but no adapter is wired", tc.ID)
 	default:
 		return generic.New(runner, tc, rulesHost), nil
 	}
+}
+
+// communityRulesAllowed is false under --mode commercial: the community pack
+// (opengrep-rules) carries a Commons Clause that forbids selling it, so it must not
+// run in a commercial scan. Set from the license mode in run().
+var communityRulesAllowed = true
+
+// communityRulesDir returns the installed community rules directory, or "" when it
+// is not installed or not allowed in this mode.
+func communityRulesDir() string {
+	ir := toolchain.InstalledCommunityRules()
+	if !ir.Installed {
+		return ""
+	}
+	if !communityRulesAllowed {
+		fmt.Fprintln(os.Stderr, "achilles: community rules are installed but skipped in --mode commercial (Commons Clause)")
+		return ""
+	}
+	return ir.Dir
 }
 
 func buildRunner(kind string) (xexec.Runner, error) {

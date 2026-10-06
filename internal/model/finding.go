@@ -92,10 +92,53 @@ type Scan struct {
 	Target   string    `json:"target"`
 	Tools    []string  `json:"tools"`
 	Findings []Finding `json:"findings"`
+	// Dismissed holds findings the AI review confidently ruled out (see
+	// Verdict.Dismissed). They are not in Findings, so they do not gate, file
+	// issues, or inflate counts, but reports list them so the call can be audited.
+	Dismissed []Finding `json:"dismissed,omitempty"`
 	// FailedTools are tools that could not run or whose output could not be
 	// normalized. A scan with failures is incomplete, so "no findings" must never
 	// be presented as a clean result.
 	FailedTools []string `json:"failedTools,omitempty"`
+	// Triage summarizes how much of the scan the AI review actually covered; nil
+	// when no triage was requested.
+	Triage *TriageStats `json:"triage,omitempty"`
+}
+
+// TriageStats is the coverage of the AI review over a scan. A report that shows
+// verdicts must also show how many findings never got one.
+type TriageStats struct {
+	Model     string `json:"model,omitempty"`
+	Total     int    `json:"total"`     // findings considered
+	Triaged   int    `json:"triaged"`   // findings that ended with a verdict
+	Failed    int    `json:"failed"`    // triage was attempted and errored
+	Withheld  int    `json:"withheld"`  // not sent to the model on purpose (credential findings)
+	Skipped   int    `json:"skipped"`   // not attempted (timeout, budget, aborted)
+	Dismissed int    `json:"dismissed"` // moved to Scan.Dismissed
+}
+
+// Dismissed reports whether this finding's verdict rules it out.
+func (f Finding) Dismissed() bool {
+	// A credential finding is never dismissed: the model was never shown it, and a
+	// leaked secret is not something a verdict can make safe.
+	return f.Verdict != nil && !f.IsSecret() && f.Verdict.Dismissed()
+}
+
+// PartitionDismissed moves every dismissed finding out of Findings into Dismissed and
+// returns how many moved. Order is preserved on both sides.
+func (s *Scan) PartitionDismissed() int {
+	kept := s.Findings[:0:0]
+	n := 0
+	for _, f := range s.Findings {
+		if f.Dismissed() {
+			s.Dismissed = append(s.Dismissed, f)
+			n++
+			continue
+		}
+		kept = append(kept, f)
+	}
+	s.Findings = kept
+	return n
 }
 
 // CountsBySeverity tallies findings per severity for summary reporting.
@@ -136,4 +179,30 @@ func normalizeWS(s string) string {
 func shortHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])[:16]
+}
+
+// IsSecret reports whether this finding is about a credential or key. Such a
+// finding's matched text IS the secret, so its code and message must never be
+// copied into an LLM prompt, a shared report, or an issue. The test is
+// deliberately broad: wrongly withholding a snippet costs a little context,
+// wrongly including one leaks a credential.
+func (f Finding) IsSecret() bool {
+	switch strings.ToLower(f.Tool) {
+	case "gitleaks", "trufflehog", "detect-secrets":
+		return true
+	}
+	rule := strings.ToLower(f.RuleID)
+	for _, w := range []string{"secret", "password", "passwd", "credential", "api-key", "apikey", "api_key",
+		"private-key", "private_key", "access-key", "access_key", "hardcoded-key", "hardcoded_key"} {
+		if strings.Contains(rule, w) {
+			return true
+		}
+	}
+	for _, c := range f.CWE {
+		switch strings.ToUpper(strings.TrimSpace(c)) {
+		case "CWE-798", "CWE-259", "CWE-321":
+			return true
+		}
+	}
+	return false
 }

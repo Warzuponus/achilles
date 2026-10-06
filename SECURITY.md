@@ -56,6 +56,31 @@ protect it. To share it, put your own authenticating reverse proxy in front of i
 add the proxy's hostname to `--allowed-hosts`), or don't share it. See
 [docs/containers.md](docs/containers.md#security-model-no-authentication).
 
+## Security model: AI verdicts are advice, not a security boundary
+
+The AI review reads code from the repository it is judging, and by default a
+confident "false positive" verdict takes a finding out of the `--fail-on` gate, the
+issues Achilles files, and the headline counts (it stays listed in a separate
+section of every report, and in SARIF as a suppressed result). That makes the
+scanned repository an adversary: a comment in the code can try to talk the model into
+dismissing a real vulnerability. Mitigations in place: every prompt tells the model
+that repository text is untrusted data; a second adversarial pass tries to refute
+each verdict; findings about credentials are never sent to the model and never
+dismissed; low-confidence and overturned verdicts are never dismissed.
+
+None of that is a guarantee. **Do not rely on the AI review to gate code from authors
+you do not trust**: for that, run with `--keep-dismissed` (the gate then uses raw
+scanner severity) or do not enable `--triage`. Reports of a prompt-injection that
+reliably flips a verdict are in scope.
+
+Code near each finding is sent to the LLM endpoint you configure, with credentials
+masked. `--llm-no-code` sends no source at all, and a local model (`--llm-provider
+ollama`) keeps everything on your machine.
+
+Filing findings as GitHub issues publishes vulnerability details to everyone who can
+read the repository. Achilles refuses to do so in a public repository unless you pass
+`--allow-public-issues`.
+
 ## Deploying safely
 
 See [docs/containers.md](docs/containers.md). In short: keep the War Room on

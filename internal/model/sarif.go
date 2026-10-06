@@ -13,8 +13,29 @@ type SarifLog struct {
 
 // SarifRun is one tool invocation.
 type SarifRun struct {
-	Tool    SarifTool     `json:"tool"`
-	Results []SarifResult `json:"results"`
+	Tool        SarifTool         `json:"tool"`
+	Results     []SarifResult     `json:"results"`
+	Invocations []SarifInvocation `json:"invocations,omitempty"`
+}
+
+// SarifInvocation records whether the run completed. A scan where a scanner
+// failed reports executionSuccessful=false so consumers cannot mistake it for clean.
+type SarifInvocation struct {
+	ExecutionSuccessful        bool                `json:"executionSuccessful"`
+	ToolExecutionNotifications []SarifNotification `json:"toolExecutionNotifications,omitempty"`
+}
+
+type SarifNotification struct {
+	Level   string       `json:"level"`
+	Message SarifMessage `json:"message"`
+}
+
+// SarifSuppression marks a result as ruled out. GitHub code scanning shows a
+// suppressed result as dismissed instead of as an open alert.
+type SarifSuppression struct {
+	Kind          string `json:"kind"`   // "external": decided outside the source code
+	Status        string `json:"status"` // "accepted"
+	Justification string `json:"justification,omitempty"`
 }
 
 type SarifTool struct {
@@ -62,12 +83,14 @@ type SarifRuleProps struct {
 }
 
 type SarifResult struct {
-	RuleID              string            `json:"ruleId"`
-	Level               string            `json:"level,omitempty"`
-	Message             SarifMessage      `json:"message"`
-	Locations           []SarifLocation   `json:"locations,omitempty"`
-	Fingerprints        map[string]string `json:"fingerprints,omitempty"`
-	PartialFingerprints map[string]string `json:"partialFingerprints,omitempty"`
+	RuleID              string             `json:"ruleId"`
+	Level               string             `json:"level,omitempty"`
+	Message             SarifMessage       `json:"message"`
+	Locations           []SarifLocation    `json:"locations,omitempty"`
+	Fingerprints        map[string]string  `json:"fingerprints,omitempty"`
+	PartialFingerprints map[string]string  `json:"partialFingerprints,omitempty"`
+	Suppressions        []SarifSuppression `json:"suppressions,omitempty"`
+	Properties          map[string]any     `json:"properties,omitempty"`
 }
 
 type SarifMessage struct {

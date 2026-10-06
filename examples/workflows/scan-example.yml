@@ -1,15 +1,15 @@
-# Example: run Achilles on pull requests, annotate the diff, upload SARIF to
-# GitHub code scanning, and fail only on newly-introduced high-severity findings.
-# Copy this into a consumer repo's .github/workflows/ (it does not run here).
-name: Achilles scan (example)
+# Example: a fast per-PR gate with no LLM and no secrets. It annotates the diff and
+# fails only on newly introduced high-severity findings. Fork PRs work too, because
+# nothing here needs a secret. For AI-verified results and issues, see achilles.yml.
+# Copy into a repo's .github/workflows/ (it does not run here).
+name: Achilles PR gate (example)
 
 on:
   pull_request:
 
 permissions:
   contents: read
-  security-events: write # required to upload SARIF
-  # pull-requests: write  # uncomment to let --pr-comment post the sticky summary
+  security-events: write # only for upload-sarif; remove it and `upload-sarif` if you don't want the Security tab
 
 jobs:
   scan:
@@ -18,31 +18,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # needed for --diff against the base ref
-
-      - name: Achilles scan
-        uses: Warzuponus/achilles@v0.1.0
+      - uses: Warzuponus/achilles@v0.1.0
         with:
-          target: "."
-          mode: "commercial"
-          # Diff-aware + baseline-aware gate; annotate the PR; emit SARIF.
-          # To post a sticky PR summary comment, add `pull-requests: write` above,
-          # set GITHUB_TOKEN in env, and add: --pr-comment ${{ github.event.pull_request.number }}
+          fail-on: high
+          upload-sarif: "true" # best-effort; skipped quietly where code scanning is unavailable
+          # Only findings in files this PR changed, and only ones not in the committed baseline.
           args: >-
             --diff origin/${{ github.base_ref }}
             --baseline .achilles/baseline.json
-            --sarif-report achilles.sarif
-            --github
-            --fail-on high
-        # env:
-        #   GITHUB_TOKEN: ${{ github.token }}   # for --pr-comment
-
-      - name: Upload SARIF
-        if: always()
-        # Best-effort: uploading to GitHub code scanning needs `security-events:
-        # write` AND code scanning enabled on the repo. Not every consumer repo
-        # has it (private repos without Advanced Security, restricted default
-        # tokens), so a failed upload must not fail the whole scan job.
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2
-        with:
-          sarif_file: achilles.sarif

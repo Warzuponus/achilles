@@ -63,6 +63,30 @@ func (v Verdict) Surfaced() bool {
 	return v.HighConfidence() || v.Overturned
 }
 
+// DismissFloor is the confidence a false-positive verdict needs before the
+// finding is dismissed rather than kept for a human. It matches the floor
+// HighConfidence uses for true positives: a shaky "probably fine" must not hide a
+// finding.
+const DismissFloor = 0.7
+
+// Dismissed reports whether the AI review is confident enough that this finding is
+// not a real issue to take it out of the actionable set (gate, issues, headline
+// counts). Dismissed findings are still reported, in their own section, so the
+// call is auditable.
+//
+// A verdict the adversarial judge overturned is never dismissed: two models
+// disagreeing is a reason for a human to look. "uncertain" and low-confidence
+// verdicts are never dismissed either.
+func (v Verdict) Dismissed() bool {
+	if v.Overturned {
+		return false
+	}
+	if v.Refuted {
+		return true // the judge knocked down the only claim that it was real
+	}
+	return v.Classification == ClassFalsePositive && v.Confidence >= DismissFloor
+}
+
 // Provenance records how a verdict was produced (for the Evidence Vault).
 type Provenance struct {
 	TriageModel   string `json:"triageModel,omitempty"`

@@ -4,6 +4,7 @@ package llmtest
 
 import (
 	"context"
+	"sync"
 
 	"github.com/Warzuponus/achilles/internal/triage/llm"
 )
@@ -15,10 +16,13 @@ type Fake struct {
 	FirstErr  error    // if set, Complete returns it on the FIRST call only (retry-fallback tests)
 	Calls     []llm.Request
 	i         int
+	mu        sync.Mutex // findings are triaged concurrently
 }
 
 // Complete implements llm.Client.
 func (f *Fake) Complete(_ context.Context, req llm.Request) (llm.Response, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.Calls = append(f.Calls, req)
 	if f.Err != nil {
 		return llm.Response{}, f.Err

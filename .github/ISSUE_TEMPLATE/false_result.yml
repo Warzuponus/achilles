@@ -1,0 +1,37 @@
+name: Wrong finding or wrong AI verdict
+description: A false positive, a missed vulnerability, or an AI review that dismissed something real
+labels: ["accuracy"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Accuracy reports are the most useful kind. A minimal snippet that reproduces the
+        result is ideal. **Never include real secrets or proprietary code.**
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What was wrong?
+      options:
+        - False positive that the AI review did not dismiss
+        - Real issue the AI review wrongly dismissed
+        - Real issue no scanner reported
+        - Fix suggestion was wrong or unsafe
+    validations:
+      required: true
+  - type: input
+    id: rule
+    attributes:
+      label: Tool and rule ID
+      placeholder: "opengrep / python.lang.security.audit.eval-detected"
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Minimal code that reproduces it
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model used (if the AI review was involved)
+      placeholder: "provider/model-name"

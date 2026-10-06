@@ -20,7 +20,7 @@ Be explicit about the evidence behind each path:
 |------|----------|
 | CLI + file vault | Unit and integration tests in CI (`make test`); the repo scans itself on every PR ([self-scan.yml](.github/workflows/self-scan.yml)). |
 | Docker image + compose stack | [quickstart.yml](.github/workflows/quickstart.yml) runs the full compose quickstart (build, start, scan the bundled sample with `--strict-tools`, check the findings in the War Room, check the Host and cross-origin protections) on every relevant change. |
-| GitHub Action + per-PR gate | [ci.yml](.github/workflows/ci.yml) runs the action from the checkout against the bundled sample with `--strict-tools` on every PR; [scan-example.yml](examples/workflows/scan-example.yml) is the reference consumer workflow. |
+| GitHub Action + per-PR gate | [ci.yml](.github/workflows/ci.yml) runs the action from the checkout (`version: source`) against the bundled sample with `--strict-tools` on every PR; the example workflows are the reference consumers. The release-binary download path is exercised only once a release exists. |
 | Scan hub | The workflow is in the repo, but CI does not exercise it: it needs a GitHub App you create (below). Treat the setup steps as a checklist to verify in your own organisation. |
 | Fleet on cron / Kubernetes | The fleet binary is tested ([fleet.md](docs/fleet.md)); the `CronJob` and cron snippets are **patterns, not tested manifests**. |
 | Multi-user / network exposure | **Not a supported configuration.** There is no authentication. See [Security model](docs/containers.md#security-model-no-authentication). |
@@ -91,53 +91,50 @@ database you operate.
 
 ### The action
 
-[`action.yml`](action.yml) is a composite action: it builds `achilles`, installs the
-baseline scanners (Opengrep pinned via `opengrep-version`, gosec, osv-scanner,
-Trivy, Gitleaks) and runs a scan.
+[`action.yml`](action.yml) is a composite action. It downloads the release binary
+(checksum-verified; nothing is compiled), installs the hash-pinned scanners with
+`achilles tools install`, scans, writes `report.html`, `report.md` and
+`achilles.sarif`, uploads them as the `achilles-report` artifact, and can open
+GitHub issues for findings. The full input table and the safe-trigger rules are in
+[CI & the Scan Hub](docs/ci-and-hub.md#option-a--ai-verified-scan-of-your-repo-with-issues-start-here).
 
-| Input | Default | Purpose |
-|-------|---------|---------|
-| `target` | `.` | path to scan |
-| `mode` | `commercial` | license mode (`oss` or `commercial`) |
-| `args` | `--sarif-report achilles.sarif --github` | extra `achilles` flags |
-| `opengrep-version` | pinned | Opengrep release to install |
+The shortest useful setup is [`examples/workflows/achilles.yml`](examples/workflows/achilles.yml):
+one secret (your LLM key), one variable (the model name), and `permissions: issues: write`.
 
-Reference it as `uses: <owner>/achilles@<ref>`.
+Reference it as `uses: Warzuponus/achilles@<tag>`. Pin a tag or a commit SHA.
 
 ### Per-PR gate (no LLM, no secrets)
 
 Copy [`examples/workflows/scan-example.yml`](examples/workflows/scan-example.yml):
 inline annotations on the diff, a SARIF artifact, and a gate that fails only on
-**newly introduced** findings (`--diff` + `--baseline` + `--fail-on`).
+**newly introduced** findings (`--diff` + `--baseline` + `fail-on`). It needs no
+secret, so it works on fork PRs too.
 
 ```yaml
 permissions:
   contents: read
-  security-events: write   # to upload SARIF
+  security-events: write   # only for upload-sarif
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }        # for --diff against the base ref
-      - uses: <owner>/achilles@v0.1.0
+      - uses: Warzuponus/achilles@v0.1.0
         with:
-          mode: commercial
+          fail-on: high
+          upload-sarif: "true"
           args: >-
             --diff origin/${{ github.base_ref }}
             --baseline .achilles/baseline.json
-            --sarif-report achilles.sarif --github --fail-on high
-      - if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with: { sarif_file: achilles.sarif }
 ```
 
 Uploading SARIF to the Security tab is free on public repos but needs GitHub
 Advanced Security on private ones. Without it the upload step cannot publish; you
-still get annotations, the gate, and the SARIF as a downloadable artifact.
+still get annotations, the gate, and the report as a downloadable artifact.
 
 Regenerate a baseline after intentional changes:
-`./bin/achilles --write-baseline .achilles/baseline.json .`
+`achilles --write-baseline .achilles/baseline.json .`
 
 ### Routed LLM scan
 
@@ -153,8 +150,9 @@ OpenAI-compatible service. Details: [CI & the Scan Hub](docs/ci-and-hub.md).
 [`scan-hub.yml`](.github/workflows/scan-hub.yml) scans **other** repositories from
 the Achilles repo, so the LLM key and routing live in one place and targets need no
 secrets and no workflow. Results are **workflow artifacts** (HTML report, SARIF,
-Markdown summary, threat model) of the hub run — there is no cloud vault and nothing
-is written back to the target.
+Markdown summary, threat model) of the hub run — there is no cloud vault. Nothing is
+written back to the target unless you tick `file_issues` (the App then also needs
+**Issues: Write**).
 
 Cross-repo read is granted by a **GitHub App** (short-lived, per-repo tokens, not a
 personal token). One-time setup by an org or repo admin:
@@ -170,7 +168,7 @@ personal token). One-time setup by an org or repo admin:
 4. Run it: Actions → *Achilles scan hub* → *Run workflow* with
    - `target_repo` — the repository name (the owner is this repository's owner)
    - `ref` — optional branch, tag or SHA (blank = default branch)
-5. Download the report from the run → Artifacts → `achilles-<repo>`.
+5. Download the report from the run → Artifacts → `achilles-report`.
 
 To also post SARIF to a target's Security tab, the App needs **Code scanning:
 Write** on that repo and the workflow an upload-sarif step; central artifacts are

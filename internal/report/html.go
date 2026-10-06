@@ -1,12 +1,15 @@
 package report
 
 import (
+	"fmt"
 	"html/template"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/Warzuponus/achilles/internal/advisor"
 	"github.com/Warzuponus/achilles/internal/model"
+	"github.com/Warzuponus/achilles/internal/redact"
 	"github.com/Warzuponus/achilles/internal/review"
 	"github.com/Warzuponus/achilles/internal/threatmodel"
 )
@@ -34,34 +37,110 @@ type htmlView struct {
 	HTMLReport
 	Total      int
 	Counts     []severityCount // ordered, only non-zero
-	Findings   []model.Finding // in-scope, sorted by severity
+	Findings   []findingView   // actionable findings: severity, then AI-confirmed first
+	Dismissed  []findingView   // ruled out by the AI review; listed so the call is auditable
+	Confirmed  int             // actionable findings the AI review confirmed
 	HasReview  bool
 	HasAdvice  bool
 	HasThreats bool
+	Incomplete string // non-empty: the scan is partial; names the tools that failed
+	Coverage   string // one line on how much of the scan the AI review covered
+	CoverageOK bool   // false when the AI review was absent or partial
+	Summary    string // plain-language headline
 }
+
+// findingView is a finding prepared for display: secrets masked, code bounded.
+type findingView struct {
+	model.Finding
+	Status  string // AI review status: confirmed | needs review | not reviewed | overturned | dismissed
+	Snippet string // redacted, bounded code; empty for secret findings
+	Message string // redacted
+	Secret  bool
+	// VerdictFix is the triage pass's fix idea, shown only when no fuller
+	// remediation exists for the finding.
+	VerdictFix string
+}
+
+// statusClass is the CSS-safe form of Status.
+func (v findingView) StatusClass() string { return strings.ReplaceAll(v.Status, " ", "-") }
 
 type severityCount struct {
 	Severity model.Severity
 	Count    int
 }
 
+// maxSnippetLines bounds the code shown per finding so a report stays readable.
+const maxSnippetLines = 30
+
+func toView(f model.Finding) findingView {
+	v := findingView{Finding: f, Secret: f.IsSecret(), Message: redact.Secrets(f.Message)}
+	switch {
+	case f.Verdict == nil:
+		v.Status = "not reviewed"
+	case f.Verdict.Overturned:
+		v.Status = "overturned"
+	case f.Verdict.Dismissed():
+		v.Status = "dismissed"
+	case f.Verdict.HighConfidence():
+		v.Status = "confirmed"
+	default:
+		v.Status = "needs review"
+	}
+	if f.Verdict != nil && f.Verdict.SuggestedFix != "" && (f.Remediation == nil || f.Remediation.Summary == "") {
+		v.VerdictFix = redact.Secrets(f.Verdict.SuggestedFix)
+	}
+	if !v.Secret && f.CodeContext != "" {
+		lines := strings.Split(strings.TrimRight(redact.Prompt(f.CodeContext), "\n"), "\n")
+		if len(lines) > maxSnippetLines {
+			lines = append(lines[:maxSnippetLines], "…")
+		}
+		v.Snippet = strings.Join(lines, "\n")
+	}
+	return v
+}
+
+// statusRank orders findings within a severity: what the AI confirmed first.
+func statusRank(s string) int {
+	switch s {
+	case "confirmed":
+		return 0
+	case "overturned":
+		return 1
+	case "needs review":
+		return 2
+	default:
+		return 3
+	}
+}
+
 // WriteHTML renders a self-contained (inline CSS, no external assets) HTML report.
 func WriteHTML(w io.Writer, r HTMLReport) error {
 	counts := map[model.Severity]int{}
-	var findings []model.Finding
+	var findings, dismissed []findingView
+	confirmed := 0
 	for _, f := range r.Scan.Findings {
 		if f.Shadow {
 			continue
 		}
-		findings = append(findings, f)
+		fv := toView(f)
+		findings = append(findings, fv)
 		counts[f.Severity]++
+		if fv.Status == "confirmed" {
+			confirmed++
+		}
+	}
+	for _, f := range r.Scan.Dismissed {
+		dismissed = append(dismissed, toView(f))
 	}
 	sort.SliceStable(findings, func(i, j int) bool {
-		return severityRank[findings[i].Severity] < severityRank[findings[j].Severity]
+		a, b := findings[i], findings[j]
+		if severityRank[a.Severity] != severityRank[b.Severity] {
+			return severityRank[a.Severity] < severityRank[b.Severity]
+		}
+		return statusRank(a.Status) < statusRank(b.Status)
 	})
 	var ordered []severityCount
-	for sev, rank := range severityRank {
-		_ = rank
+	for sev := range severityRank {
 		if counts[sev] > 0 {
 			ordered = append(ordered, severityCount{sev, counts[sev]})
 		}
@@ -75,11 +154,43 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 		Total:      len(findings),
 		Counts:     ordered,
 		Findings:   findings,
+		Dismissed:  dismissed,
+		Confirmed:  confirmed,
 		HasReview:  r.Review != nil && (r.Review.Summary != "" || len(r.Review.Risks) > 0),
 		HasAdvice:  r.Advice != nil && len(r.Advice.Upgrades) > 0,
 		HasThreats: r.ThreatModel != nil && (len(r.ThreatModel.Threats) > 0 || len(r.ThreatModel.Components) > 0),
 	}
+	if len(r.Scan.FailedTools) > 0 {
+		v.Incomplete = strings.Join(r.Scan.FailedTools, ", ")
+	}
+	v.Coverage, v.CoverageOK = coverageLine(r.Scan.Triage)
+	v.Summary = summaryLine(v)
 	return htmlTmpl.Execute(w, v)
+}
+
+// coverageLine says how much of the scan the AI review covered. A report that shows
+// verdicts has to show the findings that never got one.
+func coverageLine(t *model.TriageStats) (string, bool) {
+	if t == nil {
+		return "AI verification was not run: findings below are raw scanner output.", false
+	}
+	line := fmt.Sprintf("AI review (%s) gave a verdict on %d of %d findings", t.Model, t.Triaged, t.Total)
+	if t.Failed > 0 || t.Skipped > 0 {
+		line += fmt.Sprintf("; %d failed and %d were not reached (see the run log)", t.Failed, t.Skipped)
+		return line + ".", false
+	}
+	return line + ".", true
+}
+
+func summaryLine(v htmlView) string {
+	s := fmt.Sprintf("%d actionable finding(s)", v.Total)
+	if v.Coverage != "" && v.CoverageOK {
+		s += fmt.Sprintf(", %d confirmed by the AI review", v.Confirmed)
+	}
+	if n := len(v.Dismissed); n > 0 {
+		s += fmt.Sprintf("; %d more ruled out as false positives (listed at the end)", n)
+	}
+	return s + "."
 }
 
 var htmlTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
@@ -152,6 +263,13 @@ const htmlDoc = `<!doctype html>
   footer{color:var(--muted);font-size:12px;text-align:center;margin-top:32px}
   .verdict{font-size:12px;font-weight:700;border-radius:6px;padding:1px 7px;border:1px solid var(--border)}
   .sec{color:var(--critical);font-weight:700;font-size:12px}
+  .alert{border-radius:10px;padding:10px 14px;margin:14px 0;font-size:14px;border:1px solid var(--border)}
+  .alert.warn{border-color:var(--high);background:var(--panel2)}
+  .alert.ok{border-color:var(--border);color:var(--muted)}
+  .status{font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;border:1px solid var(--border);
+    text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .s-confirmed{color:var(--critical);border-color:var(--critical)}
+  .s-overturned,.s-needs-review{color:var(--medium);border-color:var(--medium)}
 </style>
 </head>
 <body><div class="wrap">
@@ -160,9 +278,14 @@ const htmlDoc = `<!doctype html>
   <div class="meta">Target <code>{{.Target}}</code> · {{.GeneratedAt}} · {{len .Tools}} scanner(s): {{range $i,$t := .Tools}}{{if $i}}, {{end}}{{$t}}{{end}}</div>
 </header>
 
+{{if .Incomplete}}<div class="alert warn"><strong>Incomplete scan.</strong> These tools failed to run or could not be read: {{.Incomplete}}. Missing results are not evidence of safety. Run <code>achilles doctor</code> to see what is missing.</div>{{end}}
+<div class="alert {{if .CoverageOK}}ok{{else}}warn{{end}}">{{.Coverage}}</div>
+
+<p class="lead" style="margin-top:20px">{{.Summary}}</p>
 <div class="cards">
   <div class="card"><div class="n">{{.Total}}</div><div class="l">Findings</div></div>
   {{range .Counts}}<div class="card"><div class="n">{{.Count}}</div><div class="l"><span class="badge b-{{sev .Severity}}">{{sev .Severity}}</span></div></div>{{end}}
+  {{if .Dismissed}}<div class="card"><div class="n">{{len .Dismissed}}</div><div class="l">Dismissed by AI</div></div>{{end}}
 </div>
 
 {{if .HasReview}}
@@ -220,14 +343,18 @@ const htmlDoc = `<!doctype html>
   <details>
     <summary><span class="badge b-{{sev .Severity}}">{{sev .Severity}}</span>
       <span class="rule">{{.RuleID}}</span>
+      <span class="status s-{{.StatusClass}}">{{.Status}}</span>
       <span class="loc">{{.Location.File}}{{if .Location.Region.StartLine}}:{{.Location.Region.StartLine}}{{end}}</span></summary>
     <div class="body">
       <div class="msg">{{.Message}}</div>
-      <div class="kv">Tool: {{.Tool}}</div>
+      <div class="kv">Tool: {{.Tool}}{{if .CWE}} · {{range $i,$c := .CWE}}{{if $i}}, {{end}}{{$c}}{{end}}{{end}}{{if .Correlated}} · also reported by {{range $i,$c := .Correlated}}{{if $i}}, {{end}}{{$c}}{{end}}{{end}}</div>
+      {{if .Secret}}<div class="kv">This looks like a credential, so the matched text is withheld. Rotate it, then remove it from history.</div>{{end}}
+      {{if .Snippet}}<pre>{{.Snippet}}</pre>{{end}}
       {{with .Verdict}}
-      <div class="kv" style="margin-top:8px"><span class="verdict">{{.Classification}} · {{printf "%.0f%%" (pct .Confidence)}}{{if .Refuted}} · refuted{{else if .Overturned}} · overturned by judge{{end}}</span></div>
+      <div class="kv" style="margin-top:8px"><span class="verdict">{{.Classification}} · {{printf "%.0f%%" (pct .Confidence)}}{{if .Exploitability}} · {{.Exploitability}}{{end}}{{if .Refuted}} · refuted{{else if .Overturned}} · overturned by judge{{end}}</span></div>
       {{if .Reasoning}}<div class="kv">{{.Reasoning}}</div>{{end}}
       {{end}}
+      {{if .VerdictFix}}<div class="fix"><h4>Suggested fix</h4><div>{{.VerdictFix}}</div></div>{{end}}
       {{with .Remediation}}
       <div class="fix">
         <h4>Suggested fix</h4>
@@ -239,8 +366,24 @@ const htmlDoc = `<!doctype html>
     </div>
   </details>
   {{end}}
-  {{else}}<div class="empty">No findings. ✅</div>{{end}}
+  {{else}}<div class="empty">{{if .Incomplete}}No findings from the tools that ran, but the scan is incomplete.{{else}}No findings. ✅{{end}}</div>{{end}}
 </section>
 
-<footer>Generated by Achilles · LLM-assisted SAST</footer>
+{{if .Dismissed}}
+<section>
+  <h2>Ruled out by the AI review <span class="tag">{{len .Dismissed}}</span></h2>
+  <p class="lead">These did not gate the build or open issues. Skim them: a wrong dismissal is the costly mistake. Re-run with <code>--keep-dismissed</code> to treat them as findings.</p>
+  <div class="tbl-scroll"><table>
+    <tr><th>Rule</th><th>Where</th><th>Confidence</th><th>Why</th></tr>
+    {{range .Dismissed}}
+    <tr><td><span class="badge b-{{sev .Severity}}">{{sev .Severity}}</span> <span class="rule">{{.RuleID}}</span></td>
+      <td>{{.Location.File}}{{if .Location.Region.StartLine}}:{{.Location.Region.StartLine}}{{end}}</td>
+      <td>{{with .Verdict}}{{printf "%.0f%%" (pct .Confidence)}}{{end}}</td>
+      <td>{{with .Verdict}}{{if .RefuteReason}}{{.RefuteReason}}{{else}}{{.Reasoning}}{{end}}{{end}}</td></tr>
+    {{end}}
+  </table></div>
+</section>
+{{end}}
+
+<footer>Generated by Achilles · LLM-assisted SAST · AI verdicts are model judgments, not proof — review before acting on them.</footer>
 </div></body></html>`

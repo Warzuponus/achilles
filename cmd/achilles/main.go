@@ -31,9 +31,16 @@ func main() {
 }
 
 func run(argv []string) error {
+	if handled, err := runSubcommand(argv, os.Stdout, os.Stderr); handled {
+		return err
+	}
 	o, err := parseFlags(argv)
 	if err != nil {
 		return err
+	}
+	if o.showVersion {
+		printVersion(os.Stdout)
+		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), o.timeout)
@@ -63,6 +70,19 @@ func run(argv []string) error {
 		return err
 	}
 	llmAuthMode = o.llmAuth
+	// Bad LLM setup (no key, wrong endpoint for the key, no model) is cheapest to
+	// report now, before minutes of scanning.
+	if err := o.validateLLM(); err != nil {
+		return err
+	}
+	if o.aiOn {
+		if err := os.MkdirAll(o.reportDir, 0o750); err != nil {
+			return fmt.Errorf("--ai: create report directory: %w", err)
+		}
+	}
+	if o.llmWanted() && !o.dryRun {
+		announceEgress(os.Stderr, o)
+	}
 
 	// --- resolve target + config ---
 	absTarget, err := filepath.Abs(o.target)
@@ -78,6 +98,7 @@ func run(argv []string) error {
 	if err != nil {
 		return err
 	}
+	communityRulesAllowed = m != policy.ModeCommercial // Commons Clause pack: never in commercial scans
 	gate := policy.Gate{Mode: m, Attested: parseAttest(o.attest)}
 
 	runner, err := buildRunner(o.runnerKind)
@@ -105,6 +126,14 @@ func run(argv []string) error {
 	if err != nil {
 		return err
 	}
+	// --timeout bounded the scanners. The LLM phases get their own budget (they are
+	// slow, and sharing one clock meant a long scan starved the AI review), and
+	// writing outputs gets a fresh one so a spent budget cannot lose the report.
+	llmCtx, cancelLLM := context.WithTimeout(context.Background(), o.llmBudget)
+	defer cancelLLM()
+	outCtx, cancelOut := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancelOut()
+
 	if err := filterFindings(o, ev, runID, absTarget, &scan); err != nil {
 		return err
 	}
@@ -122,7 +151,7 @@ func run(argv []string) error {
 	if err != nil {
 		return err
 	}
-	llmUsage, err := triageScan(ctx, o, ev, runID, &scan, clusters, tasks)
+	llmUsage, err := triageScan(llmCtx, o, ev, runID, &scan, clusters, tasks)
 	if err != nil {
 		return err
 	}
@@ -133,18 +162,18 @@ func run(argv []string) error {
 	report.WriteHuman(os.Stdout, scan)
 	fmt.Fprintf(os.Stderr, "\nEvidence Vault: %s (run %s)\n", vaultOpts.Backend, runID)
 
-	if err := writeReports(ctx, o, absTarget, scan, inScope); err != nil {
+	if err := writeReports(outCtx, o, absTarget, scan, inScope); err != nil {
 		return err
 	}
 
 	if o.researchOn {
-		if err := runResearch(ctx, ev, runID, absTarget, o.ruleRepoDir, o.maxTargets, runner, o.llmBaseURL, o.llmModel, tasks); err != nil {
+		if err := runResearch(llmCtx, ev, runID, absTarget, o.ruleRepoDir, o.maxTargets, runner, o.llmBaseURL, o.llmModel, tasks); err != nil {
 			fmt.Fprintf(os.Stderr, "achilles: research: %v\n", err)
 		}
 	}
 
 	if o.mineRules {
-		if err := runMiner(ctx, ev, runID, o.ruleRepoDir, o.maxTargets, runner, o.llmBaseURL, o.llmModel, tasks); err != nil {
+		if err := runMiner(llmCtx, ev, runID, o.ruleRepoDir, o.maxTargets, runner, o.llmBaseURL, o.llmModel, tasks); err != nil {
 			fmt.Fprintf(os.Stderr, "achilles: mine-rules: %v\n", err)
 		}
 	}
@@ -160,7 +189,7 @@ func run(argv []string) error {
 		}
 	}
 
-	if err := runAgents(ctx, o, ev, runID, absTarget, scan, tasks); err != nil {
+	if err := runAgents(llmCtx, o, ev, runID, absTarget, scan, tasks); err != nil {
 		return err
 	}
 

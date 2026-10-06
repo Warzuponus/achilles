@@ -1,0 +1,66 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "juice-shop",
+    "description": "EXAMPLE ONLY. OWASP Juice Shop, a deliberately vulnerable Node/TypeScript shop. Not scored until pinned: see evals/detect/README.md.",
+    "source": {
+      "url": "https://github.com/juice-shop/juice-shop.git",
+      "commit": "REPLACE_WITH_VERIFIED_40_CHAR_COMMIT_SHA"
+    },
+    "vulnerabilities": [
+      {
+        "id": "JS-EXAMPLE-SQLI-LOGIN",
+        "class": "injection",
+        "cwe": ["CWE-89"],
+        "file": "routes/login.ts",
+        "startLine": 1,
+        "endLine": 1,
+        "description": "EXAMPLE: the login route builds its SQL query from request fields. VERIFY the file and set the real line range against the pinned commit before relying on this entry.",
+        "note": "Unverified placeholder label. The runner refuses this file until the commit above is a real SHA; after pinning, every file and line here must be re-checked against that exact commit."
+      }
+    ]
+  },
+  {
+    "schemaVersion": 1,
+    "id": "nodegoat",
+    "description": "EXAMPLE ONLY. OWASP NodeGoat, a deliberately vulnerable Express application. Not scored until pinned.",
+    "source": {
+      "url": "https://github.com/OWASP/NodeGoat.git",
+      "commit": "REPLACE_WITH_VERIFIED_40_CHAR_COMMIT_SHA"
+    },
+    "vulnerabilities": [
+      {
+        "id": "NG-EXAMPLE-EVAL-CONTRIB",
+        "class": "injection",
+        "cwe": ["CWE-95"],
+        "file": "app/routes/contributions.js",
+        "startLine": 1,
+        "endLine": 1,
+        "description": "EXAMPLE: server-side JavaScript injection through eval() on request fields in the contributions route. VERIFY file and lines against the pinned commit.",
+        "note": "Unverified placeholder label."
+      }
+    ]
+  },
+  {
+    "schemaVersion": 1,
+    "id": "webgoat",
+    "description": "EXAMPLE ONLY. OWASP WebGoat, a deliberately vulnerable Java application. Not scored until pinned. Note the subdir: file paths below are relative to it.",
+    "source": {
+      "url": "https://github.com/WebGoat/WebGoat.git",
+      "commit": "REPLACE_WITH_VERIFIED_40_CHAR_COMMIT_SHA",
+      "subdir": ""
+    },
+    "vulnerabilities": [
+      {
+        "id": "WG-EXAMPLE-SQLI",
+        "class": "injection",
+        "cwe": ["CWE-89"],
+        "file": "REPLACE/WITH/VERIFIED/PATH/TO/A/LESSON.java",
+        "startLine": 1,
+        "endLine": 1,
+        "description": "EXAMPLE: a SQL injection lesson. Pick a real lesson file in the pinned checkout and label the exact vulnerable statement.",
+        "note": "Unverified placeholder label."
+      }
+    ]
+  }
+]

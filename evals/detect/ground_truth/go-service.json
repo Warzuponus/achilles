@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "id": "go-service",
+  "description": "net/http handlers with injection, traversal, SSRF, weak hashing and a hard-coded password. Own go.mod so the parent module ignores it. Hermetic fixture.",
+  "source": {
+    "path": "../fixtures/go-service"
+  },
+  "vulnerabilities": [
+    {
+      "id": "GO-SQLI-1",
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "file": "main.go",
+      "startLine": 23,
+      "endLine": 23,
+      "description": "Query built with fmt.Sprintf from a request parameter."
+    },
+    {
+      "id": "GO-CMDI-1",
+      "class": "injection",
+      "cwe": [
+        "CWE-78"
+      ],
+      "file": "main.go",
+      "startLine": 33,
+      "endLine": 33,
+      "description": "Request parameter is concatenated into a command run through sh -c."
+    },
+    {
+      "id": "GO-PATH-1",
+      "class": "path-traversal",
+      "cwe": [
+        "CWE-22"
+      ],
+      "file": "main.go",
+      "startLine": 39,
+      "endLine": 39,
+      "description": "Request-controlled name is joined under the upload directory and read; '..' escapes it."
+    },
+    {
+      "id": "GO-SSRF-1",
+      "class": "ssrf",
+      "cwe": [
+        "CWE-918"
+      ],
+      "file": "main.go",
+      "startLine": 48,
+      "endLine": 48,
+      "description": "http.Get on an attacker-supplied URL."
+    },
+    {
+      "id": "GO-CRYPTO-1",
+      "class": "weak-crypto",
+      "cwe": [
+        "CWE-327",
+        "CWE-328"
+      ],
+      "file": "main.go",
+      "startLine": 57,
+      "endLine": 59,
+      "description": "Passwords are hashed with unsalted MD5."
+    },
+    {
+      "id": "GO-SECRET-1",
+      "class": "hardcoded-secret",
+      "cwe": [
+        "CWE-798"
+      ],
+      "file": "main.go",
+      "startLine": 19,
+      "endLine": 19,
+      "description": "Admin password is a constant in the source."
+    }
+  ]
+}

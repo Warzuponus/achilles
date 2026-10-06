@@ -42,6 +42,26 @@ First public release (`v0.1.0`) is pending.
   a three-line example workflow.
 - Issue and pull-request templates, `NOTICE`, and this changelog.
 
+- **Verify fixes by re-scan** (`--verify-fixes`, on by default with `--remediate`): each
+  proposed patch is applied to a temp copy and the scanner that reported the finding is
+  re-run. `--fix-pr` applies only verified patches; reports and issues show the status.
+- **Deep verification** (`--deep-verify N`, `--deep-max-steps`): a bounded, read-only,
+  secrets-blocked tool loop that lets the model read and search the repository to settle
+  findings a single-file review could not. It can confirm freely but can only support a
+  dismissal with cited evidence, and never overrides a confident true positive.
+- **Gate-structured verdicts** (`triage/v4`): the model answers designed-behavior,
+  reachable, attacker-controlled, sanitized and new-capability separately; comments and
+  names are treated as claims, not evidence. Entry-point hints (routes, handlers, CLI
+  args) from the finding's own file are added to the prompt.
+- **Self-consistency sampling** (`--llm-samples`): borderline verdicts are re-asked and
+  the majority wins; a split is `uncertain` and is never dismissed.
+
+- **Detection benchmark** (`achilles-eval --mode detect`, `make eval-detect`): scans
+  ground-truth corpora and scores recall by vulnerability class, tracing every miss to where
+  it was lost (not detected, tool missing, noise filter, dismissed by the AI review, and so
+  on). A committed hermetic fixture baseline gates regressions. See
+  [Benchmarking Detection](docs/benchmarking.md).
+
 ### Changed
 - `--timeout` bounds the scanners only; the AI phases have their own `--llm-budget`
   (default 45m) and run `--llm-concurrency` findings in parallel, most severe first.

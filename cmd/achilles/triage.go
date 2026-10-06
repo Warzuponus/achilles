@@ -83,7 +83,10 @@ func triageScan(ctx context.Context, o *options, ev vault.Store, runID string, s
 			baseURL: o.llmBaseURL, triageModel: o.llmModel, judgeModel: o.llmJudge,
 			embedModel: o.llmEmbed, remediate: o.remediateOn, rag: o.ragOn, tasks: tasks,
 			dryRun: o.dryRun, maxCost: o.maxCost, prices: priceTable, excluded: excluded,
-			noCode: o.llmNoCode, keepDismissed: o.keepDismissed, concurrency: o.llmConcurrency,
+			noCode: o.llmNoCode, keepDismissed: o.keepDismissed, concurrency: o.llmConcurrency, samples: o.llmSamples,
+		}
+		if o.deepVerify > 0 {
+			opts.afterTriage = func(c context.Context) error { return deepVerifyFindings(c, o, ev, runID, scan) }
 		}
 		return runTriage(ctx, ev, runID, scan, clusters, opts)
 	}
@@ -111,6 +114,11 @@ type triageOpts struct {
 	noCode        bool // --llm-no-code: prompts carry no source; verdicts are then never trusted to dismiss
 	keepDismissed bool // --keep-dismissed: leave AI-dismissed findings in scan.Findings
 	concurrency   int  // findings triaged in parallel; <1 means 1
+	samples       int  // --llm-samples: re-ask borderline verdicts this many times in total; <2 means once
+
+	// afterTriage runs once every finding has its first verdict and before AI-dismissed
+	// findings are moved out of the gate (--deep-verify hooks in here). nil = none.
+	afterTriage func(context.Context) error
 }
 
 // abortAfterFailures is how many failed findings in a row, with not one success,
@@ -146,7 +154,7 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 
 	en := enrich.New(3)
 	en.IncludeBlame = true // best-effort git attribution in the prompt context
-	eng := triage.NewEngine(router, ev, en, scan.Target).SetNoCode(o.noCode)
+	eng := triage.NewEngine(router, ev, en, scan.Target).SetNoCode(o.noCode).SetSamples(o.samples)
 
 	// Learning layer (DESIGN.md §8): calibration from accumulated feedback.
 	fb := knowledge.NewFeedbackStore(ev)
@@ -206,6 +214,10 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		})
 	est := cost.Project(planned, o.prices)
 	est.Excluded = o.excluded
+	if eng.Samples() > 1 {
+		est.Excluded = append(est.Excluded, fmt.Sprintf(
+			"NOTE: --llm-samples %d re-asks only borderline verdicts, which cannot be known in advance; the estimate counts the extra calls for every finding, an upper bound", eng.Samples()))
+	}
 	if o.remediate {
 		est.Excluded = append(est.Excluded,
 			"NOTE: remediation is counted for every triaged finding — an upper bound, since only high-confidence ones are fixed")
@@ -216,6 +228,11 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 
 	if o.dryRun {
 		est.Write(os.Stderr)
+		if o.afterTriage != nil {
+			if err := o.afterTriage(ctx); err != nil { // prints the deep-verify plan; calls no model
+				return llm.Usage{}, err
+			}
+		}
 		fmt.Fprintf(os.Stderr, "achilles: dry run — stopping before the first model call\n")
 		return llm.Usage{}, nil
 	}
@@ -350,6 +367,12 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		return u, fmt.Errorf("AI review aborted after %d failed finding(s) with no success: %s\n"+
 			"  check the API key, --llm-base-url / --llm-provider and --llm-model, then re-run (no report was written)",
 			failedN, oneLine(fatal))
+	}
+
+	if o.afterTriage != nil {
+		if err := o.afterTriage(ctx); err != nil {
+			return u, err
+		}
 	}
 
 	// Coverage: how much of the scan got a verdict. Reports print this beside the

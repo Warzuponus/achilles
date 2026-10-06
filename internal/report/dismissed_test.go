@@ -61,3 +61,35 @@ func TestMarkdownListsDismissedAndWarnsOnFailedTools(t *testing.T) {
 		}
 	}
 }
+
+func TestHTMLShowsGatesStabilityDeepAndFixVerification(t *testing.T) {
+	v := &model.Verdict{
+		Classification: model.ClassTruePositive, Confidence: 0.8,
+		Gates: &model.Gates{
+			Reachable:          model.Gate{Answer: model.GateYes, Evidence: "route /run calls it"},
+			AttackerControlled: model.Gate{Answer: model.GateYes},
+			Sanitized:          model.Gate{Answer: model.SanitizedNone},
+		},
+		Stability: &model.Stability{Samples: 3, Agreeing: 2,
+			Classifications: map[model.Classification]int{model.ClassTruePositive: 2, model.ClassUncertain: 1}},
+	}
+	f := model.Finding{
+		RuleID: "G204", Severity: model.SeverityHigh, Verdict: v,
+		Deep:        &model.DeepVerification{Steps: 3, Conclusion: model.ClassTruePositive, Confidence: 0.9, Reasoning: "no auth middleware"},
+		Remediation: &model.Remediation{Summary: "use exec args", Verification: &model.FixVerification{Status: model.FixVerified}},
+	}
+	out := renderHTML(t, model.Scan{Target: "/r", Findings: []model.Finding{f}})
+	for _, want := range []string{
+		"Reachable?", "route /run calls it", "Attacker-controlled?",
+		"Asked 3 times", "disagreed", "Deep check (3 step(s))", "no auth middleware",
+		"Verified by re-scan",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("HTML missing %q", want)
+		}
+	}
+	f.Remediation.Verification = &model.FixVerification{Status: model.FixNotFixed, Detail: "still reported"}
+	if out := renderHTML(t, model.Scan{Target: "/r", Findings: []model.Finding{f}}); !strings.Contains(out, "Not verified (not fixed): still reported") {
+		t.Error("an unverified fix must say so")
+	}
+}

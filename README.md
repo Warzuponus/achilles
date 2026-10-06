@@ -62,6 +62,13 @@ Every path above needs a **release**, and none exists yet; until then build from
   second adversarial pass tries to refute the verdict. Confident false positives drop
   out of the gate, the counts and the issues, and are listed separately so you can audit
   them. Reports say how many findings the review actually covered.
+- **Patches checked, not trusted.** A suggested fix is applied to a temp copy and the
+  scanner that reported the finding is re-run; `--fix-pr` opens a PR only with patches
+  where the finding is gone and nothing new appeared ([Verifying Fixes](docs/verifying-fixes.md)).
+- **Optional deeper checks:** `--deep-verify N` lets the model read and search the repo
+  (read-only, bounded, secrets blocked) to settle the findings a one-file review could not
+  ([Deep Verification](docs/deep-verify.md)), and `--llm-samples` re-asks borderline verdicts
+  and never dismisses one the answers disagree on.
 - **Fix suggestions** for confirmed findings, a repo-level security review, a
   dependency-upgrade plan, and an optional threat model.
 - **Gating for CI:** fail only on new findings (`--baseline`, `--diff`) at or above a
@@ -82,8 +89,11 @@ Every path above needs a **release**, and none exists yet; until then build from
   `achilles tools install` adds the community rules (a Commons Clause licence applies;
   they are skipped under `--mode commercial`, see [THIRD-PARTY.md](THIRD-PARTY.md)). The
   heavier per-language analyzers (`--profile full`) need Docker.
-- **Accuracy is only lightly measured:** an 18-case labeled corpus, not real-repository
-  precision and recall. See [evals/](evals/README.md).
+- **Accuracy is only lightly measured:** an 18-case labeled triage corpus and a small
+  detection benchmark (24 labeled issues in synthetic fixtures; about 46% recall with the
+  default scanners, far lower for Python and JavaScript with only the bundled rules;
+  the community rules were not measured), not real-repository precision and recall. See [evals/](evals/README.md) and
+  [Benchmarking Detection](docs/benchmarking.md).
 - **You choose the model and pay the provider.** `--dry-run` prints a cost estimate
   first. There is no default model.
 - **Issues publish vulnerabilities** to everyone who can read the repo, so Achilles
@@ -275,6 +285,12 @@ in [GitHub issues](https://github.com/Warzuponus/achilles/issues).
 Achilles orchestrates excellent open-source tools it does not own: Opengrep, gosec,
 Trivy, Gitleaks and osv-scanner (and, optionally, many more — see
 [THIRD-PARTY.md](THIRD-PARTY.md) for each one's license and how it is invoked).
+
+The attacker-first verification ideas (answering explicit gate questions per finding,
+trying to disprove a finding before reporting it, checking that fixes work, and
+measuring detection against known-vulnerable code) were informed by the open-source
+[VulnHunter](https://github.com/nealbridges/VulnHunter) project (Apache-2.0, a fork of
+Capital One's VulnHunter). Those are concepts only; no code or prompt text is copied.
 
 Some design ideas were informed by public writing, notably Block's
 ["CodeCrucible: A Blueprint for LLM-Driven SAST"](https://engineering.block.xyz/blog/codecrucible-a-blueprint-for-llm-driven-sast)

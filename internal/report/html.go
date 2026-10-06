@@ -61,6 +61,88 @@ type findingView struct {
 	VerdictFix string
 }
 
+// gateRow is one answered question of the AI review, for display.
+type gateRow struct{ Question, Answer, Evidence string }
+
+// GateRows lists the gate answers of the verdict that carry information; empty
+// when the review gave none (older runs, or a model that omitted them).
+func (v findingView) GateRows() []gateRow {
+	if v.Verdict == nil || v.Verdict.Gates == nil {
+		return nil
+	}
+	g := v.Verdict.Gates
+	var rows []gateRow
+	for _, r := range []struct {
+		q string
+		g model.Gate
+	}{
+		{"Designed behavior?", g.DesignedBehavior}, {"Reachable?", g.Reachable},
+		{"Attacker-controlled?", g.AttackerControlled}, {"Sanitized?", g.Sanitized},
+		{"New capability?", g.NewCapability},
+	} {
+		if r.g.Answer == "" {
+			continue
+		}
+		rows = append(rows, gateRow{r.q, string(r.g.Answer), redact.Secrets(r.g.Evidence)})
+	}
+	return rows
+}
+
+// StabilityLine says how consistent the model was when asked more than once.
+func (v findingView) StabilityLine() string {
+	if v.Verdict == nil || v.Verdict.Stability == nil || v.Verdict.Stability.Samples < 2 {
+		return ""
+	}
+	st := v.Verdict.Stability
+	var parts []string
+	for _, c := range []model.Classification{model.ClassTruePositive, model.ClassFalsePositive, model.ClassUncertain} {
+		if n := st.Classifications[c]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, c))
+		}
+	}
+	line := fmt.Sprintf("Asked %d times: %s", st.Samples, strings.Join(parts, ", "))
+	if !st.Unanimous() {
+		line += ". The answers disagreed, so this is never dismissed automatically."
+	}
+	return line
+}
+
+// FixLine describes the re-scan result of the suggested patch; empty when the
+// patch was not re-scanned.
+func (v findingView) FixLine() string {
+	r := v.Remediation
+	if r == nil || r.Verification == nil {
+		return ""
+	}
+	fv := r.Verification
+	switch fv.Status {
+	case model.FixVerified:
+		return "Verified by re-scan: the scanner that reported this no longer does after the patch, and reported nothing new. That does not prove the change is correct; review and test it."
+	default:
+		line := "Not verified (" + strings.ReplaceAll(string(fv.Status), "_", " ") + ")"
+		if fv.Detail != "" {
+			line += ": " + redact.Secrets(fv.Detail)
+		}
+		return line
+	}
+}
+
+// DeepLine summarizes a --deep-verify pass over this finding.
+func (v findingView) DeepLine() string {
+	d := v.Deep
+	if d == nil {
+		return ""
+	}
+	if d.Aborted != "" {
+		return fmt.Sprintf("Deep check stopped after %d step(s): %s", d.Steps, redact.Secrets(d.Aborted))
+	}
+	line := fmt.Sprintf("Deep check (%d step(s)): %s, %.0f%% confident", d.Steps, d.Conclusion, d.Confidence*100)
+	if d.Reasoning != "" {
+		line += ". " + redact.Secrets(d.Reasoning)
+	}
+	return line
+}
+
 // statusClass is the CSS-safe form of Status.
 func (v findingView) StatusClass() string { return strings.ReplaceAll(v.Status, " ", "-") }
 
@@ -268,6 +350,8 @@ const htmlDoc = `<!doctype html>
   .alert.ok{border-color:var(--border);color:var(--muted)}
   .status{font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;border:1px solid var(--border);
     text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  table.gates{margin:8px 0;font-size:13px}
+  table.gates td{padding:3px 10px 3px 0;border:0;color:var(--muted)}
   .s-confirmed{color:var(--critical);border-color:var(--critical)}
   .s-overturned,.s-needs-review{color:var(--medium);border-color:var(--medium)}
 </style>
@@ -354,7 +438,11 @@ const htmlDoc = `<!doctype html>
       <div class="kv" style="margin-top:8px"><span class="verdict">{{.Classification}} · {{printf "%.0f%%" (pct .Confidence)}}{{if .Exploitability}} · {{.Exploitability}}{{end}}{{if .Refuted}} · refuted{{else if .Overturned}} · overturned by judge{{end}}</span></div>
       {{if .Reasoning}}<div class="kv">{{.Reasoning}}</div>{{end}}
       {{end}}
+      {{with .GateRows}}<table class="gates">{{range .}}<tr><td>{{.Question}}</td><td><strong>{{.Answer}}</strong></td><td>{{.Evidence}}</td></tr>{{end}}</table>{{end}}
+      {{with .StabilityLine}}<div class="kv">{{.}}</div>{{end}}
+      {{with .DeepLine}}<div class="kv">{{.}}</div>{{end}}
       {{if .VerdictFix}}<div class="fix"><h4>Suggested fix</h4><div>{{.VerdictFix}}</div></div>{{end}}
+      {{with .FixLine}}<div class="kv">{{.}}</div>{{end}}
       {{with .Remediation}}
       <div class="fix">
         <h4>Suggested fix</h4>

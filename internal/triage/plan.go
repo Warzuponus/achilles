@@ -11,8 +11,11 @@ import (
 // reasoning, a judge reply is shorter, and a remediation carries a diff so it is
 // the largest. Compare them against real `--diagnostics` token usage and adjust
 // if they drift; they are the least certain part of the estimate.
+//
+// The triage figure covers the five gate answers (each a short answer plus one
+// line of evidence) on top of the reasoning: ~150 tokens more than before gates.
 const (
-	estTriageOutputTokens      = 250
+	estTriageOutputTokens      = 400
 	estJudgeOutputTokens       = 120
 	estRemediationOutputTokens = 600
 )
@@ -33,6 +36,11 @@ type PlanOpts struct {
 //
 // Findings the calibrator can auto-resolve are skipped here exactly as they are
 // skipped at run time, so the estimate reflects the learning layer's savings.
+//
+// Self-consistency sampling (SetSamples(k)) re-asks only BORDERLINE verdicts, which
+// cannot be known before triage runs, so the plan counts k-1 extra triage calls for
+// EVERY finding — an upper bound, like Remediate. The caller should label it as such
+// when Samples() > 1.
 //
 // Two known omissions, both of which make this a floor rather than a ceiling:
 // RAG few-shot examples (--rag) add prompt tokens that depend on the retrieved
@@ -57,6 +65,13 @@ func (e *Engine) Plan(findings []model.Finding, o PlanOpts) []cost.Call {
 			InputTokens:  messageTokens(triageMessages(f, codeContext, nil)),
 			OutputTokens: estTriageOutputTokens,
 		})
+		for i := 1; i < e.Samples(); i++ {
+			out = append(out, cost.Call{
+				Task:         "triage",
+				InputTokens:  messageTokens(triageMessages(f, codeContext, nil)),
+				OutputTokens: estTriageOutputTokens,
+			})
+		}
 		out = append(out, cost.Call{
 			Task: "judge",
 			// The judge prompt carries the verdict under review, so add the

@@ -85,6 +85,10 @@ type Finding struct {
 	Verdict     *Verdict     `json:"verdict,omitempty"`
 	Provenance  *Provenance  `json:"provenance,omitempty"`
 	Remediation *Remediation `json:"remediation,omitempty"` // Phase 2.1; nil unless remediated
+
+	// Deep is set when --deep-verify let the model read the repository to settle this
+	// finding; nil otherwise.
+	Deep *DeepVerification `json:"deep,omitempty"`
 }
 
 // Scan is the result of running one or more tools against a target.

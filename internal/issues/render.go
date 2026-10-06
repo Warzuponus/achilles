@@ -262,6 +262,9 @@ func (r *renderer) writeFix(b *strings.Builder, f model.Finding, withDiff bool) 
 	if rem != nil && rem.Confidence > 0 {
 		fmt.Fprintf(b, "\n_Fix confidence: %d%%. Review before applying; Achilles proposes fixes but never applies them._\n", pct(rem.Confidence))
 	}
+	if line := r.verificationLine(rem, diff); line != "" {
+		fmt.Fprintf(b, "\n%s\n", line)
+	}
 	switch {
 	case diff == "":
 	case !withDiff:
@@ -269,6 +272,47 @@ func (r *renderer) writeFix(b *strings.Builder, f model.Finding, withDiff bool) 
 	default:
 		fmt.Fprintf(b, "\n%s\n", fenced("diff", cutLines(redactDiff(r.strip(diff)), maxDiff)))
 	}
+}
+
+// verificationLine says whether re-scanning the proposed diff supported it. It
+// only applies to a diff; prose guidance has nothing to verify. Empty when
+// verification did not run.
+func (r *renderer) verificationLine(rem *model.Remediation, diff string) string {
+	if rem == nil || rem.Verification == nil || diff == "" {
+		return ""
+	}
+	v := rem.Verification
+	if v.Status == model.FixVerified {
+		return "**Verified:** the scanner that reported this no longer reports it after applying this patch, and it reported nothing new. " +
+			"That does not prove the change is correct or that the program still works; review and test it."
+	}
+	reasons := map[model.FixVerificationStatus]string{
+		model.FixNotFixed:      "the scanner still reports this finding after applying the patch",
+		model.FixIntroducesNew: "the scanner reports new findings after applying the patch",
+		model.FixPatchFailed:   "the patch did not apply cleanly or was rejected as unsafe",
+		model.FixSkipped:       "verification was skipped",
+		model.FixError:         "verification could not complete",
+	}
+	reason := reasons[v.Status]
+	if reason == "" {
+		reason = "verification did not confirm this fix"
+	}
+	out := "**Not verified:** " + reason + "."
+	if d := strings.Join(strings.Fields(r.prose(v.Detail, 300)), " "); d != "" {
+		out += " " + d
+	}
+	if len(v.NewFindings) > 0 {
+		var items []string
+		for i, n := range v.NewFindings {
+			if i == 5 {
+				items = append(items, fmt.Sprintf("and %d more", len(v.NewFindings)-5))
+				break
+			}
+			items = append(items, "`"+r.inline(r.strip(n))+"`")
+		}
+		out += " New: " + strings.Join(items, ", ") + "."
+	}
+	return out
 }
 
 // representative picks the finding whose details the issue shows: the first one

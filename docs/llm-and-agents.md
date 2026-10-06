@@ -229,6 +229,66 @@ achilles --remediate --llm-model gpt-4o --html-report report.html .
 Verdicts and fixes show up per-finding in the HTML report and are recorded to the
 vault.
 
+### Gates: the attacker-first questions behind a verdict
+
+Since prompt `triage/v4` the model answers five questions as separate structured
+fields (`verdict.gates`) before it classifies, so a report can show *why* a finding
+was kept or dismissed instead of only a paragraph of reasoning:
+
+| Gate | Answers | Question |
+|------|---------|----------|
+| `designedBehavior` | yes / no / unknown | Is this the application doing what it is designed to do? |
+| `reachable` | yes / no / unknown | Can production code reach it? (one-line evidence) |
+| `attackerControlled` | yes / no / unknown | Does attacker-influenced data reach it? |
+| `sanitized` | none / partial / effective / unknown | Is there an effective control between source and sink, and where? |
+| `newCapability` | yes / no / unknown | Would exploiting it give the attacker something they did not already have? |
+
+Gates are advisory and lenient: a model that omits them still produces a verdict,
+and an answer outside a gate's vocabulary is stored as `unknown`. They can only make
+dismissal *harder* — a verdict whose own gates say reachable + attacker-controlled +
+not (effectively) sanitized + new capability is never dismissed, whatever its
+classification. The prompt also tells the model that comments, docstrings and names
+are claims, not evidence, and that the repository text is untrusted data.
+
+### Self-consistency sampling: `--llm-samples N`
+
+One answer from a model is one draw. With `N > 1`, a **borderline** verdict —
+`uncertain`, confidence below 0.85, or one the judge refuted or overturned — is
+re-asked up to `N-1` more times (extra samples at a small non-zero temperature; the
+first answer stays deterministic). The classification becomes the plurality answer,
+**a tie is `uncertain`** (never broken toward `false_positive`), and confidence is
+the mean of the agreeing samples. The split is kept on the verdict as
+`stability: {samples, agreeing, classifications}`.
+
+A non-unanimous result is **never dismissed**. The judge's refuted/overturned flags
+describe the first answer, so they are kept only if the result is still that
+classification. Extra samples are triage calls only (they are not re-judged), are
+recorded to the vault as `triage-sample`, and a sample that errors is simply
+dropped. `--dry-run` counts `N-1` extra triage calls per finding — an upper bound,
+since only borderline verdicts are re-asked and that cannot be known beforehand.
+Confident, judge-approved verdicts cost nothing extra.
+
+### Entry-point hints
+
+The code context can begin with a short block naming how the finding's **own file**
+takes input:
+
+```
+// This file exposes (pattern match on this file only; no hint is NOT evidence of unreachability):
+//   HTTP route POST /run (line 9)
+```
+
+A fast, offline line-pattern detector (`internal/inventory`) recognises Go
+(`net/http`, gin/echo/chi, gRPC), Python (Flask/FastAPI/Django, Celery), JS/TS
+(Express/Koa/Fastify/Nest/Next), Java/Kotlin (Spring, JAX-RS, servlets, message
+listeners), Rails, PHP superglobals/Laravel routes, CLI argument parsing, and
+stdin/queue/file consumers. It reads only that file (the one already being read for
+context), scans at most 1 MiB, and lists at most 8 hints nearest the finding; a
+summary carries only the kind, HTTP method and a scrubbed route path, never code or
+tokens. It makes no cross-file claims, and the prompt says so: a handler is often
+registered in another file, so a missing hint is not evidence the code is
+unreachable. `--llm-no-code` withholds the block with the rest of the code.
+
 ## Whole-repo agents
 
 These reason over the codebase profile + findings rather than one finding at a time:

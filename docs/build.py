@@ -19,7 +19,7 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# When hosting (GitHub Pages), `../repo` links can't resolve — set this to a repo
+# When hosting the page elsewhere, `../repo` links can't resolve — set this to a repo
 # blob base (e.g. https://github.com/Warzuponus/achilles/blob/main) to rewrite them
 # to absolute URLs. Unset (local/committed build) keeps them relative.
 REPO_URL = os.environ.get("ACHILLES_DOCS_REPO_URL", "").rstrip("/")

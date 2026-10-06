@@ -73,6 +73,10 @@ First public release (`v0.1.0`) is pending.
 - `--config` defaults to the embedded registry instead of `configs/tools.yaml` in the
   current directory.
 
+### Removed
+- The `Docs to Pages` workflow. The guides remain in `docs/`, and `make docs-html` still builds
+  the single-page `docs/site.html`.
+
 ### Fixed
 - Opengrep under `--runner docker` asked Docker for an empty image; it now runs as the
   local binary, as documented.

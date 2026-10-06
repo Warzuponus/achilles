@@ -6,13 +6,16 @@
 // the eval harness is developer/CI tooling, not part of the scanning engine, and
 // nothing in a customer scan should be able to reach it.
 //
-// Two modes:
+// Modes:
 //
 //	achilles-eval --mode context                      # hermetic: no model, no key, CI-safe
 //	achilles-eval --mode verdict --llm-model MODEL     # needs a live model
+//	achilles-eval --mode detect                        # recall on known-vulnerable code; needs the real scanners
 //
-// Both write JSON with --out and diff against a previous run with --baseline,
-// which is the point: a metric with no baseline proves nothing.
+// All write JSON with --out and diff against a previous run with --baseline,
+// which is the point: a metric with no baseline proves nothing. The detect mode
+// (see detect.go) measures scanner RECALL and traces every miss to the pipeline
+// stage that lost it.
 package main
 
 import (
@@ -43,7 +46,7 @@ func run(argv []string) error {
 	fs := flag.NewFlagSet("achilles-eval", flag.ContinueOnError)
 	var (
 		corpusPath = fs.String("corpus", "evals/triage/corpus.yaml", "labeled corpus manifest")
-		mode       = fs.String("mode", "context", "context (hermetic, no model) | corpus (no model, needs gosec/bandit) | verdict | remediate | threat-model (these three need a live model)")
+		mode       = fs.String("mode", "context", "context (hermetic, no model) | corpus (no model, needs gosec/bandit) | detect (recall + miss tracing; needs the real scanners) | verdict | remediate | threat-model (these three need a live model)")
 		outPath    = fs.String("out", "", "write the report as JSON to this file")
 		basePath   = fs.String("baseline", "", "compare against a previously written JSON report")
 		verbose    = fs.Bool("verbose", false, "print a per-case table")
@@ -62,13 +65,26 @@ func run(argv []string) error {
 		noVault     = fs.Bool("no-vault", false, "do not record raw LLM responses (loses the ability to explain a bad screen)")
 		timeout     = fs.Duration("timeout", 30*time.Minute, "overall timeout for a verdict run")
 	)
+	dflags := registerDetectFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "usage: achilles-eval [flags]\n\n")
-		fmt.Fprintf(fs.Output(), "Measures triage quality against a labeled corpus.\n\n")
+		fmt.Fprintf(fs.Output(), "Measures triage quality against a labeled corpus (--mode context|verdict|...) and\n")
+		fmt.Fprintf(fs.Output(), "scanner recall against known-vulnerable code (--mode detect).\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(argv); err != nil {
 		return err
+	}
+	if *mode == "detect" {
+		// Detect mode has its own ground truth and needs no triage corpus.
+		explicit := map[string]bool{}
+		fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+		return runDetect(detectArgs{
+			flags: *dflags, explicit: explicit,
+			out: *outPath, baseline: *basePath, verbose: *verbose, failOnReg: *failOnReg, repeat: *repeat,
+			timeout: *timeout, baseURL: *baseURL, model: *llmModel, judgeModel: *judgeModel,
+			modelConfig: *modelConfig, auth: *llmAuth,
+		})
 	}
 
 	corpus, err := eval.LoadCorpus(*corpusPath)
@@ -99,7 +115,7 @@ func run(argv []string) error {
 			vaultPath: *vaultPath, noVault: *noVault,
 		})
 	default:
-		return fmt.Errorf("--mode must be context, corpus, verdict, remediate or threat-model, got %q", *mode)
+		return fmt.Errorf("--mode must be context, corpus, detect, verdict, remediate or threat-model, got %q", *mode)
 	}
 }
 

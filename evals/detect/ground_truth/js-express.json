@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "id": "js-express",
+  "description": "Express service: reflected XSS, eval, command injection, an unchecked object reference and a baked-in signing secret. Hermetic fixture.",
+  "source": {
+    "path": "../fixtures/js-express"
+  },
+  "vulnerabilities": [
+    {
+      "id": "JS-XSS-1",
+      "class": "xss",
+      "cwe": [
+        "CWE-79"
+      ],
+      "file": "server.js",
+      "startLine": 11,
+      "endLine": 11,
+      "description": "Query parameter is concatenated into an HTML response without encoding."
+    },
+    {
+      "id": "JS-EVAL-1",
+      "class": "injection",
+      "cwe": [
+        "CWE-95"
+      ],
+      "file": "server.js",
+      "startLine": 15,
+      "endLine": 15,
+      "description": "eval() runs a query parameter."
+    },
+    {
+      "id": "JS-CMDI-1",
+      "class": "injection",
+      "cwe": [
+        "CWE-78"
+      ],
+      "file": "server.js",
+      "startLine": 20,
+      "endLine": 20,
+      "description": "Query parameter is concatenated into a command passed to child_process.exec."
+    },
+    {
+      "id": "JS-IDOR-1",
+      "class": "authz",
+      "cwe": [
+        "CWE-639",
+        "CWE-862"
+      ],
+      "file": "server.js",
+      "startLine": 25,
+      "endLine": 27,
+      "description": "The order is returned for any id with no check that it belongs to the caller.",
+      "note": "Business-logic flaw: no pattern-based scanner is expected to find it."
+    },
+    {
+      "id": "JS-SECRET-1",
+      "class": "hardcoded-secret",
+      "cwe": [
+        "CWE-798"
+      ],
+      "file": "server.js",
+      "startLine": 7,
+      "endLine": 7,
+      "description": "JWT signing secret is a string literal in the source."
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 BINARY := achilles
 BINDIR := bin
 
-.PHONY: all build install release test test-integration verify-tier2 license-check lint fmt vet run clean tidy eval-context eval-gate eval-baseline eval-verdict eval-verdict-ollama
+.PHONY: all build install release test test-integration verify-tier2 license-check lint fmt vet run clean tidy eval-context eval-gate eval-baseline eval-verdict eval-verdict-ollama eval-detect eval-detect-gate
 
 all: build
 
@@ -66,6 +66,19 @@ eval-verdict-ollama:
 #   make eval-verdict EVAL_MODEL=<model> EVAL_ARGS="--repeat 3"
 eval-verdict:
 	go run ./cmd/achilles-eval --mode verdict --llm-model "$(EVAL_MODEL)" $(EVAL_ARGS)
+
+# Detection benchmark (evals/detect/): scanner RECALL on known-vulnerable code, with every
+# miss traced to the pipeline stage that lost it. Hermetic fixtures, but it runs the REAL
+# scanners (opengrep, gosec, gitleaks, osv-scanner, ...) on PATH, and osv-scanner needs
+# network. A scanner that is absent is reported as the loss point `tool-missing` and the
+# target as incomplete, never counted as a clean miss. Not wired into CI.
+#   make eval-detect DETECT_ARGS="--out evals/detect/baseline.json"   # refresh the baseline
+eval-detect: build
+	go run ./cmd/achilles-eval --mode detect --achilles-bin $(BINDIR)/$(BINARY) --verbose $(DETECT_ARGS)
+
+eval-detect-gate: build
+	go run ./cmd/achilles-eval --mode detect --achilles-bin $(BINDIR)/$(BINARY) \
+		--baseline evals/detect/baseline.json --fail-on-regression $(DETECT_ARGS)
 
 # Also runs real-tool integration tests where the tool is installed (skips otherwise).
 test-integration:

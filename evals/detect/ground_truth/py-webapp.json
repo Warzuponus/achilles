@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "id": "py-webapp",
+  "description": "Flask-style service with the classic web weaknesses, one per route. Hermetic fixture.",
+  "source": {
+    "path": "../fixtures/py-webapp"
+  },
+  "vulnerabilities": [
+    {
+      "id": "PY-SQLI-1",
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "file": "app.py",
+      "startLine": 19,
+      "endLine": 19,
+      "description": "User-controlled name is interpolated into a SQL string via an f-string."
+    },
+    {
+      "id": "PY-CMDI-1",
+      "class": "injection",
+      "cwe": [
+        "CWE-78"
+      ],
+      "file": "app.py",
+      "startLine": 26,
+      "endLine": 26,
+      "description": "User-controlled host is concatenated into a shell command run with shell=True."
+    },
+    {
+      "id": "PY-EVAL-1",
+      "class": "injection",
+      "cwe": [
+        "CWE-95"
+      ],
+      "file": "app.py",
+      "startLine": 33,
+      "endLine": 33,
+      "description": "eval() runs a request parameter."
+    },
+    {
+      "id": "PY-PATH-1",
+      "class": "path-traversal",
+      "cwe": [
+        "CWE-22"
+      ],
+      "file": "app.py",
+      "startLine": 39,
+      "endLine": 39,
+      "description": "Request-controlled file name is joined onto the upload directory and served; '..' escapes it."
+    },
+    {
+      "id": "PY-SSRF-1",
+      "class": "ssrf",
+      "cwe": [
+        "CWE-918"
+      ],
+      "file": "app.py",
+      "startLine": 45,
+      "endLine": 45,
+      "description": "Server fetches an attacker-supplied URL with no allowlist."
+    },
+    {
+      "id": "PY-DESER-1",
+      "class": "deserialization",
+      "cwe": [
+        "CWE-502"
+      ],
+      "file": "app.py",
+      "startLine": 50,
+      "endLine": 50,
+      "description": "pickle.loads() on the raw request body."
+    },
+    {
+      "id": "PY-CRYPTO-1",
+      "class": "weak-crypto",
+      "cwe": [
+        "CWE-327",
+        "CWE-328"
+      ],
+      "file": "app.py",
+      "startLine": 54,
+      "endLine": 54,
+      "description": "Passwords are hashed with unsalted MD5."
+    },
+    {
+      "id": "PY-THIRDPARTY-EVAL-1",
+      "class": "injection",
+      "cwe": [
+        "CWE-95"
+      ],
+      "file": "third_party/legacy/shell.py",
+      "startLine": 5,
+      "endLine": 5,
+      "description": "eval() on its argument in a third-party snippet checked into the tree.",
+      "note": "Expected to be lost at the noise filter: third_party paths are excluded by default. Kept deliberately to exercise that loss point; delete it if you decide vendored code is out of scope."
+    }
+  ]
+}

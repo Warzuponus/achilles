@@ -1,0 +1,1266 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-06T06:22:24Z",
+  "config": {
+    "lineTolerance": 3,
+    "ai": false,
+    "judge": false,
+    "groundTruth": "evals/detect/ground_truth",
+    "matcherVersion": 1
+  },
+  "targets": [
+    {
+      "id": "deps-manifest",
+      "description": "A requirements file pinning releases with published advisories. Needs network: osv-scanner queries the OSV database. Hermetic fixture, live advisory data.",
+      "source": "local:../fixtures/deps-manifest",
+      "entries": [
+        {
+          "id": "DEP-REQUESTS-1",
+          "class": "vulnerable-dependency",
+          "file": "requirements.txt",
+          "startLine": 2,
+          "endLine": 2,
+          "description": "requests 2.19.1 leaks the Authorization header on a redirect to another host (CVE-2018-18074).",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "osv-scanner",
+              "ruleId": "CVE-2024-47081",
+              "file": "requirements.txt",
+              "line": 0
+            },
+            {
+              "tool": "osv-scanner",
+              "ruleId": "CVE-2024-35195",
+              "file": "requirements.txt",
+              "line": 0
+            },
+            {
+              "tool": "osv-scanner",
+              "ruleId": "CVE-2026-25645",
+              "file": "requirements.txt",
+              "line": 0
+            },
+            {
+              "tool": "osv-scanner",
+              "ruleId": "CVE-2023-32681",
+              "file": "requirements.txt",
+              "line": 0
+            },
+            {
+              "tool": "osv-scanner",
+              "ruleId": "CVE-2018-18074",
+              "file": "requirements.txt",
+              "line": 0
+            }
+          ]
+        },
+        {
+          "id": "DEP-PYYAML-1",
+          "class": "vulnerable-dependency",
+          "file": "requirements.txt",
+          "startLine": 3,
+          "endLine": 3,
+          "description": "PyYAML 5.3.1 allows arbitrary code execution through full_load (CVE-2020-14343).",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "osv-scanner",
+              "ruleId": "CVE-2020-14343",
+              "file": "requirements.txt",
+              "line": 0
+            },
+            {
+              "tool": "osv-scanner",
+              "ruleId": "CVE-2020-14343",
+              "file": "requirements.txt",
+              "line": 0
+            },
+            {
+              "tool": "osv-scanner",
+              "ruleId": "CVE-2020-14343",
+              "file": "requirements.txt",
+              "line": 0
+            },
+            {
+              "tool": "osv-scanner",
+              "ruleId": "CVE-2020-14343",
+              "file": "requirements.txt",
+              "line": 0
+            }
+          ]
+        }
+      ],
+      "tools": {
+        "knownToVault": true,
+        "registered": [
+          "gitleaks",
+          "gosec",
+          "opengrep",
+          "osv-scanner",
+          "trivy"
+        ],
+        "ran": [
+          "gitleaks",
+          "opengrep",
+          "osv-scanner"
+        ],
+        "failed": [
+          {
+            "tool": "trivy",
+            "stage": "run",
+            "error": "trivy run: run trivy: exec: \"trivy\": executable file not found in $PATH",
+            "missing": true
+          }
+        ],
+        "skipped": [
+          "gosec"
+        ]
+      },
+      "findings": {
+        "surfaced": 46,
+        "matched": 14,
+        "unmatchedInLabeledFiles": 32,
+        "unlabeledFiles": 0,
+        "unmatchedSamples": [
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2025-66471",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2024-37891",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2026-21441",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2026-45409",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2026-27205",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2023-45803",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2018-25091",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2024-3651",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2023-30861",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2019-11324",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2025-50181",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2026-44431",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2019-11236",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2023-43804",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2026-97689",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2020-26137",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2019-11236",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2019-11324",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2020-26137",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2023-43804",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2018-25091",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2023-45803",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2023-30861",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2024-3651",
+            "file": "requirements.txt",
+            "line": 0
+          },
+          {
+            "tool": "osv-scanner",
+            "ruleId": "CVE-2026-44431",
+            "file": "requirements.txt",
+            "line": 0
+          }
+        ]
+      },
+      "incomplete": true
+    },
+    {
+      "id": "go-service",
+      "description": "net/http handlers with injection, traversal, SSRF, weak hashing and a hard-coded password. Own go.mod so the parent module ignores it. Hermetic fixture.",
+      "source": "local:../fixtures/go-service",
+      "entries": [
+        {
+          "id": "GO-SQLI-1",
+          "class": "injection",
+          "cwe": [
+            "CWE-89"
+          ],
+          "file": "main.go",
+          "startLine": 23,
+          "endLine": 23,
+          "description": "Query built with fmt.Sprintf from a request parameter.",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "gosec",
+              "ruleId": "G701",
+              "file": "main.go",
+              "line": 23,
+              "cwe": [
+                "CWE-89"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "GO-CMDI-1",
+          "class": "injection",
+          "cwe": [
+            "CWE-78"
+          ],
+          "file": "main.go",
+          "startLine": 33,
+          "endLine": 33,
+          "description": "Request parameter is concatenated into a command run through sh -c.",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "gosec",
+              "ruleId": "G702",
+              "file": "main.go",
+              "line": 33,
+              "cwe": [
+                "CWE-78"
+              ]
+            },
+            {
+              "tool": "gosec",
+              "ruleId": "G204",
+              "file": "main.go",
+              "line": 33,
+              "cwe": [
+                "CWE-78"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "GO-PATH-1",
+          "class": "path-traversal",
+          "cwe": [
+            "CWE-22"
+          ],
+          "file": "main.go",
+          "startLine": 39,
+          "endLine": 39,
+          "description": "Request-controlled name is joined under the upload directory and read; '..' escapes it.",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "gosec",
+              "ruleId": "G703",
+              "file": "main.go",
+              "line": 39,
+              "cwe": [
+                "CWE-22"
+              ]
+            },
+            {
+              "tool": "gosec",
+              "ruleId": "G304",
+              "file": "main.go",
+              "line": 39,
+              "cwe": [
+                "CWE-22"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "GO-SSRF-1",
+          "class": "ssrf",
+          "cwe": [
+            "CWE-918"
+          ],
+          "file": "main.go",
+          "startLine": 48,
+          "endLine": 48,
+          "description": "http.Get on an attacker-supplied URL.",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "gosec",
+              "ruleId": "G704",
+              "file": "main.go",
+              "line": 48,
+              "cwe": [
+                "CWE-918"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "GO-CRYPTO-1",
+          "class": "weak-crypto",
+          "cwe": [
+            "CWE-327",
+            "CWE-328"
+          ],
+          "file": "main.go",
+          "startLine": 57,
+          "endLine": 59,
+          "description": "Passwords are hashed with unsalted MD5.",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "gosec",
+              "ruleId": "G401",
+              "file": "main.go",
+              "line": 58,
+              "cwe": [
+                "CWE-328"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "GO-SECRET-1",
+          "class": "hardcoded-secret",
+          "cwe": [
+            "CWE-798"
+          ],
+          "file": "main.go",
+          "startLine": 19,
+          "endLine": 19,
+          "description": "Admin password is a constant in the source.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "tool-missing",
+            "detail": "nothing was reported near main.go:19-19, and a scanner that covers hardcoded-secret findings in go was unavailable: trivy (not installed or not on PATH). Scanners ran: gitleaks, gosec, opengrep, osv-scanner; failed: trivy (not installed)."
+          }
+        }
+      ],
+      "tools": {
+        "knownToVault": true,
+        "registered": [
+          "gitleaks",
+          "gosec",
+          "opengrep",
+          "osv-scanner",
+          "trivy"
+        ],
+        "ran": [
+          "gitleaks",
+          "gosec",
+          "opengrep",
+          "osv-scanner"
+        ],
+        "failed": [
+          {
+            "tool": "trivy",
+            "stage": "run",
+            "error": "trivy run: run trivy: exec: \"trivy\": executable file not found in $PATH",
+            "missing": true
+          }
+        ]
+      },
+      "findings": {
+        "surfaced": 15,
+        "matched": 7,
+        "unmatchedInLabeledFiles": 8,
+        "unlabeledFiles": 0,
+        "unmatchedSamples": [
+          {
+            "tool": "gosec",
+            "ruleId": "G705",
+            "file": "main.go",
+            "line": 44,
+            "cwe": [
+              "CWE-79"
+            ]
+          },
+          {
+            "tool": "gosec",
+            "ruleId": "G705",
+            "file": "main.go",
+            "line": 34,
+            "cwe": [
+              "CWE-79"
+            ]
+          },
+          {
+            "tool": "gosec",
+            "ruleId": "G114",
+            "file": "main.go",
+            "line": 66,
+            "cwe": [
+              "CWE-676"
+            ]
+          },
+          {
+            "tool": "gosec",
+            "ruleId": "G501",
+            "file": "main.go",
+            "line": 7,
+            "cwe": [
+              "CWE-327"
+            ]
+          },
+          {
+            "tool": "gosec",
+            "ruleId": "G104",
+            "file": "main.go",
+            "line": 66,
+            "cwe": [
+              "CWE-703"
+            ]
+          },
+          {
+            "tool": "gosec",
+            "ruleId": "G104",
+            "file": "main.go",
+            "line": 54,
+            "cwe": [
+              "CWE-703"
+            ]
+          },
+          {
+            "tool": "gosec",
+            "ruleId": "G104",
+            "file": "main.go",
+            "line": 44,
+            "cwe": [
+              "CWE-703"
+            ]
+          },
+          {
+            "tool": "gosec",
+            "ruleId": "G104",
+            "file": "main.go",
+            "line": 34,
+            "cwe": [
+              "CWE-703"
+            ]
+          }
+        ]
+      },
+      "incomplete": true
+    },
+    {
+      "id": "js-express",
+      "description": "Express service: reflected XSS, eval, command injection, an unchecked object reference and a baked-in signing secret. Hermetic fixture.",
+      "source": "local:../fixtures/js-express",
+      "entries": [
+        {
+          "id": "JS-XSS-1",
+          "class": "xss",
+          "cwe": [
+            "CWE-79"
+          ],
+          "file": "server.js",
+          "startLine": 11,
+          "endLine": 11,
+          "description": "Query parameter is concatenated into an HTML response without encoding.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "not-detected",
+            "detail": "opengrep ran cleanly on server.js and reported nothing within 3 line(s) of 11-11 — a detection gap (no rule matched). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        },
+        {
+          "id": "JS-EVAL-1",
+          "class": "injection",
+          "cwe": [
+            "CWE-95"
+          ],
+          "file": "server.js",
+          "startLine": 15,
+          "endLine": 15,
+          "description": "eval() runs a query parameter.",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "opengrep",
+              "ruleId": "achilles.javascript.dangerous-eval",
+              "file": "server.js",
+              "line": 15,
+              "cwe": [
+                "CWE-95"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "JS-CMDI-1",
+          "class": "injection",
+          "cwe": [
+            "CWE-78"
+          ],
+          "file": "server.js",
+          "startLine": 20,
+          "endLine": 20,
+          "description": "Query parameter is concatenated into a command passed to child_process.exec.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "not-detected",
+            "detail": "opengrep ran cleanly on server.js and reported nothing within 3 line(s) of 20-20 — a detection gap (no rule matched). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        },
+        {
+          "id": "JS-IDOR-1",
+          "class": "authz",
+          "cwe": [
+            "CWE-639",
+            "CWE-862"
+          ],
+          "file": "server.js",
+          "startLine": 25,
+          "endLine": 27,
+          "description": "The order is returned for any id with no check that it belongs to the caller.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "not-detected",
+            "detail": "opengrep ran cleanly on server.js and reported nothing within 3 line(s) of 25-27 — a detection gap (no rule matched). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        },
+        {
+          "id": "JS-SECRET-1",
+          "class": "hardcoded-secret",
+          "cwe": [
+            "CWE-798"
+          ],
+          "file": "server.js",
+          "startLine": 7,
+          "endLine": 7,
+          "description": "JWT signing secret is a string literal in the source.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "tool-missing",
+            "detail": "nothing was reported near server.js:7-7, and a scanner that covers hardcoded-secret findings in javascript was unavailable: trivy (not installed or not on PATH). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        }
+      ],
+      "tools": {
+        "knownToVault": true,
+        "registered": [
+          "gitleaks",
+          "gosec",
+          "opengrep",
+          "osv-scanner",
+          "trivy"
+        ],
+        "ran": [
+          "gitleaks",
+          "opengrep",
+          "osv-scanner"
+        ],
+        "failed": [
+          {
+            "tool": "trivy",
+            "stage": "run",
+            "error": "trivy run: run trivy: exec: \"trivy\": executable file not found in $PATH",
+            "missing": true
+          }
+        ],
+        "skipped": [
+          "gosec"
+        ]
+      },
+      "findings": {
+        "surfaced": 1,
+        "matched": 1,
+        "unmatchedInLabeledFiles": 0,
+        "unlabeledFiles": 0
+      },
+      "incomplete": true
+    },
+    {
+      "id": "py-webapp",
+      "description": "Flask-style service with the classic web weaknesses, one per route. Hermetic fixture.",
+      "source": "local:../fixtures/py-webapp",
+      "entries": [
+        {
+          "id": "PY-SQLI-1",
+          "class": "injection",
+          "cwe": [
+            "CWE-89"
+          ],
+          "file": "app.py",
+          "startLine": 19,
+          "endLine": 19,
+          "description": "User-controlled name is interpolated into a SQL string via an f-string.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "not-detected",
+            "detail": "opengrep ran cleanly on app.py and reported nothing within 3 line(s) of 19-19 — a detection gap (no rule matched). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        },
+        {
+          "id": "PY-CMDI-1",
+          "class": "injection",
+          "cwe": [
+            "CWE-78"
+          ],
+          "file": "app.py",
+          "startLine": 26,
+          "endLine": 26,
+          "description": "User-controlled host is concatenated into a shell command run with shell=True.",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "opengrep",
+              "ruleId": "achilles.python.subprocess-shell-true",
+              "file": "app.py",
+              "line": 26,
+              "cwe": [
+                "CWE-78"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "PY-EVAL-1",
+          "class": "injection",
+          "cwe": [
+            "CWE-95"
+          ],
+          "file": "app.py",
+          "startLine": 33,
+          "endLine": 33,
+          "description": "eval() runs a request parameter.",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "opengrep",
+              "ruleId": "achilles.python.dangerous-eval",
+              "file": "app.py",
+              "line": 33,
+              "cwe": [
+                "CWE-95"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "PY-PATH-1",
+          "class": "path-traversal",
+          "cwe": [
+            "CWE-22"
+          ],
+          "file": "app.py",
+          "startLine": 39,
+          "endLine": 39,
+          "description": "Request-controlled file name is joined onto the upload directory and served; '..' escapes it.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "not-detected",
+            "detail": "opengrep ran cleanly on app.py and reported nothing within 3 line(s) of 39-39 — a detection gap (no rule matched). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        },
+        {
+          "id": "PY-SSRF-1",
+          "class": "ssrf",
+          "cwe": [
+            "CWE-918"
+          ],
+          "file": "app.py",
+          "startLine": 45,
+          "endLine": 45,
+          "description": "Server fetches an attacker-supplied URL with no allowlist.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "not-detected",
+            "detail": "opengrep ran cleanly on app.py and reported nothing within 3 line(s) of 45-45 — a detection gap (no rule matched). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        },
+        {
+          "id": "PY-DESER-1",
+          "class": "deserialization",
+          "cwe": [
+            "CWE-502"
+          ],
+          "file": "app.py",
+          "startLine": 50,
+          "endLine": 50,
+          "description": "pickle.loads() on the raw request body.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "not-detected",
+            "detail": "opengrep ran cleanly on app.py and reported nothing within 3 line(s) of 50-50 — a detection gap (no rule matched). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        },
+        {
+          "id": "PY-CRYPTO-1",
+          "class": "weak-crypto",
+          "cwe": [
+            "CWE-327",
+            "CWE-328"
+          ],
+          "file": "app.py",
+          "startLine": 54,
+          "endLine": 54,
+          "description": "Passwords are hashed with unsalted MD5.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "not-detected",
+            "detail": "opengrep ran cleanly on app.py and reported nothing within 3 line(s) of 54-54 — a detection gap (no rule matched). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        },
+        {
+          "id": "PY-THIRDPARTY-EVAL-1",
+          "class": "injection",
+          "cwe": [
+            "CWE-95"
+          ],
+          "file": "third_party/legacy/shell.py",
+          "startLine": 5,
+          "endLine": 5,
+          "description": "eval() on its argument in a third-party snippet checked into the tree.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "noise-filter",
+            "detail": "opengrep reported achilles.python.dangerous-eval at third_party/legacy/shell.py:5, but the path matches the noise filter (vendored/generated/minified defaults) and the finding was dropped before reporting",
+            "findings": [
+              {
+                "tool": "opengrep",
+                "ruleId": "achilles.python.dangerous-eval",
+                "file": "third_party/legacy/shell.py",
+                "line": 5,
+                "cwe": [
+                  "CWE-95"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "tools": {
+        "knownToVault": true,
+        "registered": [
+          "gitleaks",
+          "gosec",
+          "opengrep",
+          "osv-scanner",
+          "trivy"
+        ],
+        "ran": [
+          "gitleaks",
+          "opengrep",
+          "osv-scanner"
+        ],
+        "failed": [
+          {
+            "tool": "trivy",
+            "stage": "run",
+            "error": "trivy run: run trivy: exec: \"trivy\": executable file not found in $PATH",
+            "missing": true
+          }
+        ],
+        "skipped": [
+          "gosec"
+        ]
+      },
+      "findings": {
+        "surfaced": 2,
+        "matched": 2,
+        "unmatchedInLabeledFiles": 0,
+        "unlabeledFiles": 0
+      },
+      "incomplete": true
+    },
+    {
+      "id": "secrets-config",
+      "description": "A settings module with invented credentials: a database URL with a password, a payment-style key and an internal API token. None grants access to anything.",
+      "source": "local:../fixtures/secrets-config",
+      "entries": [
+        {
+          "id": "SEC-DBURL-1",
+          "class": "hardcoded-secret",
+          "cwe": [
+            "CWE-798"
+          ],
+          "file": "settings.py",
+          "startLine": 3,
+          "endLine": 3,
+          "description": "Database connection URL embeds the password.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "tool-missing",
+            "detail": "nothing was reported near settings.py:3-3, and a scanner that covers hardcoded-secret findings in python was unavailable: trivy (not installed or not on PATH). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        },
+        {
+          "id": "SEC-PAYKEY-1",
+          "class": "hardcoded-secret",
+          "cwe": [
+            "CWE-798"
+          ],
+          "file": "settings.py",
+          "startLine": 4,
+          "endLine": 4,
+          "description": "Payment-provider-style secret key as a string literal.",
+          "status": "missed",
+          "detected": false,
+          "detectedUnfiltered": false,
+          "loss": {
+            "point": "tool-missing",
+            "detail": "nothing was reported near settings.py:4-4, and a scanner that covers hardcoded-secret findings in python was unavailable: trivy (not installed or not on PATH). Scanners ran: gitleaks, opengrep, osv-scanner; failed: trivy (not installed); skipped as not applicable to the target's languages: gosec."
+          }
+        },
+        {
+          "id": "SEC-TOKEN-1",
+          "class": "hardcoded-secret",
+          "cwe": [
+            "CWE-798"
+          ],
+          "file": "settings.py",
+          "startLine": 5,
+          "endLine": 5,
+          "description": "Internal API token as a string literal.",
+          "status": "detected",
+          "detected": true,
+          "detectedUnfiltered": true,
+          "matchedBy": "rule",
+          "matches": [
+            {
+              "tool": "gitleaks",
+              "ruleId": "generic-api-key",
+              "file": "settings.py",
+              "line": 5
+            }
+          ]
+        }
+      ],
+      "tools": {
+        "knownToVault": true,
+        "registered": [
+          "gitleaks",
+          "gosec",
+          "opengrep",
+          "osv-scanner",
+          "trivy"
+        ],
+        "ran": [
+          "gitleaks",
+          "opengrep",
+          "osv-scanner"
+        ],
+        "failed": [
+          {
+            "tool": "trivy",
+            "stage": "run",
+            "error": "trivy run: run trivy: exec: \"trivy\": executable file not found in $PATH",
+            "missing": true
+          }
+        ],
+        "skipped": [
+          "gosec"
+        ]
+      },
+      "findings": {
+        "surfaced": 1,
+        "matched": 1,
+        "unmatchedInLabeledFiles": 0,
+        "unlabeledFiles": 0
+      },
+      "incomplete": true
+    }
+  ],
+  "overall": {
+    "entries": 24,
+    "detected": 11,
+    "missed": 13,
+    "recall": 0.4583333333333333,
+    "detectedUnfiltered": 11,
+    "recallUnfiltered": 0.4583333333333333
+  },
+  "byClass": [
+    {
+      "class": "injection",
+      "entries": 8,
+      "detected": 5,
+      "missed": 3,
+      "recall": 0.625,
+      "detectedUnfiltered": 5,
+      "recallUnfiltered": 0.625
+    },
+    {
+      "class": "xss",
+      "entries": 1,
+      "detected": 0,
+      "missed": 1,
+      "recall": 0,
+      "detectedUnfiltered": 0,
+      "recallUnfiltered": 0
+    },
+    {
+      "class": "path-traversal",
+      "entries": 2,
+      "detected": 1,
+      "missed": 1,
+      "recall": 0.5,
+      "detectedUnfiltered": 1,
+      "recallUnfiltered": 0.5
+    },
+    {
+      "class": "hardcoded-secret",
+      "entries": 5,
+      "detected": 1,
+      "missed": 4,
+      "recall": 0.2,
+      "detectedUnfiltered": 1,
+      "recallUnfiltered": 0.2
+    },
+    {
+      "class": "weak-crypto",
+      "entries": 2,
+      "detected": 1,
+      "missed": 1,
+      "recall": 0.5,
+      "detectedUnfiltered": 1,
+      "recallUnfiltered": 0.5
+    },
+    {
+      "class": "ssrf",
+      "entries": 2,
+      "detected": 1,
+      "missed": 1,
+      "recall": 0.5,
+      "detectedUnfiltered": 1,
+      "recallUnfiltered": 0.5
+    },
+    {
+      "class": "authz",
+      "entries": 1,
+      "detected": 0,
+      "missed": 1,
+      "recall": 0,
+      "detectedUnfiltered": 0,
+      "recallUnfiltered": 0
+    },
+    {
+      "class": "deserialization",
+      "entries": 1,
+      "detected": 0,
+      "missed": 1,
+      "recall": 0,
+      "detectedUnfiltered": 0,
+      "recallUnfiltered": 0
+    },
+    {
+      "class": "vulnerable-dependency",
+      "entries": 2,
+      "detected": 2,
+      "missed": 0,
+      "recall": 1,
+      "detectedUnfiltered": 2,
+      "recallUnfiltered": 1
+    }
+  ],
+  "lossPoints": {
+    "noise-filter": 1,
+    "not-detected": 8,
+    "tool-missing": 4
+  },
+  "findings": {
+    "surfaced": 65,
+    "matched": 25,
+    "unmatchedInLabeledFiles": 40,
+    "unlabeledFiles": 0
+  },
+  "incompleteTargets": [
+    "deps-manifest",
+    "go-service",
+    "js-express",
+    "py-webapp",
+    "secrets-config"
+  ],
+  "runs": 3,
+  "history": [
+    {
+      "at": "2026-10-06T06:22:08Z",
+      "recall": 0.4583333333333333,
+      "detected": 11,
+      "scored": 24,
+      "incomplete": true,
+      "scoredIds": [
+        "deps-manifest/DEP-PYYAML-1",
+        "deps-manifest/DEP-REQUESTS-1",
+        "go-service/GO-CMDI-1",
+        "go-service/GO-CRYPTO-1",
+        "go-service/GO-PATH-1",
+        "go-service/GO-SECRET-1",
+        "go-service/GO-SQLI-1",
+        "go-service/GO-SSRF-1",
+        "js-express/JS-CMDI-1",
+        "js-express/JS-EVAL-1",
+        "js-express/JS-IDOR-1",
+        "js-express/JS-SECRET-1",
+        "js-express/JS-XSS-1",
+        "py-webapp/PY-CMDI-1",
+        "py-webapp/PY-CRYPTO-1",
+        "py-webapp/PY-DESER-1",
+        "py-webapp/PY-EVAL-1",
+        "py-webapp/PY-PATH-1",
+        "py-webapp/PY-SQLI-1",
+        "py-webapp/PY-SSRF-1",
+        "py-webapp/PY-THIRDPARTY-EVAL-1",
+        "secrets-config/SEC-DBURL-1",
+        "secrets-config/SEC-PAYKEY-1",
+        "secrets-config/SEC-TOKEN-1"
+      ],
+      "detectedIds": [
+        "deps-manifest/DEP-PYYAML-1",
+        "deps-manifest/DEP-REQUESTS-1",
+        "go-service/GO-CMDI-1",
+        "go-service/GO-CRYPTO-1",
+        "go-service/GO-PATH-1",
+        "go-service/GO-SQLI-1",
+        "go-service/GO-SSRF-1",
+        "js-express/JS-EVAL-1",
+        "py-webapp/PY-CMDI-1",
+        "py-webapp/PY-EVAL-1",
+        "secrets-config/SEC-TOKEN-1"
+      ]
+    },
+    {
+      "at": "2026-10-06T06:22:16Z",
+      "recall": 0.4583333333333333,
+      "detected": 11,
+      "scored": 24,
+      "incomplete": true,
+      "scoredIds": [
+        "deps-manifest/DEP-PYYAML-1",
+        "deps-manifest/DEP-REQUESTS-1",
+        "go-service/GO-CMDI-1",
+        "go-service/GO-CRYPTO-1",
+        "go-service/GO-PATH-1",
+        "go-service/GO-SECRET-1",
+        "go-service/GO-SQLI-1",
+        "go-service/GO-SSRF-1",
+        "js-express/JS-CMDI-1",
+        "js-express/JS-EVAL-1",
+        "js-express/JS-IDOR-1",
+        "js-express/JS-SECRET-1",
+        "js-express/JS-XSS-1",
+        "py-webapp/PY-CMDI-1",
+        "py-webapp/PY-CRYPTO-1",
+        "py-webapp/PY-DESER-1",
+        "py-webapp/PY-EVAL-1",
+        "py-webapp/PY-PATH-1",
+        "py-webapp/PY-SQLI-1",
+        "py-webapp/PY-SSRF-1",
+        "py-webapp/PY-THIRDPARTY-EVAL-1",
+        "secrets-config/SEC-DBURL-1",
+        "secrets-config/SEC-PAYKEY-1",
+        "secrets-config/SEC-TOKEN-1"
+      ],
+      "detectedIds": [
+        "deps-manifest/DEP-PYYAML-1",
+        "deps-manifest/DEP-REQUESTS-1",
+        "go-service/GO-CMDI-1",
+        "go-service/GO-CRYPTO-1",
+        "go-service/GO-PATH-1",
+        "go-service/GO-SQLI-1",
+        "go-service/GO-SSRF-1",
+        "js-express/JS-EVAL-1",
+        "py-webapp/PY-CMDI-1",
+        "py-webapp/PY-EVAL-1",
+        "secrets-config/SEC-TOKEN-1"
+      ]
+    },
+    {
+      "at": "2026-10-06T06:22:24Z",
+      "recall": 0.4583333333333333,
+      "detected": 11,
+      "scored": 24,
+      "incomplete": true,
+      "scoredIds": [
+        "deps-manifest/DEP-PYYAML-1",
+        "deps-manifest/DEP-REQUESTS-1",
+        "go-service/GO-CMDI-1",
+        "go-service/GO-CRYPTO-1",
+        "go-service/GO-PATH-1",
+        "go-service/GO-SECRET-1",
+        "go-service/GO-SQLI-1",
+        "go-service/GO-SSRF-1",
+        "js-express/JS-CMDI-1",
+        "js-express/JS-EVAL-1",
+        "js-express/JS-IDOR-1",
+        "js-express/JS-SECRET-1",
+        "js-express/JS-XSS-1",
+        "py-webapp/PY-CMDI-1",
+        "py-webapp/PY-CRYPTO-1",
+        "py-webapp/PY-DESER-1",
+        "py-webapp/PY-EVAL-1",
+        "py-webapp/PY-PATH-1",
+        "py-webapp/PY-SQLI-1",
+        "py-webapp/PY-SSRF-1",
+        "py-webapp/PY-THIRDPARTY-EVAL-1",
+        "secrets-config/SEC-DBURL-1",
+        "secrets-config/SEC-PAYKEY-1",
+        "secrets-config/SEC-TOKEN-1"
+      ],
+      "detectedIds": [
+        "deps-manifest/DEP-PYYAML-1",
+        "deps-manifest/DEP-REQUESTS-1",
+        "go-service/GO-CMDI-1",
+        "go-service/GO-CRYPTO-1",
+        "go-service/GO-PATH-1",
+        "go-service/GO-SQLI-1",
+        "go-service/GO-SSRF-1",
+        "js-express/JS-EVAL-1",
+        "py-webapp/PY-CMDI-1",
+        "py-webapp/PY-EVAL-1",
+        "secrets-config/SEC-TOKEN-1"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "deps-manifest",
+  "description": "A requirements file pinning releases with published advisories. Needs network: osv-scanner queries the OSV database. Hermetic fixture, live advisory data.",
+  "source": {
+    "path": "../fixtures/deps-manifest"
+  },
+  "vulnerabilities": [
+    {
+      "id": "DEP-REQUESTS-1",
+      "class": "vulnerable-dependency",
+      "file": "requirements.txt",
+      "startLine": 2,
+      "endLine": 2,
+      "description": "requests 2.19.1 leaks the Authorization header on a redirect to another host (CVE-2018-18074).",
+      "package": "requests"
+    },
+    {
+      "id": "DEP-PYYAML-1",
+      "class": "vulnerable-dependency",
+      "file": "requirements.txt",
+      "startLine": 3,
+      "endLine": 3,
+      "description": "PyYAML 5.3.1 allows arbitrary code execution through full_load (CVE-2020-14343).",
+      "package": "PyYAML"
+    }
+  ]
+}

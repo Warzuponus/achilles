@@ -41,6 +41,16 @@ func WriteHuman(w io.Writer, s model.Scan) {
 			"Install the missing tool(s) or see --diagnostics; this is NOT a clean scan.\n",
 			len(s.FailedTools), strings.Join(s.FailedTools, ", "))
 	}
+	if t := s.Triage; t != nil {
+		fmt.Fprintf(w, "\nAI review (%s): verdict on %d of %d finding(s)", t.Model, t.Triaged, t.Total)
+		if t.Failed+t.Skipped > 0 {
+			fmt.Fprintf(w, " — %d failed, %d not reached; those are UNVERIFIED", t.Failed, t.Skipped)
+		}
+		fmt.Fprintln(w)
+	}
+	if n := len(s.Dismissed); n > 0 {
+		fmt.Fprintf(w, "%d more finding(s) ruled out as false positives by the AI review (not counted above; see the HTML/Markdown report, or --keep-dismissed to include them)\n", n)
+	}
 	if len(s.Findings) == 0 {
 		if len(s.FailedTools) == 0 {
 			fmt.Fprintln(w, "\nNo findings. Clean scan.")

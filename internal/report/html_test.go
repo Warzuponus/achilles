@@ -77,3 +77,67 @@ func TestWriteHTML_FindingsOnly(t *testing.T) {
 		t.Errorf("findings-only report wrong (should have G101, no AI panels)")
 	}
 }
+
+func renderHTML(t *testing.T, scan model.Scan) string {
+	t.Helper()
+	var sb strings.Builder
+	if err := WriteHTML(&sb, HTMLReport{Target: "/r", Scan: scan, Tools: scan.Tools}); err != nil {
+		t.Fatal(err)
+	}
+	return sb.String()
+}
+
+func TestWriteHTML_WarnsWhenScanIncomplete(t *testing.T) {
+	out := renderHTML(t, model.Scan{Target: "/r", Tools: []string{"gosec"}, FailedTools: []string{"trivy", "gitleaks"}})
+	for _, want := range []string{"Incomplete scan", "trivy, gitleaks", "No findings from the tools that ran"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("incomplete-scan report missing %q", want)
+		}
+	}
+	if strings.Contains(out, "No findings. ✅") {
+		t.Error("an incomplete scan must not read as a clean one")
+	}
+}
+
+func TestWriteHTML_ShowsAICoverageAndDismissed(t *testing.T) {
+	fp := &model.Verdict{Classification: model.ClassFalsePositive, Confidence: 0.9, Reasoning: "input is a constant"}
+	scan := model.Scan{
+		Target: "/r", Tools: []string{"gosec"},
+		Findings: []model.Finding{
+			{RuleID: "G204", Severity: model.SeverityHigh, Message: "real one",
+				Verdict: &model.Verdict{Classification: model.ClassTruePositive, Confidence: 0.9}},
+			{RuleID: "G999", Severity: model.SeverityHigh, Message: "never reviewed"},
+		},
+		Dismissed: []model.Finding{{RuleID: "G104", Severity: model.SeverityHigh, Verdict: fp}},
+		Triage:    &model.TriageStats{Model: "m1", Total: 3, Triaged: 2, Failed: 1},
+	}
+	out := renderHTML(t, scan)
+	for _, want := range []string{
+		"gave a verdict on 2 of 3 findings", "1 failed", // coverage is honest about the gap
+		"Ruled out by the AI review", "G104", "input is a constant",
+		"confirmed", "not reviewed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("report missing %q", want)
+		}
+	}
+	// A confirmed finding sorts ahead of an unreviewed one of equal severity.
+	if strings.Index(out, "G204") > strings.Index(out, "G999") {
+		t.Error("confirmed finding should be listed before the unreviewed one")
+	}
+}
+
+func TestWriteHTML_WithholdsSecretMaterial(t *testing.T) {
+	scan := model.Scan{Target: "/r", Tools: []string{"gitleaks"}, Findings: []model.Finding{{
+		Tool: "gitleaks", RuleID: "generic-api-key", Severity: model.SeverityHigh,
+		Message:     `found key = "AKIAIOSFODNN7EXAMPLE"`,
+		CodeContext: `aws_key = "AKIAIOSFODNN7EXAMPLE"`,
+	}}}
+	out := renderHTML(t, scan)
+	if strings.Contains(out, "AKIAIOSFODNN7EXAMPLE") {
+		t.Error("report leaked a credential")
+	}
+	if !strings.Contains(out, "matched text is withheld") {
+		t.Error("report should say why the snippet is missing")
+	}
+}

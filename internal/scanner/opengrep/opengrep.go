@@ -21,6 +21,10 @@ type Scanner struct {
 	// bin is the executable name; empty relies on the container entrypoint.
 	bin   string
 	image string
+	// extraRules is an optional second rules directory (the installed community
+	// pack), passed as an additional `-f`. The primary rulesPath stays the offline
+	// fallback; both are loaded when this is set.
+	extraRules string
 }
 
 // Option configures the scanner.
@@ -28,6 +32,9 @@ type Option func(*Scanner)
 
 func WithBin(bin string) Option   { return func(s *Scanner) { s.bin = bin } }
 func WithImage(img string) Option { return func(s *Scanner) { s.image = img } }
+
+// WithExtraRules adds a second rules directory loaded alongside the primary one.
+func WithExtraRules(dir string) Option { return func(s *Scanner) { s.extraRules = dir } }
 
 // New builds an Opengrep scanner. runner selects local vs container execution;
 // rulesPath points at a directory of rule YAML.
@@ -82,6 +89,13 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 			{Name: "rules", HostPath: s.rulesPath, ReadOnly: true},
 			{Name: "out", HostPath: outDir, ReadOnly: false},
 		},
+	}
+
+	if s.extraRules != "" {
+		// Second -f before the {src} positional (the last argument).
+		n := len(cmd.Args) - 1
+		cmd.Args = append(cmd.Args[:n:n], "-f", "{rules2}", cmd.Args[n])
+		cmd.Mounts = append(cmd.Mounts, xexec.Mount{Name: "rules2", HostPath: s.extraRules, ReadOnly: true})
 	}
 
 	res, err := s.runner.Run(ctx, cmd)

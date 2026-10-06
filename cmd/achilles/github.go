@@ -13,6 +13,7 @@ import (
 
 	"github.com/Warzuponus/achilles/internal/github"
 	"github.com/Warzuponus/achilles/internal/gitops"
+	"github.com/Warzuponus/achilles/internal/issues"
 	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/report"
 )
@@ -89,92 +90,49 @@ func runPRReview(ctx context.Context, pr int, headSHA, repo string, scan model.S
 	return nil
 }
 
-// issueLabel scopes issue listing/creation to Achilles's own issues, so we never
-// touch a human's issues when reconciling.
-const issueLabel = "achilles"
-
-// maxNewIssues caps issues opened per run so a first run on a noisy repo can't
-// open hundreds at once.
-const maxNewIssues = 50
-
-// runFileIssues files/reconciles GitHub issues for kept findings, keyed by a
-// per-finding fingerprint marker in the issue body:
-//   - a finding with no existing issue → open one;
-//   - a finding whose fingerprint matches an OPEN issue → already tracked, skip;
-//   - a finding whose fingerprint matches a CLOSED issue → suppressed (a human
-//     triaged/won't-fixed it) → skip;
-//   - an OPEN Achilles issue whose fingerprint is no longer detected → auto-close
-//     (only when reconcile is set; a diff-limited scan doesn't see the full set).
-//
-// Outward-facing + opt-in.
-func runFileIssues(ctx context.Context, repo string, scan model.Scan, reconcile bool) error {
-	gc, err := github.New(envOr("GITHUB_TOKEN", os.Getenv("GH_TOKEN")), repo, os.Getenv("GITHUB_API_URL"))
+// runFileIssues files/reconciles GitHub issues for the scan's kept findings via
+// internal/issues (dedupe, regression reopen, public-repo guard, redaction; see
+// that package). It returns an error only for a fatal problem or, with
+// --issues-strict, for any failed GitHub call; the caller decides whether that is
+// fatal. Outward-facing + opt-in.
+func runFileIssues(ctx context.Context, o *options, scan model.Scan) error {
+	gc, err := github.New(envOr("GITHUB_TOKEN", os.Getenv("GH_TOKEN")), o.repoFlag, os.Getenv("GITHUB_API_URL"))
 	if err != nil {
 		return err
 	}
-	existing, err := gc.ListIssues(ctx, issueLabel)
-	if err != nil {
-		return err
-	}
+	reconcile, why := issuesReconcile(o)
+	_, err = issues.Sync(ctx, gc, scan, issues.Options{
+		Repo:                o.repoFlag,
+		Label:               o.issuesLabel,
+		MinSeverity:         o.issuesMinSeverity,
+		Max:                 o.issuesMax,
+		Group:               issues.Group(o.issuesGroup),
+		DryRun:              o.issuesDryRun,
+		Strict:              o.issuesStrict,
+		AllowPublic:         o.allowPublicIssues,
+		CommitSHA:           os.Getenv("GITHUB_SHA"),
+		ServerURL:           envOr("GITHUB_SERVER_URL", "https://github.com"),
+		Reconcile:           reconcile,
+		ReconcileSkipReason: why,
+		Out:                 os.Stderr,
+	})
+	return err
+}
 
-	openByFP := map[string]int{}   // fingerprint -> open issue number
-	closedFPs := map[string]bool{} // fingerprints a human closed (suppress)
-	for _, is := range existing {
-		m := fpMarkerRE.FindStringSubmatch(is.Body)
-		if m == nil {
-			continue
-		}
-		if is.State == "closed" {
-			closedFPs[m[1]] = true
-		} else {
-			openByFP[m[1]] = is.Number
-		}
+// issuesReconcile reports whether closing issues for findings that are no longer
+// detected is safe. It is only safe when the scan saw everything: a diff, a
+// baseline or a PR-mini delta narrows what is reported, so an absent finding
+// proves nothing. (Failed scanners are checked by issues.Sync from the scan.)
+func issuesReconcile(o *options) (bool, string) {
+	switch {
+	case o.diffRef != "":
+		return false, "--diff only scans changed files"
+	case o.baselinePath != "":
+		return false, "--baseline hides known findings"
+	case o.prMini != "":
+		return false, "--pr-mini reports only the delta against a baseline"
 	}
-
-	current := map[string]bool{} // fingerprints detected this run (gate auto-close)
-	filed, suppressed, tracked := 0, 0, 0
-	for _, f := range scan.Findings {
-		if f.Shadow || f.Fingerprint == "" {
-			continue
-		}
-		current[f.Fingerprint] = true
-		switch {
-		case closedFPs[f.Fingerprint]:
-			suppressed++
-			continue
-		case openByFP[f.Fingerprint] != 0:
-			tracked++
-			continue
-		}
-		if filed >= maxNewIssues {
-			continue
-		}
-		title := fmt.Sprintf("[%s] %s in %s", f.Severity, f.RuleID, f.Location.File)
-		body := fmt.Sprintf("<!-- achilles:fp:%s -->\n**Rule:** %s\n**Severity:** %s\n**Location:** `%s:%d`\n\n%s\n\n_Filed by Achilles. Close this issue to suppress the finding in future scans; it auto-closes when no longer detected._",
-			f.Fingerprint, f.RuleID, f.Severity, f.Location.File, f.Location.Region.StartLine, strings.TrimSpace(f.Message))
-		if _, err := gc.CreateIssue(ctx, title, body, []string{issueLabel}); err != nil {
-			fmt.Fprintf(os.Stderr, "achilles: file-issues: create %q: %v\n", title, err)
-			continue
-		}
-		filed++
-	}
-
-	closed := 0
-	if reconcile {
-		for fp, num := range openByFP {
-			if current[fp] {
-				continue
-			}
-			if err := gc.CloseIssue(ctx, num, "Resolved — Achilles no longer detects this finding. Auto-closing."); err != nil {
-				fmt.Fprintf(os.Stderr, "achilles: file-issues: close #%d: %v\n", num, err)
-				continue
-			}
-			closed++
-		}
-	}
-	fmt.Fprintf(os.Stderr, "achilles: file-issues — %d filed, %d already tracked, %d suppressed (closed), %d auto-closed on %s\n",
-		filed, tracked, suppressed, closed, repo)
-	return nil
+	return true, ""
 }
 
 // maxFixesPerPR caps how many remediation diffs one auto-fix PR carries, keeping

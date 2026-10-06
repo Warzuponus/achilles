@@ -1,0 +1,172 @@
+# GoReleaser v2 configuration. Run by .github/workflows/release.yml on a v* tag.
+#
+#   goreleaser check
+#   goreleaser release --snapshot --clean --skip=sign     # local dry run, publishes nothing
+#
+# Output (dist/):
+#   achilles_<version>_<os>_<arch>.tar.gz          (.zip on Windows)  the CLI; what
+#                                                  scripts/install.sh downloads
+#   achilles-server_<version>_<os>_<arch>.tar.gz   War Room (achillesd) + fleet dispatcher
+#   checksums.txt, checksums.txt.sigstore.json     sha256 of every archive, keyless-signed
+#
+# The scanners (Opengrep, gosec, Trivy, ...) are NOT bundled: `achilles tools install`
+# fetches the pinned, checksum-verified upstream releases. See THIRD-PARTY.md.
+version: 2
+
+project_name: achilles
+
+builds:
+  - id: achilles
+    main: ./cmd/achilles
+    binary: achilles
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - {goos: windows, goarch: arm64}   # no pinned scanner builds for windows/arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: achillesd
+    main: ./cmd/achillesd
+    binary: achillesd
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - {goos: windows, goarch: arm64}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: achilles-fleet
+    main: ./cmd/achilles-fleet
+    binary: achilles-fleet
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - {goos: windows, goarch: arm64}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: cli
+    ids: [achilles]
+    name_template: "achilles_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - {goos: windows, formats: [zip]}
+    files:
+      - LICENSE
+      - README.md
+      - THIRD-PARTY.md
+  - id: server
+    ids: [achillesd, achilles-fleet]
+    name_template: "achilles-server_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - {goos: windows, formats: [zip]}
+    files:
+      - LICENSE
+      - README.md
+      - THIRD-PARTY.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# Keyless (OIDC) signature over checksums.txt, which transitively covers every
+# archive. Needs `cosign` on PATH and `id-token: write` (the release workflow has
+# both). Verify with the command printed in the release notes below.
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+# SBOMs: OFF by default because goreleaser shells out to `syft`, which the release
+# workflow does not install. To enable: add a pinned syft-install step to
+# .github/workflows/release.yml (e.g. anchore/sbom-action/download-syft) and
+# uncomment:
+# sboms:
+#   - artifacts: archive
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^docs?:"
+      - "^test:"
+      - "^ci:"
+      - "^Merge "
+
+release:
+  github:
+    owner: Warzuponus
+    name: achilles
+  prerelease: auto
+  header: |
+    ## Install
+
+    ```sh
+    curl -fsSLO https://raw.githubusercontent.com/Warzuponus/achilles/{{ .Tag }}/scripts/install.sh
+    less install.sh          # read it first
+    VERSION={{ .Tag }} sh install.sh
+    achilles tools install   # fetch the pinned scanners
+    achilles doctor
+    ```
+  footer: |
+    ## Verify
+
+    ```sh
+    cosign verify-blob \
+      --certificate-identity 'https://github.com/Warzuponus/achilles/.github/workflows/release.yml@refs/tags/{{ .Tag }}' \
+      --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+      --bundle checksums.txt.sigstore.json checksums.txt
+    sha256sum --check --ignore-missing checksums.txt
+    ```
+
+# --- Package-manager publishing: DISABLED until a tap/bucket repo and token exist ---
+#
+# Homebrew (needs a separate tap repo, conventionally Warzuponus/homebrew-tap, and a
+# fine-grained PAT with contents:write on it stored as the repo secret
+# HOMEBREW_TAP_GITHUB_TOKEN; also pass it as an env var in release.yml):
+#
+# brews:
+#   - name: achilles
+#     ids: [cli]
+#     repository:
+#       owner: Warzuponus
+#       name: homebrew-tap
+#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+#     homepage: https://github.com/Warzuponus/achilles
+#     description: Orchestrate open-source SAST tools and triage their findings
+#     license: Apache-2.0
+#     test: |
+#       system "#{bin}/achilles", "--version"
+#   (goreleaser >= 2.10 prefers `homebrew_casks`; note unsigned binaries trip
+#    macOS Gatekeeper via casks, so check the current goreleaser docs before choosing.)
+#
+# Scoop (needs a bucket repo, e.g. Warzuponus/scoop-bucket, and SCOOP_BUCKET_GITHUB_TOKEN):
+#
+# scoops:
+#   - ids: [cli]
+#     repository:
+#       owner: Warzuponus
+#       name: scoop-bucket
+#       token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+#     homepage: https://github.com/Warzuponus/achilles
+#     description: Orchestrate open-source SAST tools and triage their findings
+#     license: Apache-2.0

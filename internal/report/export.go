@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Warzuponus/achilles/internal/model"
+	"github.com/Warzuponus/achilles/internal/redact"
 )
 
 // sarifLevel maps our severity onto SARIF result levels.
@@ -32,18 +33,22 @@ func WriteSARIFReport(w io.Writer, s model.Scan) error {
 		Results: []model.SarifResult{},
 	}
 	for _, f := range s.Findings {
-		run.Results = append(run.Results, model.SarifResult{
-			RuleID:  f.RuleID,
-			Level:   sarifLevel(f.Severity),
-			Message: model.SarifMessage{Text: f.Message},
-			Locations: []model.SarifLocation{{
-				PhysicalLocation: model.SarifPhysicalLocation{
-					ArtifactLocation: model.SarifArtifactLocation{URI: f.Location.File},
-					Region:           model.SarifRegion{StartLine: f.Location.Region.StartLine},
-				},
-			}},
-			Fingerprints: map[string]string{"achilles/v1": f.Fingerprint},
-		})
+		run.Results = append(run.Results, sarifResult(f, false))
+	}
+	// Findings the AI review ruled out are still emitted, marked suppressed, so
+	// code scanning shows them as dismissed (with the reason) and does not re-open
+	// them as new alerts on the next run.
+	for _, f := range s.Dismissed {
+		run.Results = append(run.Results, sarifResult(f, true))
+	}
+	if len(s.FailedTools) > 0 {
+		inv := model.SarifInvocation{ExecutionSuccessful: false}
+		for _, t := range s.FailedTools {
+			inv.ToolExecutionNotifications = append(inv.ToolExecutionNotifications, model.SarifNotification{
+				Level: "error", Message: model.SarifMessage{Text: t + " failed to run or its output could not be read; results are incomplete"},
+			})
+		}
+		run.Invocations = []model.SarifInvocation{inv}
 	}
 	log := model.SarifLog{
 		Version: "2.1.0",
@@ -53,6 +58,53 @@ func WriteSARIFReport(w io.Writer, s model.Scan) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(log)
+}
+
+func sarifResult(f model.Finding, suppressed bool) model.SarifResult {
+	msg := f.Message
+	if f.IsSecret() {
+		msg = redact.Secrets(msg) // code scanning alerts are readable by everyone with repo access
+	}
+	r := model.SarifResult{
+		RuleID:  f.RuleID,
+		Level:   sarifLevel(f.Severity),
+		Message: model.SarifMessage{Text: msg},
+		Locations: []model.SarifLocation{{
+			PhysicalLocation: model.SarifPhysicalLocation{
+				ArtifactLocation: model.SarifArtifactLocation{URI: f.Location.File},
+				Region:           model.SarifRegion{StartLine: f.Location.Region.StartLine},
+			},
+		}},
+		Fingerprints: map[string]string{"achilles/v1": f.Fingerprint},
+	}
+	props := map[string]any{}
+	if len(f.CWE) > 0 {
+		props["cwe"] = f.CWE
+	}
+	if v := f.Verdict; v != nil {
+		props["achilles/verdict"] = string(v.Classification)
+		props["achilles/confidence"] = v.Confidence
+		props["achilles/exploitability"] = string(v.Exploitability)
+		if v.SuggestedFix != "" && !f.IsSecret() {
+			props["achilles/suggestedFix"] = v.SuggestedFix
+		}
+	}
+	if len(props) > 0 {
+		r.Properties = props
+	}
+	if suppressed {
+		why := "Ruled out by the Achilles AI review."
+		if v := f.Verdict; v != nil {
+			switch {
+			case v.RefuteReason != "":
+				why = v.RefuteReason
+			case v.Reasoning != "":
+				why = v.Reasoning
+			}
+		}
+		r.Suppressions = []model.SarifSuppression{{Kind: "external", Status: "accepted", Justification: why}}
+	}
+	return r
 }
 
 // --- JUnit ---
@@ -111,29 +163,70 @@ func WriteJUnit(w io.Writer, s model.Scan) error {
 // WriteMarkdown emits a Markdown summary suitable for a PR comment.
 func WriteMarkdown(w io.Writer, s model.Scan) error {
 	fmt.Fprintf(w, "## Achilles scan — %d finding(s)\n\n", len(s.Findings))
-	if len(s.Findings) == 0 {
-		_, err := io.WriteString(w, "No findings. ✅\n")
-		return err
+	if len(s.FailedTools) > 0 {
+		fmt.Fprintf(w, "> **Incomplete scan:** %s failed to run, so missing results are not evidence of safety.\n\n",
+			strings.Join(s.FailedTools, ", "))
 	}
-	fmt.Fprintln(w, "| Severity | Rule | Location | Verdict | Message |")
-	fmt.Fprintln(w, "|----------|------|----------|---------|---------|")
-	for _, f := range s.Findings {
-		loc := f.Location.File
-		if f.Location.Region.StartLine > 0 {
-			loc = fmt.Sprintf("%s:%d", loc, f.Location.Region.StartLine)
+	if t := s.Triage; t != nil {
+		fmt.Fprintf(w, "AI review (`%s`) gave a verdict on %d of %d findings", t.Model, t.Triaged, t.Total)
+		if t.Failed+t.Skipped > 0 {
+			fmt.Fprintf(w, " (%d failed, %d not reached)", t.Failed, t.Skipped)
 		}
-		verdict := "—"
-		if f.Verdict != nil {
-			verdict = string(f.Verdict.Classification)
-			switch {
-			case f.Verdict.Refuted:
-				verdict += " (refuted)"
-			case f.Verdict.Overturned:
-				verdict += " (**overturned by judge**)"
+		fmt.Fprint(w, ".\n\n")
+	}
+	if len(s.Findings) == 0 {
+		msg := "No findings. ✅\n"
+		if len(s.FailedTools) > 0 {
+			msg = "No findings from the tools that ran.\n"
+		}
+		if _, err := io.WriteString(w, msg); err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintln(w, "| Severity | Rule | Location | Verdict | Message |")
+		fmt.Fprintln(w, "|----------|------|----------|---------|---------|")
+		for _, f := range s.Findings {
+			loc := f.Location.File
+			if f.Location.Region.StartLine > 0 {
+				loc = fmt.Sprintf("%s:%d", loc, f.Location.Region.StartLine)
 			}
+			verdict := "—"
+			if f.Verdict != nil {
+				verdict = string(f.Verdict.Classification)
+				switch {
+				case f.Verdict.Refuted:
+					verdict += " (refuted)"
+				case f.Verdict.Overturned:
+					verdict += " (**overturned by judge**)"
+				}
+			}
+			msg := f.Message
+			if f.IsSecret() {
+				msg = redact.Secrets(msg)
+			}
+			fmt.Fprintf(w, "| %s | `%s` | %s | %s | %s |\n",
+				f.Severity, f.RuleID, loc, verdict, mdEscape(msg))
 		}
-		fmt.Fprintf(w, "| %s | `%s` | %s | %s | %s |\n",
-			f.Severity, f.RuleID, loc, verdict, mdEscape(f.Message))
+	}
+	if len(s.Dismissed) > 0 {
+		fmt.Fprintf(w, "\n<details><summary>%d finding(s) ruled out by the AI review</summary>\n\n", len(s.Dismissed))
+		fmt.Fprintln(w, "| Rule | Location | Why |")
+		fmt.Fprintln(w, "|------|----------|-----|")
+		for _, f := range s.Dismissed {
+			loc := f.Location.File
+			if f.Location.Region.StartLine > 0 {
+				loc = fmt.Sprintf("%s:%d", loc, f.Location.Region.StartLine)
+			}
+			why := ""
+			if f.Verdict != nil {
+				why = f.Verdict.Reasoning
+				if f.Verdict.RefuteReason != "" {
+					why = f.Verdict.RefuteReason
+				}
+			}
+			fmt.Fprintf(w, "| `%s` | %s | %s |\n", f.RuleID, loc, mdEscape(why))
+		}
+		fmt.Fprint(w, "\n</details>\n")
 	}
 	return nil
 }

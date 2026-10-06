@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/Warzuponus/achilles/internal/config"
 	"github.com/Warzuponus/achilles/internal/correlate"
@@ -80,6 +83,7 @@ func triageScan(ctx context.Context, o *options, ev vault.Store, runID string, s
 			baseURL: o.llmBaseURL, triageModel: o.llmModel, judgeModel: o.llmJudge,
 			embedModel: o.llmEmbed, remediate: o.remediateOn, rag: o.ragOn, tasks: tasks,
 			dryRun: o.dryRun, maxCost: o.maxCost, prices: priceTable, excluded: excluded,
+			noCode: o.llmNoCode, keepDismissed: o.keepDismissed, concurrency: o.llmConcurrency,
 		}
 		return runTriage(ctx, ev, runID, scan, clusters, opts)
 	}
@@ -103,7 +107,15 @@ type triageOpts struct {
 	maxCost  float64
 	prices   cost.Table
 	excluded []string // LLM work the estimate deliberately omits, for the report
+
+	noCode        bool // --llm-no-code: prompts carry no source; verdicts are then never trusted to dismiss
+	keepDismissed bool // --keep-dismissed: leave AI-dismissed findings in scan.Findings
+	concurrency   int  // findings triaged in parallel; <1 means 1
 }
+
+// abortAfterFailures is how many failed findings in a row, with not one success,
+// mean the endpoint or key is broken rather than the findings: stop spending time.
+const abortAfterFailures = 5
 
 // runTriage runs the LLM triage + judge layer over the scan's findings,
 // mutating them in place and recording provenance to the vault. It applies the
@@ -134,7 +146,7 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 
 	en := enrich.New(3)
 	en.IncludeBlame = true // best-effort git attribution in the prompt context
-	eng := triage.NewEngine(router, ev, en, scan.Target)
+	eng := triage.NewEngine(router, ev, en, scan.Target).SetNoCode(o.noCode)
 
 	// Learning layer (DESIGN.md §8): calibration from accumulated feedback.
 	fb := knowledge.NewFeedbackStore(ev)
@@ -222,15 +234,52 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 			est.TotalUSD, o.maxCost)
 	}
 
+	// A fatal error (rejected credential, exhausted credits, an endpoint that fails
+	// every call) cancels the remaining work: minutes of per-finding errors help no one.
+	llmCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var (
+		mu          sync.Mutex
+		fatal       error
+		failedN     int
+		withheldN   int
+		succeeded   int
+		consecutive int
+	)
 	triageOne := func(i int) {
+		if llmCtx.Err() != nil {
+			return // aborted or out of time: counted as "not reached"
+		}
 		f := &scan.Findings[i]
-		if err := eng.Triage(ctx, runID, f); err != nil {
-			fmt.Fprintf(os.Stderr, "achilles: triage failed for %s: %v\n", f.RuleID, err)
+		err := eng.Triage(llmCtx, runID, f)
+		switch {
+		case errors.Is(err, triage.ErrWithheld):
+			mu.Lock()
+			withheldN++
+			mu.Unlock()
+			return
+		case err != nil:
+			if llmCtx.Err() != nil {
+				return
+			}
+			mu.Lock()
+			failedN++
+			consecutive++
+			if fatal == nil && (fatalLLMError(err) || (consecutive >= abortAfterFailures && succeeded == 0)) {
+				fatal = err
+				cancel()
+			}
+			mu.Unlock()
+			fmt.Fprintf(os.Stderr, "achilles: triage failed for %s: %s\n", f.RuleID, oneLine(err))
 			return
 		}
+		mu.Lock()
+		succeeded++
+		consecutive = 0
+		mu.Unlock()
 		if o.remediate {
-			if err := eng.Remediate(ctx, runID, f); err != nil {
-				fmt.Fprintf(os.Stderr, "achilles: remediation failed for %s: %v\n", f.RuleID, err)
+			if err := eng.Remediate(llmCtx, runID, f); err != nil && llmCtx.Err() == nil {
+				fmt.Fprintf(os.Stderr, "achilles: remediation failed for %s: %s\n", f.RuleID, oneLine(err))
 			}
 		}
 	}
@@ -238,17 +287,41 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	// Pass 1 — everything that gets its own triage: uncorrelated findings and
 	// cluster representatives. A representative is not necessarily the lowest
 	// index in its cluster (it's the highest-severity member), so this has to
-	// complete before anything inherits.
+	// complete before anything inherits. Most severe first: if the LLM budget runs
+	// out, what was reviewed is what matters most.
+	var pass1 []int
 	for i := range scan.Findings {
 		if _, inherited := inheritFrom[i]; !inherited {
-			triageOne(i)
+			pass1 = append(pass1, i)
 		}
 	}
+	sort.SliceStable(pass1, func(a, b int) bool {
+		return scan.Findings[pass1[a]].Severity.Rank() > scan.Findings[pass1[b]].Severity.Rank()
+	})
+	workers := o.concurrency
+	if workers < 1 {
+		workers = 1
+	}
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+	for _, i := range pass1 {
+		if llmCtx.Err() != nil {
+			break
+		}
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			triageOne(i)
+		}(i)
+	}
+	wg.Wait()
 
 	// Pass 2 — correlated duplicates inherit their representative's verdict.
 	for i := range scan.Findings {
 		rep, inherited := inheritFrom[i]
-		if !inherited {
+		if !inherited || llmCtx.Err() != nil {
 			continue
 		}
 		f := &scan.Findings[i]
@@ -272,5 +345,59 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		map[string]any{"promptTokens": u.PromptTokens, "completionTokens": u.CompletionTokens, "totalTokens": u.TotalTokens})
 	fmt.Fprintf(os.Stderr, "achilles: llm usage — %d prompt + %d completion = %d total token(s)\n",
 		u.PromptTokens, u.CompletionTokens, u.TotalTokens)
+
+	if fatal != nil {
+		return u, fmt.Errorf("AI review aborted after %d failed finding(s) with no success: %s\n"+
+			"  check the API key, --llm-base-url / --llm-provider and --llm-model, then re-run (no report was written)",
+			failedN, oneLine(fatal))
+	}
+
+	// Coverage: how much of the scan got a verdict. Reports print this beside the
+	// verdicts so an unreviewed finding is never mistaken for a reviewed one.
+	stats := model.TriageStats{Model: o.triageModel, Total: len(scan.Findings), Failed: failedN, Withheld: withheldN}
+	for _, f := range scan.Findings {
+		if f.Verdict != nil {
+			stats.Triaged++
+		}
+	}
+	stats.Skipped = stats.Total - stats.Triaged - stats.Failed - stats.Withheld
+	if stats.Skipped < 0 {
+		stats.Skipped = 0
+	}
+	switch {
+	case o.keepDismissed:
+	case o.noCode:
+		fmt.Fprintln(os.Stderr, "achilles: --llm-no-code: the model never saw the code, so its false-positive calls are not used to dismiss findings")
+	default:
+		stats.Dismissed = scan.PartitionDismissed()
+	}
+	scan.Triage = &stats
+	fmt.Fprintf(os.Stderr, "achilles: AI review — verdict on %d of %d finding(s); %d dismissed as false positives, %d failed, %d withheld (credentials), %d not reached\n",
+		stats.Triaged, stats.Total, stats.Dismissed, stats.Failed, stats.Withheld, stats.Skipped)
+	if stats.Skipped > 0 && ctx.Err() != nil {
+		fmt.Fprintln(os.Stderr, "achilles: the --llm-budget ran out; the findings above were reviewed most severe first. Raise --llm-budget or narrow the scan with --diff / --baseline.")
+	}
 	return u, nil
+}
+
+// fatalLLMError reports failures that no retry or later finding can fix: a rejected
+// credential or exhausted credits.
+func fatalLLMError(err error) bool {
+	var he *llm.HTTPError
+	if errors.As(err, &he) {
+		return he.Status == 401 || he.Status == 402
+	}
+	return false
+}
+
+// oneLine trims an error to a single readable line for the run log.
+func oneLine(err error) string {
+	s := strings.TrimSpace(err.Error())
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	if len(s) > 240 {
+		s = s[:240] + "…"
+	}
+	return s
 }

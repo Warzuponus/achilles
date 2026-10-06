@@ -7,11 +7,14 @@ package triage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/Warzuponus/achilles/internal/enrich"
 	"github.com/Warzuponus/achilles/internal/model"
+	"github.com/Warzuponus/achilles/internal/redact"
 	"github.com/Warzuponus/achilles/internal/triage/llm"
 	"github.com/Warzuponus/achilles/internal/vault"
 )
@@ -37,12 +40,37 @@ type Engine struct {
 	retriever  ExampleRetriever // optional (RAG); nil disables few-shot
 	calibrator Calibrator       // optional; nil disables auto-resolution
 
-	usage llm.Usage // accumulated token usage across all LLM calls this run
+	noCode bool // privacy mode: never put source code in a prompt
+
+	mu    sync.Mutex // guards usage; findings are triaged concurrently
+	usage llm.Usage  // accumulated token usage across all LLM calls this run
 }
+
+// ErrWithheld means a finding was deliberately not sent to the model: it is about
+// a credential, so its content must not leave the machine. It is not a failure.
+var ErrWithheld = errors.New("finding withheld from the model (it concerns a credential)")
 
 // Usage returns the token usage accumulated across every LLM call this engine
 // has made (triage + judge + remediation).
-func (e *Engine) Usage() llm.Usage { return e.usage }
+func (e *Engine) Usage() llm.Usage {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.usage
+}
+
+// SetNoCode makes every prompt carry the rule, message and location but never
+// source code (--llm-no-code).
+func (e *Engine) SetNoCode(on bool) *Engine { e.noCode = on; return e }
+
+// promptView is what the model is allowed to see of a finding: the message has
+// credentials masked, and the code context is bounded by the privacy settings.
+func (e *Engine) promptView(f model.Finding) (model.Finding, string) {
+	f.Message = redact.Prompt(f.Message)
+	if e.noCode {
+		return f, "(source code withheld by --llm-no-code)"
+	}
+	return f, redact.Prompt(e.enricher.Context(f, e.root))
+}
 
 // NewEngine wires the triage engine. root is the scanned tree root (for context
 // reads). vault may be nil to skip provenance recording.
@@ -102,13 +130,16 @@ func (e *Engine) Inherit(runID string, f *model.Finding, rep model.Finding) {
 
 // Triage populates f.Verdict and f.Provenance in place.
 func (e *Engine) Triage(ctx context.Context, runID string, f *model.Finding) error {
+	if f.IsSecret() {
+		return ErrWithheld
+	}
 	// Calibration short-circuit: a chronically false-positive rule is resolved
 	// from feedback history without spending an LLM call (DESIGN.md §8).
 	if e.AutoResolve(runID, f) {
 		return nil
 	}
 
-	codeContext := e.enricher.Context(*f, e.root)
+	pf, codeContext := e.promptView(*f)
 
 	// RAG few-shot: retrieve similar past findings with known verdicts.
 	var examples []string
@@ -119,7 +150,7 @@ func (e *Engine) Triage(ctx context.Context, runID string, f *model.Finding) err
 	}
 
 	// --- triage pass ---
-	tResp, err := e.completeValidated(ctx, "triage", triageMessages(*f, codeContext, examples), "verdict", verdictSchema, &verdictCheck{})
+	tResp, err := e.completeValidated(ctx, "triage", triageMessages(pf, codeContext, examples), "verdict", verdictSchema, &verdictCheck{})
 	if err != nil {
 		return fmt.Errorf("triage llm: %w", err)
 	}
@@ -133,7 +164,7 @@ func (e *Engine) Triage(ctx context.Context, runID string, f *model.Finding) err
 	}
 
 	// --- adversarial judge pass ---
-	jResp, err := e.completeValidated(ctx, "judge", judgeMessages(*f, codeContext, v), "judge", judgeSchema, &judgeCheck{})
+	jResp, err := e.completeValidated(ctx, "judge", judgeMessages(pf, codeContext, v), "judge", judgeSchema, &judgeCheck{})
 	if err != nil {
 		return fmt.Errorf("judge llm: %w", err)
 	}
@@ -171,8 +202,11 @@ func (e *Engine) Remediate(ctx context.Context, runID string, f *model.Finding) 
 	if f.Verdict == nil || !f.Verdict.HighConfidence() {
 		return nil
 	}
-	codeContext := e.enricher.Context(*f, e.root)
-	resp, err := e.completeValidated(ctx, "remediation", remediationMessages(*f, codeContext), "remediation", remediationSchema, &remediationCheck{})
+	if f.IsSecret() {
+		return nil
+	}
+	pf, codeContext := e.promptView(*f)
+	resp, err := e.completeValidated(ctx, "remediation", remediationMessages(pf, codeContext), "remediation", remediationSchema, &remediationCheck{})
 	if err != nil {
 		return fmt.Errorf("remediation llm: %w", err)
 	}
@@ -206,7 +240,9 @@ type schemaCheck interface{ validate() error }
 func (e *Engine) completeValidated(ctx context.Context, task string, msgs []llm.Message, schemaName string, schema json.RawMessage, check schemaCheck) (llm.Response, error) {
 	resp, err := llm.CompleteAndDecode(ctx, e.router.For(task), msgs,
 		&llm.Schema{Name: schemaName, Definition: schema}, check, check.validate)
+	e.mu.Lock()
 	e.usage.Add(resp.Usage) // accumulate even on partial success; zero when unreported
+	e.mu.Unlock()
 	if err != nil && resp.Content == "" {
 		return resp, err
 	}

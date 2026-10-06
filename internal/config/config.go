@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Warzuponus/achilles/configs"
 	"github.com/Warzuponus/achilles/internal/policy"
 )
 
@@ -79,15 +80,47 @@ type Config struct {
 	Tools []ToolConfig `yaml:"tools"`
 }
 
-// Load reads and validates a tools.yaml file.
+// Load reads and validates a tools.yaml file. An empty path loads the copy
+// embedded in the binary (configs/tools.yaml, byte-identical) and points each
+// tool's rules at a real directory (see ResolveRulesDir), so a downloaded
+// `achilles` needs no repository checkout. An explicit path is read as-is.
 func Load(path string) (*Config, error) {
+	if path == "" {
+		return loadEmbedded()
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
 	}
+	return parse(data, path)
+}
+
+func loadEmbedded() (*Config, error) {
+	data, err := configs.ToolsYAML()
+	if err != nil {
+		return nil, fmt.Errorf("read embedded config: %w", err)
+	}
+	c, err := parse(data, "(embedded configs/tools.yaml)")
+	if err != nil {
+		return nil, err
+	}
+	for i := range c.Tools {
+		if c.Tools[i].Rules == "" {
+			continue
+		}
+		dir, err := ResolveRulesDir(c.Tools[i].Rules)
+		if err != nil {
+			return nil, fmt.Errorf("tool %q: rules: %w", c.Tools[i].ID, err)
+		}
+		c.Tools[i].Rules = dir
+	}
+	return c, nil
+}
+
+func parse(data []byte, label string) (*Config, error) {
 	var c Config
 	if err := yaml.Unmarshal(data, &c); err != nil {
-		return nil, fmt.Errorf("parse config %s: %w", path, err)
+		return nil, fmt.Errorf("parse config %s: %w", label, err)
 	}
 	if err := c.validate(); err != nil {
 		return nil, err

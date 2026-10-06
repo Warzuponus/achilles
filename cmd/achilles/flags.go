@@ -4,8 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/Warzuponus/achilles/internal/triage/llm"
 	"github.com/Warzuponus/achilles/internal/vault"
 )
 
@@ -75,13 +78,32 @@ type options struct {
 	targetLabel       string
 	sourceCommit      string
 
+	// One-flag AI scan, provider presets and LLM-phase controls.
+	aiOn           bool          // --ai: triage + remediate + review + SCA advice + all reports
+	reportDir      string        // --report-dir: where --ai writes report.html/.md/.sarif
+	llmProvider    string        // --llm-provider: openai | openrouter | ollama (sets the base URL)
+	llmBudget      time.Duration // --llm-budget: time allowed for all LLM phases (separate from --timeout)
+	llmConcurrency int           // --llm-concurrency: findings triaged in parallel
+	llmNoCode      bool          // --llm-no-code: never send source snippets to the model
+	keepDismissed  bool          // --keep-dismissed: do not move AI-dismissed findings out of the gate
+	showVersion    bool          // --version
+
+	// Issue filing (see internal/issues).
+	issuesMinSeverity string // --issues-min-severity
+	issuesMax         int    // --issues-max
+	issuesGroup       string // --issues-group: finding | rule | rollup
+	issuesLabel       string // --issues-label
+	issuesDryRun      bool   // --issues-dry-run
+	issuesStrict      bool   // --issues-strict: exit non-zero if any GitHub call failed
+	allowPublicIssues bool   // --allow-public-issues
+
 	target string // the path to scan (first positional argument; default ".")
 }
 
 func parseFlags(argv []string) (*options, error) {
 	fs := flag.NewFlagSet("achilles", flag.ContinueOnError)
 	o := &options{}
-	fs.StringVar(&o.configPath, "config", "configs/tools.yaml", "tool registry file")
+	fs.StringVar(&o.configPath, "config", "", "tool registry file (default: the registry embedded in the binary)")
 	fs.StringVar(&o.profile, "profile", "default", "scan profile: default (baseline tools) | full (also the heavy per-language tools)")
 	fs.StringVar(&o.mode, "mode", "oss", "license mode: oss | commercial")
 	fs.StringVar(&o.attest, "attest", "", "comma-separated tool IDs with a supplied license attestation")
@@ -143,6 +165,21 @@ func parseFlags(argv []string) (*options, error) {
 	fs.StringVar(&o.threatModelOut, "threat-model", "", "infer an OTM threat model and write it to this file (needs --llm-model)")
 	fs.StringVar(&o.targetLabel, "target-label", "", "record this stable, non-secret identity (e.g. a repo URL) as the run's target instead of the scanned path (used by achilles-fleet for fetched checkouts)")
 	fs.StringVar(&o.sourceCommit, "source-commit", "", "record the scanned source's commit sha in the run metadata (used by achilles-fleet)")
+	fs.BoolVar(&o.aiOn, "ai", false, "full AI-verified scan: --triage --remediate --review --sca-advice, and write report.html, report.md and achilles.sarif into --report-dir (needs an LLM key and --llm-model or --llm-provider)")
+	fs.StringVar(&o.reportDir, "report-dir", "achilles-report", "directory --ai writes its reports into")
+	fs.StringVar(&o.llmProvider, "llm-provider", os.Getenv("ACHILLES_LLM_PROVIDER"), "LLM endpoint preset: openai | openrouter | ollama (sets --llm-base-url; an explicit --llm-base-url wins)")
+	fs.DurationVar(&o.llmBudget, "llm-budget", 45*time.Minute, "time allowed for all LLM phases combined; separate from --timeout, which bounds the scanners")
+	fs.IntVar(&o.llmConcurrency, "llm-concurrency", 4, "findings triaged in parallel (1 = sequential)")
+	fs.BoolVar(&o.llmNoCode, "llm-no-code", false, "privacy mode: send the model only rule, message and location, never source code")
+	fs.BoolVar(&o.keepDismissed, "keep-dismissed", false, "keep findings the AI review confidently dismissed in the gate, issues and counts (default: list them separately)")
+	fs.BoolVar(&o.showVersion, "version", false, "print the version and exit")
+	fs.StringVar(&o.issuesMinSeverity, "issues-min-severity", "medium", "with --file-issues: lowest severity to file (critical|high|medium|low)")
+	fs.IntVar(&o.issuesMax, "issues-max", 25, "with --file-issues: most NEW issues to open in one run (highest severity first)")
+	fs.StringVar(&o.issuesGroup, "issues-group", "finding", "with --file-issues: one issue per finding | rule | one rollup issue")
+	fs.StringVar(&o.issuesLabel, "issues-label", "achilles", "with --file-issues: label that marks issues Achilles manages")
+	fs.BoolVar(&o.issuesDryRun, "issues-dry-run", false, "with --file-issues: print the issues that would be opened/updated/closed and call no write API")
+	fs.BoolVar(&o.issuesStrict, "issues-strict", false, "with --file-issues: exit non-zero if any GitHub call failed")
+	fs.BoolVar(&o.allowPublicIssues, "allow-public-issues", false, "with --file-issues: allow filing vulnerability details as issues in a PUBLIC repository")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: achilles [flags] <target-path>")
 		fs.PrintDefaults()
@@ -154,5 +191,59 @@ func parseFlags(argv []string) (*options, error) {
 	if fs.NArg() > 0 {
 		o.target = fs.Arg(0)
 	}
+	explicit := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+	if err := o.applyPresets(explicit); err != nil {
+		return nil, err
+	}
 	return o, nil
+}
+
+// applyPresets expands --llm-provider and --ai. An explicitly given flag (or its
+// environment variable) always wins over a preset.
+func (o *options) applyPresets(explicit map[string]bool) error {
+	if o.llmProvider != "" {
+		base, err := llm.ProviderBaseURL(o.llmProvider)
+		if err != nil {
+			return err
+		}
+		if !explicit["llm-base-url"] && os.Getenv("ACHILLES_LLM_BASE_URL") == "" {
+			o.llmBaseURL = base
+		}
+		if strings.EqualFold(o.llmProvider, "ollama") && !explicit["llm-auth"] && os.Getenv("ACHILLES_LLM_AUTH") == "" {
+			o.llmAuth = llm.ModeNone
+		}
+	}
+	if o.aiOn {
+		o.triageOn, o.remediateOn, o.reviewOn, o.scaAdvice = true, true, true, true
+		if o.htmlReport == "" {
+			o.htmlReport = filepath.Join(o.reportDir, "report.html")
+		}
+		if o.markdownOut == "" {
+			o.markdownOut = filepath.Join(o.reportDir, "report.md")
+		}
+		if o.sarifReport == "" {
+			o.sarifReport = filepath.Join(o.reportDir, "achilles.sarif")
+		}
+	}
+	return nil
+}
+
+// llmWanted reports whether any requested feature calls a model.
+func (o *options) llmWanted() bool {
+	return o.triageOn || o.remediateOn || o.reviewOn || o.scaAdvice ||
+		o.threatModelOut != "" || o.researchOn || o.mineRules
+}
+
+// validateLLM fails before any scanning when the LLM setup cannot work, instead of
+// letting every finding fail one at a time after minutes of scanning.
+func (o *options) validateLLM() error {
+	if !o.llmWanted() || o.dryRun {
+		return nil
+	}
+	if o.llmModel == "" && o.modelConfig == "" {
+		return fmt.Errorf("AI features need a model: set --llm-model (or ACHILLES_LLM_MODEL), e.g. " +
+			"--llm-provider openrouter --llm-model anthropic/claude-sonnet-4.5; see docs/llm-and-agents.md")
+	}
+	return llm.CheckEndpoint(o.llmBaseURL, o.llmAuth, llm.APIKeyFromEnv())
 }

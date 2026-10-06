@@ -50,12 +50,13 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 			fmt.Fprintf(os.Stderr, "achilles: pr-review: %v\n", err)
 		}
 	}
+	var issuesErr error // returned last, only under --issues-strict, so fix-pr and the baseline still run
 	if o.fileIssues && !o.dryRun {
-		// Auto-close reconciles against the full current finding set; a diff-limited
-		// scan only sees changed files, so we skip closing then to avoid closing
-		// issues whose findings simply weren't in the diff.
-		if err := runFileIssues(ctx, o.repoFlag, scan, o.diffRef == ""); err != nil {
+		if err := runFileIssues(ctx, o, scan); err != nil {
 			fmt.Fprintf(os.Stderr, "achilles: file-issues: %v\n", err)
+			if o.issuesStrict {
+				issuesErr = fmt.Errorf("file-issues: %w", err)
+			}
 		}
 	}
 	if o.fixPR && !o.dryRun {
@@ -69,7 +70,7 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 		}
 		fmt.Fprintf(os.Stderr, "achilles: wrote baseline (%d finding(s)) to %s\n", len(inScope), o.writeBl)
 	}
-	return nil
+	return issuesErr
 }
 
 // writeDiagnostics is the observability sidecar: coverage gaps (tools that failed

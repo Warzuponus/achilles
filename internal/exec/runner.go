@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -71,7 +72,15 @@ func mountNames(mounts []Mount) []string {
 }
 
 func runOS(ctx context.Context, name string, args []string) (Result, error) {
+	return runOSEnv(ctx, name, args, nil)
+}
+
+// runOSEnv is runOS with extra KEY=VALUE environment entries (nil = inherit as is).
+func runOSEnv(ctx context.Context, name string, args []string, extraEnv []string) (Result, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

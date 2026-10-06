@@ -143,6 +143,7 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 			diags = append(diags, toolDiag{Tool: r.id, Stage: "normalize", Error: r.normErr.Error()})
 			continue
 		}
+		relativizeFindings(absTarget, r.findings)
 		for _, f := range r.findings {
 			recordJSON(ev, vault.Record{RunID: runID, Phase: "triage", Kind: vault.KindFinding,
 				Source: r.id, Fingerprint: f.Fingerprint}, f)
@@ -167,6 +168,7 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 		} else if fs, nerr := normalize.Normalize(raw.Format, raw.Tool, raw.Data); nerr == nil && len(fs) > 0 {
 			recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindRawOutput, Source: "opengrep-shadow"},
 				map[string]any{"sarif": json.RawMessage(raw.Data)})
+			relativizeFindings(absTarget, fs)
 			for i := range fs {
 				fs[i].Shadow = true
 				recordJSON(ev, vault.Record{RunID: runID, Phase: "triage", Kind: vault.KindFinding,
@@ -286,4 +288,30 @@ func correlateFindings(o *options, ev vault.Store, runID string, scan *model.Sca
 			map[string]any{"clusters": len(clusters), "triagePassesSaved": correlate.Saved(clusters)})
 	}
 	return clusters
+}
+
+// relativizeFindings rewrites absolute finding paths that lie under root to
+// slash-separated paths relative to it. Scanners disagree (Opengrep reports
+// absolute paths, gosec relative ones); everything downstream (SARIF for code
+// scanning, issue permalinks, baselines, --diff matching) needs one repo-relative
+// form, and an absolute path would also leak the scanning machine's directory
+// layout into shared reports.
+func relativizeFindings(root string, fs []model.Finding) {
+	roots := []string{root}
+	if real, err := filepath.EvalSymlinks(root); err == nil && real != root {
+		roots = append(roots, real) // e.g. /tmp -> /private/tmp on macOS
+	}
+	for i := range fs {
+		file := fs[i].Location.File
+		if !filepath.IsAbs(file) {
+			continue
+		}
+		for _, r := range roots {
+			rel, err := filepath.Rel(r, file)
+			if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				fs[i].Location.File = filepath.ToSlash(rel)
+				break
+			}
+		}
+	}
 }

@@ -8,7 +8,7 @@
 #
 # Build:
 #   docker build -t achilles/govulncheck:1.6.0 deployments/govulncheck
-FROM golang:1.26
+FROM golang:1.27
 # TODO: pin the base image by digest before release.
 
 ARG GOVULNCHECK_VERSION=v1.6.0

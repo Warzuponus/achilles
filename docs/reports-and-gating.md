@@ -17,7 +17,9 @@ write a file (they compose — ask for several at once):
 | `--sbom f.json` | CycloneDX SBOM | supply-chain inventory (via Syft; independent of findings) |
 | `--diagnostics f.json` | JSON sidecar | debugging coverage — which tools failed to run/parse, LLM token usage |
 
-The **HTML report** is the showcase: it folds in the LLM agents' output when they
+Every report says whether the scan was **complete** (a banner names any scanner that
+failed to run) and how much of it the AI review **covered**. Findings the AI
+confirmed are listed first within each severity. The **HTML report** is the showcase: it folds in the LLM agents' output when they
 ran (systemic-risk review, dependency upgrade plan, STRIDE threat model) plus each
 finding's triage verdict and suggested fix. See [LLM Triage & Agents](llm-and-agents.md).
 
@@ -35,6 +37,28 @@ achilles --fail-on high .     # exit 1 if any surviving finding is >= high
 
 Severity order: `critical > high > medium > low`. The gate runs *after* all
 filtering below, so it only ever considers findings you didn't suppress.
+
+### The gate and the AI review
+
+With `--triage` (or `--ai`), a finding the AI review is **confident is a false
+positive** (confidence at least 0.7, and the adversarial second pass did not
+overturn it) is moved out of the gate, out of the issues Achilles files, and out of
+the headline counts. It is not hidden: every report lists these findings in their own
+section ("Ruled out by the AI review", with the model's reason), and SARIF carries
+them as *suppressed* results so code scanning shows them as dismissed. These are
+never dismissed: uncertain or low-confidence verdicts, verdicts the judge overturned,
+findings about credentials (the model never sees those), and anything the review did
+not reach.
+
+```bash
+achilles --ai --fail-on high .                  # gate on what survived the AI review
+achilles --ai --keep-dismissed --fail-on high . # gate on raw scanner severity instead
+```
+
+Use `--keep-dismissed` when the code's authors are not trusted: a hostile repository
+can try to talk the model into dismissing a real finding (see
+[SECURITY.md](../SECURITY.md)). Every report states how many findings the AI
+review covered, so a partial review is visible.
 
 ### One other thing fails the run
 

@@ -1,0 +1,12 @@
+Achilles
+Copyright 2026 David Ford
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Achilles orchestrates third-party security scanners as separate programs. They
+are not part of this work, are not linked into the `achilles` binary, and are
+licensed by their own authors under their own terms; some are downloaded on your
+request by `achilles tools install` rather than distributed with it. The list,
+versions and licenses are in THIRD-PARTY.md. If you redistribute Achilles together
+with any of them, you take on the notice and source-offer obligations of their
+licenses (notably LGPL for Opengrep).

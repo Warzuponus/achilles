@@ -6,22 +6,71 @@ All of it is **opt-in**; with no LLM configured, Achilles is a pure scanner.
 
 ## Setup
 
-Achilles talks to any **OpenAI-compatible** endpoint. You need a model and a key:
+Achilles talks to any **OpenAI-compatible** endpoint. You need a key and a model.
+The shortest path is `--ai`, which turns on triage, fix suggestions, the repo
+review and the dependency advisor, and writes `report.html`, `report.md` and
+`achilles.sarif` into `--report-dir` (default `achilles-report/`):
 
 ```bash
-export ACHILLES_LLM_API_KEY=...        # or OPENAI_API_KEY
-achilles --triage --llm-model gpt-4o /path/to/code
+export ACHILLES_LLM_API_KEY=...        # your provider's key (or OPENAI_API_KEY)
+achilles --ai --llm-provider openrouter --llm-model <model> /path/to/code
 ```
 
-Point `--llm-base-url` elsewhere for a self-hosted or alternative provider
-(Ollama, vLLM, LiteLLM, OpenRouter, Azure OpenAI, a gateway, etc.):
+`--llm-provider` is a shortcut for the base URL:
 
-```bash
-achilles --triage --llm-base-url https://ollama.com/v1 --llm-model glm-5.2 .
-```
+| Provider | `--llm-provider` | Base URL | Key |
+|----------|------------------|----------|-----|
+| OpenAI | `openai` (default) | `https://api.openai.com/v1` | required |
+| OpenRouter | `openrouter` | `https://openrouter.ai/api/v1` | required |
+| Ollama (local) | `ollama` | `http://localhost:11434/v1` | none |
+| Anthropic (experimental) | `anthropic` | `https://api.anthropic.com/v1` | required |
+
+Anything else (vLLM, LiteLLM, Azure OpenAI, a gateway) is `--llm-base-url`. An
+explicit `--llm-base-url` always wins over a provider preset. There is deliberately
+no default model: model names change faster than this project, so pick one that
+your provider serves and pass it with `--llm-model` (or `ACHILLES_LLM_MODEL`).
+
+Achilles checks the setup **before it scans**: a missing key for a hosted endpoint, a
+key that plainly belongs to a different provider than the endpoint (it will not send
+an OpenRouter or Anthropic key to OpenAI), an API key over plain `http`, or a missing
+model all stop the run immediately with the fix. If the provider rejects the key or
+has no credits mid-run, the run stops after the first rejection instead of failing
+every finding in turn.
 
 The key is read from the environment only — it never appears on a command line or
 in the vault.
+
+### What leaves your machine
+
+With AI features on, the code around each finding (the enclosing function, a few
+callers in the same file, and git-blame author and date) is sent to the LLM endpoint,
+and Achilles prints the destination host before it starts. Before sending:
+
+- credentials in the code and messages are masked (cloud keys, tokens, private keys,
+  `password = "..."` style assignments);
+- findings **about** credentials (Gitleaks and other secret rules) are never sent to the
+  model at all, and are never dismissed by it;
+- `--llm-no-code` sends only rule names, messages and file locations. Verdicts made
+  without seeing code are weak, so in this mode the AI never dismisses a finding;
+- a local model (`--llm-provider ollama`) keeps everything on your machine.
+
+### Time and parallelism
+
+`--timeout` (default 5m) bounds the scanners. The AI phases have their own
+`--llm-budget` (default 45m) and review `--llm-concurrency` findings (default 4) at a
+time, most severe first, so if the budget runs out what was reviewed is what matters
+most. Whatever was not reached is reported as such, in the log and in every report,
+and stays in the gate: an unreviewed finding is never treated as a dismissed one.
+
+### What the AI review can and cannot tell you
+
+Be honest about it when you read the verdicts. The model sees one file's worth of
+context per finding, not the whole program: "reachable" is its judgment from that
+context, not a proof. `--review` and `--threat-model` reason from scan statistics
+(languages, dependencies, which rules fired), not by reading your source. On the
+project's own small labeled corpus the shipped routing scores well, but the corpus is
+18 synthetic Go and Python cases, so treat accuracy numbers as indicative.
+Findings the AI dismissed are always listed so you can audit them.
 
 ## Measuring whether triage actually works
 

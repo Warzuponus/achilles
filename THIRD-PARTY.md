@@ -6,9 +6,9 @@ their licenses and how Achilles uses them.
 
 ## The AGPL / copyleft process-boundary rule
 
-Some scanners (e.g. **TruffleHog**, AGPL-3.0) are strong-copyleft. Achilles
-invokes such tools **only as separate processes in their own container** — never
-by importing them as libraries. Arm's-length process invocation is "mere
+Some scanners (e.g. **ShellCheck**, GPL-3.0, or **TruffleHog**, AGPL-3.0, if you add
+it) are strong-copyleft. Achilles invokes such tools **only as separate processes in
+their own container** — never by importing them as libraries. Arm's-length process invocation is "mere
 aggregation" and does not impose the tool's copyleft on Achilles. The
 [license-check CI workflow](.github/workflows/license-check.yml) enforces this:
 it fails the build if any Go dependency is copyleft (AGPL/GPL/LGPL) via
@@ -18,6 +18,29 @@ imports are allowed.
 
 > This is engineering guidance, not legal advice. Obtain legal review before
 > redistributing Achilles inside a commercial product.
+
+## What the downloadable `achilles` binary bundles (and what it fetches)
+
+The release archives (`.goreleaser.yaml`) contain only Achilles itself, built from
+this repository, plus its Go library dependencies (permissive licenses; see the
+license check above). **No third-party scanner is included.** Embedded in the
+binary: `configs/tools.yaml` and the Achilles-authored baseline rules in
+`configs/rules/`.
+
+`achilles tools install` downloads, on the user's machine and from the upstream
+project, the unmodified release assets listed in
+`internal/toolchain/manifest.go` (the same versions as the container image below),
+each verified against a pinned sha256 before it is unpacked. Those tools keep their
+own licenses and run only as separate processes.
+
+`achilles tools install rules` downloads the community
+[opengrep-rules](https://github.com/opengrep/opengrep-rules) pack at a pinned commit
+(security rules for the main languages only). It is the Semgrep rules, **LGPL-2.1
+with a Commons Clause** that forbids selling the rules (including hosting or
+consulting whose value derives substantially from them). It is therefore never
+embedded, committed or redistributed by Achilles, and Achilles does not load it
+under `--mode commercial`. Review the `LICENSE` file installed alongside the rules
+before using it in a paid service.
 
 ## Redistributed binaries in the container image
 
@@ -49,7 +72,7 @@ in `/usr/share/doc/*/copyright`.
 | Trivy | Apache-2.0 | Yes | container/CLI | SCA / IaC / secrets / misconfig (SARIF) |
 | Checkov | Apache-2.0 | Yes (separate process) | container/CLI | 2nd IaC scanner (CloudFormation/K8s/Helm/…); Achilles-built image (deployments/checkov), SARIF-native |
 | Gitleaks | MIT | Yes | container/CLI | Secrets |
-| TruffleHog | **AGPL-3.0** | Yes, **process-boundary only** | container/CLI | Secrets w/ verification; never linked |
+| TruffleHog | **AGPL-3.0** | Yes, **process-boundary only** | container/CLI | Candidate; **not shipped and not in `configs/tools.yaml`**. If you add it, run it only as a separate process; never linked |
 | ShellCheck | **GPL-3.0** | Yes, **process-boundary only** | container/CLI | Shell (sh/bash) SAST; Achilles-built image (deployments/shellcheck), native JSON normalized; never linked |
 | Syft | Apache-2.0 | Yes (separate process) | container/CLI | SBOM generator (CycloneDX); Achilles-built image (deployments/syft); backs `--sbom` (artifact, not findings) |
 | Grype | Apache-2.0 | Yes | container/CLI | SCA (candidate; not yet wired) |
@@ -79,5 +102,5 @@ Enforced by the license-check CI workflow: all imports must be permissive or MPL
 MPL-2.0 (chromem-go) is weak/file-level copyleft: fine to import for a commercial
 product (obligations cover only the MPL-licensed files, whose source is public).
 
-(Regenerate this section as dependencies change; a `go-licenses`-based check is
-planned for CI.)
+(Regenerate this section as dependencies change. A `go-licenses` check runs in CI:
+see `.github/workflows/license-check.yml`.)

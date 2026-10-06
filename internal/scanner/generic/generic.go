@@ -124,6 +124,9 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 	// output file existing, not on the exit code.
 	outHost := strings.ReplaceAll(s.cfg.OutputFile, "{out}", outDir)
 	data, err := os.ReadFile(outHost)
+	if err != nil && nothingToScan(s.cfg.NothingToScan, res) {
+		data, err = []byte(fmt.Sprintf(`{"version":"2.1.0","runs":[{"tool":{"driver":{"name":%q}},"results":[]}]}`, s.cfg.ID)), nil
+	}
 	if err != nil {
 		return scanner.RawResult{}, fmt.Errorf("%s: reading %s failed (exit %d): %w (stderr: %s)",
 			s.cfg.ID, filepath.Base(outHost), res.ExitCode, err, string(res.Stderr))
@@ -140,4 +143,16 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 		ExitCode: res.ExitCode,
 		Stderr:   string(res.Stderr),
 	}, nil
+}
+
+// nothingToScan reports whether the tool said, in its output, that the target has
+// nothing it applies to (see config.ToolConfig.NothingToScan).
+func nothingToScan(phrases []string, res xexec.Result) bool {
+	out := string(res.Stderr) + "\n" + string(res.Stdout)
+	for _, p := range phrases {
+		if p != "" && strings.Contains(out, p) {
+			return true
+		}
+	}
+	return false
 }

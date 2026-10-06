@@ -208,3 +208,35 @@ func TestRun_RunnerWithoutHasSkipsPrerequisiteCheck(t *testing.T) {
 		t.Errorf("docker-style runner must not be blocked: %v", err)
 	}
 }
+
+// noReportRunner is a tool that exits without writing its report, printing msg.
+type noReportRunner struct{ stderr string }
+
+func (n noReportRunner) Run(context.Context, xexec.Command) (xexec.Result, error) {
+	return xexec.Result{ExitCode: 128, Stderr: []byte(n.stderr)}, nil
+}
+
+func TestRun_NothingToScanIsAnEmptyResultNotAFailure(t *testing.T) {
+	cfg := testCfg()
+	cfg.ID = "osv-scanner"
+	cfg.NothingToScan = []string{"No package sources found"}
+
+	raw, err := New(noReportRunner{stderr: "Scanning dir /x\nNo package sources found, --help for usage information.\n"}, cfg, "").
+		Run(context.Background(), scanner.Target{Path: "/x"})
+	if err != nil {
+		t.Fatalf("a tree with nothing to scan must not be a failure: %v", err)
+	}
+	if !strings.Contains(string(raw.Data), `"results":[]`) || raw.Tool != "osv-scanner" {
+		t.Errorf("want an empty SARIF result for osv-scanner, got %s (tool %q)", raw.Data, raw.Tool)
+	}
+}
+
+func TestRun_MissingReportStillFailsWithoutTheMarker(t *testing.T) {
+	cfg := testCfg()
+	cfg.NothingToScan = []string{"No package sources found"}
+	_, err := New(noReportRunner{stderr: "panic: something real broke"}, cfg, "").
+		Run(context.Background(), scanner.Target{Path: "/x"})
+	if err == nil {
+		t.Fatal("a tool that wrote no report for any other reason must still fail")
+	}
+}

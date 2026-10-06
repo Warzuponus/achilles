@@ -41,7 +41,12 @@ type ToolConfig struct {
 	Format     string   `yaml:"format"`
 	Argv       []string `yaml:"argv"`
 	OutputFile string   `yaml:"outputFile"`
-	Rules      string   `yaml:"rules"`
+	// NothingToScan lists phrases a tool prints when it exits without writing a
+	// report because the target has nothing it applies to (osv-scanner on a tree
+	// with no dependency manifests). Seeing one means "no results", not "the tool
+	// failed", so the scan is not marked incomplete.
+	NothingToScan []string `yaml:"nothingToScan"`
+	Rules         string   `yaml:"rules"`
 	// Network is the docker network policy ("none" default for containment,
 	// "default" to allow egress for tools that need it — SCA DBs, NuGet restore).
 	Network string `yaml:"network"`

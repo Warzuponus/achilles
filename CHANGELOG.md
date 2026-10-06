@@ -57,4 +57,8 @@ First public release (`v0.1.0`) is pending.
 - Opengrep under `--runner docker` asked Docker for an empty image; it now runs as the
   local binary, as documented.
 - Opengrep crashed under a non-UTF-8 locale when reading non-ASCII community rules.
+- osv-scanner exiting with "No package sources found" (a tree with no dependency
+  manifests) was reported as a failed tool, marking every such scan "incomplete" and
+  failing it under `--strict-tools`. It is now an empty result (`nothingToScan` in the
+  tool registry).
 - Documentation referred to a release tag and install paths that did not exist.

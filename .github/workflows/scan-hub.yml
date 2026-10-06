@@ -42,12 +42,12 @@ jobs:
       ACHILLES_LLM_BASE_URL: https://ollama.com/v1
     steps:
       # 1. This repo — provides the action, the tool registry, and the routing.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # 2. A short-lived token scoped to JUST the target repo (Contents: Read).
       - name: Mint target-scoped token
         id: tok
-        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.SCANNER_APP_ID }}
           private-key: ${{ secrets.SCANNER_APP_PRIVATE_KEY }}
@@ -56,7 +56,7 @@ jobs:
 
       # 3. Check the target out into ./target using that token.
       - name: Checkout target
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.repository_owner }}/${{ inputs.target_repo }}
           ref: ${{ inputs.ref }}
@@ -69,7 +69,7 @@ jobs:
       - name: Mint issues-scoped token
         id: issues_tok
         if: ${{ inputs.file_issues }}
-        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.SCANNER_APP_ID }}
           private-key: ${{ secrets.SCANNER_APP_PRIVATE_KEY }}

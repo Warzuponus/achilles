@@ -87,6 +87,9 @@ tools:
     format: sarif
     argv: ["scan", "--recursive", "--format", "sarif", "--output-file", "{out}/results.sarif", "{src}"]
     outputFile: "{out}/results.sarif"
+    # With no dependency manifest in the tree osv-scanner exits 128 and writes no
+    # report. That is "nothing to check", not a failed scan.
+    nothingToScan: ["No package sources found"]
 
   # --- `full` profile: heavy per-language tools (opt-in via --profile full) ---
 

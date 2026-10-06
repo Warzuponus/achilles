@@ -69,7 +69,7 @@ func copyFile(src, dst string, perm fs.FileMode) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm|0o600)
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm|0o600) // #nosec G304 -- dst is inside our own temp copy; the relative path comes from a walk of regular files only
 	if err != nil {
 		return err
 	}

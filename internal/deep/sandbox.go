@@ -414,11 +414,19 @@ func looksBinary(head []byte) bool { return bytes.IndexByte(head, 0) >= 0 }
 // ReadFile returns numbered lines start..end (1-indexed, inclusive) of a file,
 // at most ReadMaxLines lines and ReadMaxBytes bytes.
 func (s *Sandbox) ReadFile(p string, start, end int) Result {
-	real, rel, err := s.resolve(p)
+	_, rel, err := s.resolve(p)
 	if err != nil {
 		return refuse(err, p)
 	}
-	fi, err := os.Stat(real)
+	// Open through os.Root so the kernel-level lookup itself refuses anything that
+	// would leave the scan root, even if a path component is swapped for a symlink
+	// between the checks in resolve and this open.
+	root, err := os.OpenRoot(s.root)
+	if err != nil {
+		return Result{Text: "cannot read " + rel}
+	}
+	defer root.Close()
+	fi, err := root.Stat(rel)
 	if err != nil {
 		return refuse(errNotFound, p)
 	}
@@ -428,7 +436,7 @@ func (s *Sandbox) ReadFile(p string, start, end int) Result {
 	if !fi.Mode().IsRegular() {
 		return Result{Text: rel + " is not a regular file", Denied: true}
 	}
-	f, err := os.Open(real)
+	f, err := root.Open(rel)
 	if err != nil {
 		return Result{Text: "cannot read " + rel}
 	}
@@ -646,6 +654,13 @@ func (s *Sandbox) search(ctx context.Context, re *regexp.Regexp, glob, subdir st
 		stopReason string
 	)
 	seenPath := map[string]bool{}
+	// Files are opened through os.Root, so a path swapped for a symlink during the
+	// walk cannot lead a read outside the scan root.
+	root, rerr := os.OpenRoot(s.root)
+	if rerr != nil {
+		return Result{Text: "search is unavailable"}
+	}
+	defer root.Close()
 	walk := func(p string, d fs.DirEntry, werr error) error {
 		if ctx.Err() != nil {
 			stopReason = "cancelled"
@@ -691,7 +706,7 @@ func (s *Sandbox) search(ctx context.Context, re *regexp.Regexp, glob, subdir st
 			stopReason = "stopped after reading the per-call byte limit; narrow with path or path_glob"
 			return errStopWalk
 		}
-		f, oerr := os.Open(p)
+		f, oerr := root.Open(rel)
 		if oerr != nil {
 			return nil
 		}

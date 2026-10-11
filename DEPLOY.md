@@ -147,10 +147,11 @@ OpenAI-compatible service. Details: [CI & the Scan Hub](docs/ci-and-hub.md).
 
 ### The scan hub (scan other repos from one place)
 
-[`scan-hub.yml`](.github/workflows/scan-hub.yml) scans **other** repositories from
-the Achilles repo, so the LLM key and routing live in one place and targets need no
-secrets and no workflow. Results are **workflow artifacts** (HTML report, SARIF,
-Markdown summary, threat model) of the hub run — there is no cloud vault. Nothing is
+[`examples/workflows/scan-hub.yml`](examples/workflows/scan-hub.yml) scans **other**
+repositories from one hub repository, so the LLM key lives in one place and targets
+need no secrets and no workflow. It is an example: copy it into `.github/workflows/`
+of a private repository of your own. Results are **workflow artifacts** (HTML report,
+SARIF, Markdown summary) of the hub run — there is no cloud vault. Nothing is
 written back to the target unless you tick `file_issues` (the App then also needs
 **Issues: Write**).
 
@@ -161,10 +162,11 @@ personal token). One-time setup by an org or repo admin:
    no webhook. Note the App ID; generate a private key (`.pem`).
 2. Install the App on the repositories you want scannable — only those get read
    access.
-3. In the Achilles repo → Settings → Secrets → Actions, add:
-   - `SCANNER_APP_ID` — the App ID
-   - `SCANNER_APP_PRIVATE_KEY` — the full `.pem` contents
-   - `ACHILLES_LLM_API_KEY` — the LLM key
+3. In the hub repository → Settings → Secrets and variables → Actions, add:
+   - secret `SCANNER_APP_ID` — the App ID
+   - secret `SCANNER_APP_PRIVATE_KEY` — the full `.pem` contents
+   - secret `LLM_API_KEY` — the LLM key
+   - variable `LLM_MODEL` — a model your provider serves
 4. Run it: Actions → *Achilles scan hub* → *Run workflow* with
    - `target_repo` — the repository name (the owner is this repository's owner)
    - `ref` — optional branch, tag or SHA (blank = default branch)

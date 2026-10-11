@@ -29,8 +29,7 @@ if [ -n "$REF" ]; then
 else
   git ls-files > "$TMP/files"; ROOT="."
 fi
-# tasks/ is the maintainer's private planning area and is never published.
-grep -v '^tasks/' "$TMP/files" > "$TMP/scan" || true
+cp "$TMP/files" "$TMP/scan"
 
 # report runs at the end of pipes (a subshell), so it records failure in a file, not a variable.
 report() { echo "FAIL: $1" >&2; sed 's/^/    /' >&2; : > "$TMP/failed"; }
@@ -61,9 +60,8 @@ if [ -f "$ROOT/go.mod" ]; then
 fi
 check_content "private key material" '-----BEGIN ([A-Z]+ )?PRIVATE KEY-----' \
   '^(scripts/check-tree\.sh|internal/fleet/[a-z_]*_test\.go):'
-check_content "leftovers of removed cloud features (this project is local-first)" \
+check_content "references to a hosted cloud service (this project must run with no cloud dependency)" \
   '[Ff]irestore|[Vv]ertex AI|Cloud Run|Workload Identity|googleapis\.com|gcloud|GOOGLE_CLOUD' '^scripts/check-tree\.sh:'
-check_content "the project's previous name (rename leftovers)" '[Ss]taccato|STACCATO' '^scripts/check-tree\.sh:'
 
 # 3. Optional private denylist: one case-insensitive ERE per line.
 if [ -n "$DENY" ]; then

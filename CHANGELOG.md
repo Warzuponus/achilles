@@ -102,6 +102,14 @@ First public release (`v0.1.0`) is pending.
   needs Go 1.27; release binaries and the images are unaffected for users.
 
 ### Removed
+- `.github/workflows/scan-hub.yml` is now an example,
+  [`examples/workflows/scan-hub.yml`](examples/workflows/scan-hub.yml). As repository
+  CI it hard-coded one provider, one model and `mode: commercial`, needed three
+  secrets, and every fork inherited it. The example uses the published action and
+  takes the provider key and model from the hub repository's own settings. **If you
+  ran hub scans from this repository, copy the example into a repository of your own.**
+- `make eval-verdict-ollama`. `make eval-verdict` takes the endpoint and routing file
+  as arguments instead of a hard-coded provider.
 - The `Docs to Pages` workflow. The guides remain in `docs/`, and `make docs-html` still builds
   the single-page `docs/site.html`.
 

@@ -1,18 +1,21 @@
-# Central scan hub: run a full, LLM-routed Achilles scan of ANOTHER repo from
-# here, so the LLM key + routing live only in this repo — targets need no
-# secrets and no workflow of their own. The LLM endpoint is any OpenAI-compatible
-# service (Ollama Cloud below; change ACHILLES_LLM_BASE_URL / --llm-model for others).
+# Example: a central scan hub. Run an AI-verified Achilles scan of ANOTHER repository
+# from one place, so the LLM key lives in a single repository and the targets need no
+# secrets and no workflow of their own.
 #
-# Cross-repo READ is granted by a GitHub App (Contents: Read) installed on the
-# target repos; the workflow mints a short-lived installation token to check the
+# This file does not run from examples/. Copy it to .github/workflows/scan-hub.yml in
+# the repository you want to be the hub (a private repository of your own).
+#
+# Cross-repo READ is granted by a GitHub App (Contents: Read) installed on the target
+# repositories; the workflow mints a short-lived installation token to check the
 # target out. Results are uploaded as artifacts of THIS run. Nothing is written back
 # to the target unless you tick `file_issues`, which mints a second token that also
-# carries Issues: Write and files issues there. See DEPLOY.md → "Central scan hub".
+# carries Issues: Write and files issues there. See DEPLOY.md -> "The scan hub".
 #
-# Prereqs (one-time, done by a repo/org admin — see DEPLOY.md):
-#   secrets.ACHILLES_LLM_API_KEY      — API key for the LLM endpoint below
-#   secrets.SCANNER_APP_ID            — the GitHub App's id
-#   secrets.SCANNER_APP_PRIVATE_KEY   — the GitHub App's private key (.pem contents)
+# One-time setup in the hub repository (Settings -> Secrets and variables -> Actions):
+#   secret   LLM_API_KEY               your LLM provider's API key
+#   variable LLM_MODEL                 a model that provider serves
+#   secret   SCANNER_APP_ID            the GitHub App's id
+#   secret   SCANNER_APP_PRIVATE_KEY   the GitHub App's private key (.pem contents)
 name: Achilles scan hub
 
 on:
@@ -37,14 +40,8 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    env:
-      ACHILLES_LLM_API_KEY: ${{ secrets.ACHILLES_LLM_API_KEY }}
-      ACHILLES_LLM_BASE_URL: https://ollama.com/v1
     steps:
-      # 1. This repo — provides the action, the tool registry, and the routing.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # 2. A short-lived token scoped to JUST the target repo (Contents: Read).
+      # 1. A short-lived token scoped to JUST the target repo (Contents: Read).
       - name: Mint target-scoped token
         id: tok
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -54,7 +51,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ inputs.target_repo }}
 
-      # 3. Check the target out into ./target using that token.
+      # 2. Check the target out into ./target using that token.
       - name: Checkout target
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,8 +60,9 @@ jobs:
           token: ${{ steps.tok.outputs.token }}
           path: target
           fetch-depth: 1
+          persist-credentials: false
 
-      # 3b. Only when asked to file issues: a second short-lived token that can also
+      # 2b. Only when asked to file issues: a second short-lived token that can also
       #     write issues on JUST the target repo. Needs Issues: Write on the App.
       - name: Mint issues-scoped token
         id: issues_tok
@@ -78,21 +76,22 @@ jobs:
           permission-contents: read
           permission-issues: write
 
-      # 4. AI-verified scan of the target. Uses the in-repo action (./) at this
-      #    checkout; routing = configs/models.ollama.yaml (this repo). The action
-      #    uploads the report directory as the `achilles-report` artifact.
+      # 3. AI-verified scan of the target. The action uploads the report directory
+      #    as the `achilles-report` artifact of this run.
       - name: Achilles scan
-        uses: ./
+        uses: Warzuponus/achilles@v0.1.0
         with:
-          version: source
           target: "target"
-          mode: "commercial"
-          llm-api-key: ${{ secrets.ACHILLES_LLM_API_KEY }}
-          llm-base-url: https://ollama.com/v1
-          llm-model: glm-5.2
+          # `commercial` if you scan other people's code as a paid service: it
+          # refuses tools that are not commercial-safe and skips the community rules.
+          mode: "oss"
+          llm-api-key: ${{ secrets.LLM_API_KEY }}
+          llm-provider: openrouter # or openai | ollama; or set llm-base-url instead
+          llm-model: ${{ vars.LLM_MODEL }}
           issues: ${{ inputs.file_issues }}
           github-token: ${{ steps.issues_tok.outputs.token || github.token }}
+          # --repo names where issues are filed. To use a different model per task,
+          # commit a routing file to the hub, check the hub out, and add
+          # `--model-config <file>` (see configs/models.example.yaml).
           args: >-
-            --model-config configs/models.ollama.yaml
-            --threat-model achilles-report/threatmodel.otm.json
             --repo ${{ github.repository_owner }}/${{ inputs.target_repo }}

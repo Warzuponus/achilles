@@ -34,7 +34,7 @@ jobs:
           cat > models.ollama.yaml <<'YAML'
           tasks:
             triage:       { model: minimax-m2.7 }
-            judge:        { model: kimi-k2.6 }
+            judge:        { model: minimax-m3 }
             remediation:  { model: kimi-k2.6 }
             threat-model: { model: kimi-k2.6 }
             review:       { model: minimax-m2.7 }

@@ -92,7 +92,7 @@ routing can be proven instead of asserted:
 
 ```bash
 make eval-context                                    # hermetic: no model, no key
-make eval-verdict-ollama EVAL_ARGS="--repeat 3"      # the Ollama open-model routing (needs a key)
+make eval-verdict EVAL_MODEL=<model> EVAL_ARGS="--model-config <routing.yaml> --repeat 3"   # needs a key; spends money
 ```
 
 **Eval the routing, not a model.** The verdict target drives a committed
@@ -440,7 +440,7 @@ gating decisions to it.
 ### Open models via Ollama Cloud
 
 Ollama Cloud is OpenAI-compatible, so you can mix open models per task. Achilles
-ships a bake-off-derived routing at [`configs/models.ollama.yaml`](../configs/models.ollama.yaml):
+ships an example routing at [`configs/models.ollama.yaml`](../configs/models.ollama.yaml):
 
 ```bash
 export ACHILLES_LLM_API_KEY=<ollama-key>
@@ -451,9 +451,11 @@ achilles --triage --review --sca-advice --threat-model tm.otm.json \
   --html-report report.html .
 ```
 
-That config routes `triage`/`review`/`sca` → `minimax-m2.7` (fast, well-calibrated),
-`judge`/`remediation`/`threat-model` → `kimi-k2.6` (deepest reasoner), with
-`glm-5.2` as the fallback. Tune it freely.
+That config routes `triage`/`review`/`sca` → `minimax-m2.7`, `judge` → `minimax-m3`
+and `remediation`/`threat-model` → `kimi-k2.6`, with `glm-5.2` as the fallback. Only
+the triage and judge pair was measured ([evals](../evals/README.md)); the judge was
+chosen because the alternative refuted most correct true positives. Tune it freely,
+and re-run the eval when you change either of those two.
 
 > **Note on open models.** They're looser than frontier models about JSON shape.
 > Achilles hardens for this (fence-stripping + a schema-validated repair retry), but

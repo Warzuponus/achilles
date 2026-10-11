@@ -11,7 +11,7 @@ where that number comes from.
 make eval-context                                 # hermetic: no model, no API key, no cost
 make eval-gate                                    # the same, failing if coverage regressed
 make eval-corpus                                  # no model, but needs gosec/bandit on PATH
-make eval-verdict-ollama EVAL_ARGS="--repeat 3"   # Ollama open-model routing (needs a key)
+make eval-verdict EVAL_MODEL=<model> EVAL_ARGS="--model-config <routing.yaml> --repeat 3"   # needs a key; spends money
 ```
 
 **Every model-calling mode records raw LLM responses** to `--vault`
@@ -168,8 +168,8 @@ harness — not an afterthought.
   recall across all four candidates (74%→33%, 26%→78%, 15%→89%). Use it when adding
   a candidate rather than running a full comparison first.
 - **A model listed in the API is not a model you can call.** `kimi-k3` appears in
-  `/v1/models` but is extra-usage-only on this plan: every call returned HTTP 402, so
-  it is **unmeasured**, not bad. Probe entitlement with one real request before
+  `/v1/models` but the account used for these runs was not entitled to call it (every
+  request was refused), so it is **unmeasured**, not bad. Probe entitlement with one real request before
   committing a 70-minute run — this applies to any provider whose model listing is
   broader than your entitlement.
 - **Ollama trailed that hosted routing even at 94.4%** — on accuracy, on stability (4

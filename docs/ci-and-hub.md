@@ -74,25 +74,28 @@ Ollama Cloud, via `--model-config`. Same inputs as Option A.
 
 ## Option C — the central scan hub
 
-Scan **other** repos from the Achilles repo, so the key + routing live in one place
-and targets need **no secret and no workflow**. This is the GitHub-Actions
-expression of the fleet model.
-Workflow: [`.github/workflows/scan-hub.yml`](../.github/workflows/scan-hub.yml).
+Scan **other** repos from one hub repository, so the LLM key lives in one place and
+targets need **no secret and no workflow**. This is the GitHub-Actions expression of
+the fleet model. Copy
+[`examples/workflows/scan-hub.yml`](../examples/workflows/scan-hub.yml) into
+`.github/workflows/` of the repository you want to be the hub (a private repository
+of your own; it does not run from `examples/`).
 
 ### One-time setup (org/repo admin)
 
 1. **Create a GitHub App** in the org: repository permission **Contents: Read**
    only, no webhook, "Only on this account."
 2. **Install it** on the repos you want scannable — only those get read access.
-3. Add two secrets to the repository that runs the hub (your fork or copy of Achilles):
-   - `SCANNER_APP_ID` — the App's ID
-   - `SCANNER_APP_PRIVATE_KEY` — the App's **private key** (the `.pem` contents,
+3. In the hub repository (Settings → Secrets and variables → Actions) add:
+   - secret `SCANNER_APP_ID` — the App's ID
+   - secret `SCANNER_APP_PRIVATE_KEY` — the App's **private key** (the `.pem` contents,
      from the App's *Private keys* section — **not** the client secret)
-   - (`ACHILLES_LLM_API_KEY` is already the scan-hub's LLM key.)
+   - secret `LLM_API_KEY` — your LLM provider's key
+   - variable `LLM_MODEL` — a model that provider serves
 
 Set the private key reliably with:
 ```bash
-gh secret set SCANNER_APP_PRIVATE_KEY -R <owner>/achilles < your-app.private-key.pem
+gh secret set SCANNER_APP_PRIVATE_KEY -R <owner>/<hub-repo> < your-app.private-key.pem
 ```
 
 ### Running it
@@ -113,12 +116,12 @@ Actions → **Achilles scan hub** → *Run workflow* → enter the target repo n
     repository: ${{ github.repository_owner }}/${{ inputs.target_repo }}
     token: ${{ steps.tok.outputs.token }}
     path: target
-# then a routed scan of ./target → achilles-report.html uploaded as an artifact
+# then an AI-verified scan of ./target; the report is uploaded as an artifact
 ```
 
 Inputs: `target_repo` (required, repo name only — the owner is this repository's owner)
 and `ref` (optional branch/tag/SHA; blank = the default branch). Secrets:
-`SCANNER_APP_ID`, `SCANNER_APP_PRIVATE_KEY`, and the LLM key `ACHILLES_LLM_API_KEY`.
+`SCANNER_APP_ID`, `SCANNER_APP_PRIVATE_KEY`, and the LLM key `LLM_API_KEY`.
 
 **Least privilege by design:** a per-run token scoped to exactly the target repo
 (not a personal PAT). By default results are artifacts of the hub run and nothing is
@@ -128,9 +131,9 @@ on that one repo, so grant the App **Issues: Write** first (it is not needed
 otherwise). To also post SARIF to a target's Security tab, grant **Code scanning:
 Write** and add an upload-sarif step.
 
-Download the report from **the run → Artifacts → `achilles-<repo>` → `achilles-report.html`**
-(the same artifact also holds `achilles.sarif`, `achilles-report.md` and the threat
-model). There is no cloud vault: the artifacts are the record.
+Download the report from **the run → Artifacts → `achilles-report`**: it holds
+`report.html`, `report.md` and `achilles.sarif`. There is no cloud vault: the
+artifacts are the record.
 
 ## Keeping history across CI runs
 

@@ -39,6 +39,13 @@ Severity order: `critical > high > medium > low > info`. The gate runs *after* a
 filtering below, so it only ever considers findings you didn't suppress. A value that
 is not one of those five is an error (exit 2), not a threshold.
 
+Exit codes: **0** the scan ran and nothing met the threshold (or no `--fail-on` was
+given); **1** a finding met the `--fail-on` threshold; **2** anything else, including a
+bad flag, a failed vault write, `--strict-tools` with a failed scanner, and an
+interrupted run. Ctrl-C (or SIGTERM) stops the scanners and any model calls, removes
+temporary files, and exits 2 without writing a report; a second Ctrl-C ends the
+process immediately.
+
 **Where severity comes from.** Each scanner reports a SARIF level (`error`, `warning`,
 `note`) and some also report a CVSS-style `security-severity` score. Achilles takes
 the more severe of the two: `error` is high, `warning` medium, `note` low, and a score

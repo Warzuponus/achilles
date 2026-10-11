@@ -2,7 +2,13 @@ package exec
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"os"
+	osexec "os/exec"
 	"path"
+	"time"
 )
 
 // DockerRunner runs the tool inside a pinned container image. Each mount is
@@ -31,7 +37,11 @@ func (r DockerRunner) Run(ctx context.Context, c Command) (Result, error) {
 		network = r.Network
 	}
 
-	args := []string{"run", "--rm"}
+	// The container is named so it can be killed. Killing the `docker run` client
+	// does not stop the container: it would keep scanning (and keep its mounts
+	// busy) after a timeout or Ctrl-C, with nothing left to collect the result.
+	name := containerName()
+	args := []string{"run", "--rm", "--name", name}
 	if network != "" && network != "default" {
 		args = append(args, "--network", network)
 	}
@@ -48,5 +58,23 @@ func (r DockerRunner) Run(ctx context.Context, c Command) (Result, error) {
 	// (e.g. `gosec gosec ...`). c.Bin is used only by the local runner.
 	args = append(args, resolveArgs(c.Args, containerPath, mountNames(c.Mounts))...)
 
-	return runOS(ctx, "docker", args)
+	return runCmd(ctx, "docker", args, runOpts{onCancel: func() { killContainer(name) }})
+}
+
+// containerName returns a unique name for one tool container.
+func containerName() string {
+	var b [6]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("achilles-%d-%d", os.Getpid(), time.Now().UnixNano())
+	}
+	return "achilles-" + hex.EncodeToString(b[:])
+}
+
+// killContainer stops a tool container by name. It runs on its own short clock:
+// the context that would normally bound it is the one that just ended. Errors are
+// ignored: the container may already be gone, which is the outcome we want.
+func killContainer(name string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	_ = osexec.CommandContext(ctx, "docker", "kill", name).Run()
 }

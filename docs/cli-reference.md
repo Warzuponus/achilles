@@ -28,7 +28,7 @@ These run instead of a scan. (A scan target literally named `version`, `doctor` 
 | `--mode` | `oss` | license mode: `oss` or `commercial` (strict — refuses non-`commercialSafe` tools) |
 | `--attest` | — | comma-separated tool IDs you hold a license attestation for (satisfies the gate in `commercial`) |
 | `--runner` | `local` | run tools `local` (PATH) or `docker` (pinned images) |
-| `--timeout` | `5m` | overall scan timeout |
+| `--timeout` | `5m` | time allowed for the scanners. When it runs out (or on Ctrl-C) each scanner and everything it started is stopped, and that tool is reported as failed. The AI review (`--llm-budget`) and fix verification (`--verify-timeout`) have their own clocks |
 | `--version` | — | print version, commit, build date, Go version and platform, then exit |
 | `--from-sarif` | — | skip scanning; normalize an existing SARIF file (exercises the report spine) |
 | `--sarif-out` | — | also write each tool's SARIF into this directory. It is the tool's own output except that the matched text of credential findings is replaced with `[REDACTED]` |
@@ -80,6 +80,7 @@ Needs `--llm-model` and an API key in `ACHILLES_LLM_API_KEY` (or `OPENAI_API_KEY
 | `--llm-samples` | `1` | ask the model this many times on borderline verdicts and keep the majority; a verdict the samples disagree on is never dismissed. The cost estimate becomes an upper bound |
 | `--deep-verify` | `0` | let the model read and search the repository (bounded, read-only, secrets-blocked) to settle the N highest-priority findings; see [Deep verification](deep-verify.md) |
 | `--deep-max-steps` | `6` | with `--deep-verify`: most tool calls per finding |
+| `--verify-timeout` | `15m` | time allowed for all `--verify-fixes` re-scans combined; starts when verification starts, separate from `--timeout` |
 | `--verify-fixes` | `true` | with `--remediate`: re-scan each proposed patch in a temp copy; `--fix-pr` applies only verified ones; see [Verifying fixes](verifying-fixes.md) |
 | `--triage` | `false` | LLM triage + adversarial judge on each finding; confident false positives leave the gate (see [Reports & Gating](reports-and-gating.md#the-gate-and-the-ai-review)) |
 | `--remediate` | `false` | propose fixes for high-confidence findings (implies `--triage`) |

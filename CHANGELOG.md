@@ -83,6 +83,19 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Fix verification failed on almost every `--ai` run.** It re-used the scanners'
+  `--timeout` clock after the AI review, so once scan plus review took longer than that
+  timeout every fix was reported as `error` ("deadline exceeded"). Verification now has
+  its own clock, `--verify-timeout` (15m), and `--sbom` gets a fresh `--timeout`.
+- **`--timeout` and Ctrl-C did not stop scanners.** Only the top process was killed: a
+  scanner's worker process kept running and kept the scan waiting, and a Docker
+  container kept scanning after its client was killed. Each tool now runs in its own
+  process group which is killed as a whole, containers are named and killed, the wait is
+  bounded, and a tool cut off mid-run is reported as failed instead of having its exit
+  code interpreted. Ctrl-C is handled: everything stops, temporary files are removed,
+  and the run exits 2.
+- The `--fail-on` gate exited from inside the pipeline, skipping cleanup of temporary
+  rule directories. It now returns normally and exits 1 from `main`.
 - **Flags after the target path were silently ignored.** `achilles . --ai` ran a plain
   scan and `achilles . --fail-on high` ran with no gate and exited 0. Flags are now
   accepted before or after the path, an unknown flag anywhere is an error, and so is a

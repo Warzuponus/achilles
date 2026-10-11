@@ -217,7 +217,7 @@ func applyFailOn(failOn string, scan model.Scan) error {
 	// findings must never fail CI until they age into the active set.
 	worst := report.GatingSeverity(scan)
 	if worst != model.SeverityUnknown && worst.Rank() >= threshold.Rank() {
-		os.Exit(1)
+		return &gateError{worst: worst, threshold: threshold}
 	}
 	return nil
 }

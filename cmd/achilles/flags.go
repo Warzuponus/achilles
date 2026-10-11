@@ -86,6 +86,7 @@ type options struct {
 	llmBudget      time.Duration // --llm-budget: time allowed for all LLM phases (separate from --timeout)
 	llmConcurrency int           // --llm-concurrency: findings triaged in parallel
 	llmNoCode      bool          // --llm-no-code: never send source snippets to the model
+	verifyTimeout  time.Duration // --verify-timeout: clock for --verify-fixes re-scans, separate from --timeout
 	keepDismissed  bool          // --keep-dismissed: do not move AI-dismissed findings out of the gate
 	calibrate      bool          // --calibrate: let feedback history resolve chronically noisy rules without a model
 	showVersion    bool          // --version
@@ -122,7 +123,7 @@ func parseFlags(argv []string) (*options, error) {
 	fs.StringVar(&o.sarifOut, "sarif-out", "", "write each tool's SARIF into this directory")
 	fs.StringVar(&o.fromSarif, "from-sarif", "", "skip scanning; normalize this existing SARIF file")
 	fs.StringVar(&o.failOn, "fail-on", "", "exit non-zero if a finding at/above this severity exists: critical|high|medium|low|info (anything else is an error)")
-	fs.DurationVar(&o.timeout, "timeout", 5*time.Minute, "scan timeout")
+	fs.DurationVar(&o.timeout, "timeout", 5*time.Minute, "time allowed for the scanners; the AI review (--llm-budget) and fix verification (--verify-timeout) have their own clocks")
 	fs.BoolVar(&o.triageOn, "triage", false, "run LLM triage + adversarial judge on findings")
 	fs.BoolVar(&o.remediateOn, "remediate", false, "propose fixes for high-confidence findings (implies --triage)")
 	fs.BoolVar(&o.ragOn, "rag", false, "use RAG few-shot from past feedback (needs --llm-embed-model)")
@@ -183,6 +184,7 @@ func parseFlags(argv []string) (*options, error) {
 	fs.BoolVar(&o.calibrate, "calibrate", false, "let --feedback history rule out findings from chronically false-positive rules WITHOUT a model review (off by default; never above medium severity; see --rule-health for what it would affect)")
 	fs.BoolVar(&o.showVersion, "version", false, "print the version and exit")
 	fs.BoolVar(&o.verifyFixes, "verify-fixes", true, "with --remediate: apply each proposed patch to a temp copy and re-run the scanner that reported it; the fix is marked verified only if the finding is gone and nothing new appeared")
+	fs.DurationVar(&o.verifyTimeout, "verify-timeout", 15*time.Minute, "time allowed for all --verify-fixes re-scans combined; separate from --timeout, and started when verification starts")
 	fs.IntVar(&o.deepVerify, "deep-verify", 0, "let the model read and search the repository (bounded, read-only) to settle the N highest-priority findings the single-file review could not (0 = off)")
 	fs.IntVar(&o.deepMaxSteps, "deep-max-steps", 6, "with --deep-verify: most tool calls per finding")
 	fs.IntVar(&o.llmSamples, "llm-samples", 1, "ask the model this many times on borderline verdicts and keep the majority (1 = single answer)")

@@ -8,14 +8,18 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Warzuponus/achilles/internal/config"
+	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/policy"
 	"github.com/Warzuponus/achilles/internal/report"
 	"github.com/Warzuponus/achilles/internal/scanner"
@@ -25,10 +29,29 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
+		// The gate failing is exit 1 and says nothing more: the report already did.
+		// Everything else is an error, exit 2.
+		var gated *gateError
+		if errors.As(err, &gated) {
+			os.Exit(1)
+		}
 		fmt.Fprintln(os.Stderr, "achilles: "+err.Error())
 		os.Exit(2)
 	}
 }
+
+// gateError is returned when --fail-on found a finding at or above the threshold.
+// It is an error value rather than an os.Exit inside the pipeline so that deferred
+// cleanup (temporary rule directories, the signal handler) still runs, and so the
+// exit-code contract can be tested: 0 clean, 1 gated, 2 error.
+type gateError struct{ worst, threshold model.Severity }
+
+func (e *gateError) Error() string {
+	return fmt.Sprintf("a %s finding meets the --fail-on %s threshold", e.worst, e.threshold)
+}
+
+// errInterrupted is returned when the run was stopped by Ctrl-C or SIGTERM.
+var errInterrupted = errors.New("interrupted; stopped before the scan finished (nothing was reported or filed)")
 
 func run(argv []string) error {
 	if handled, err := runSubcommand(argv, os.Stdout, os.Stderr); handled {
@@ -43,7 +66,20 @@ func run(argv []string) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), o.timeout)
+	// One root context for the whole run. Ctrl-C or SIGTERM cancels it, which stops
+	// the scanners (their process groups are killed), the model calls and the
+	// GitHub calls, and lets the deferred cleanup run. Scanners are started in
+	// their own process groups, so they no longer see the terminal's Ctrl-C
+	// themselves: this handler is what stops them.
+	root, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	go func() {
+		<-root.Done()
+		stopSignals() // a second Ctrl-C then ends the process the ordinary way
+	}()
+
+	// --timeout bounds the scanners (and the small vault-only commands below).
+	ctx, cancel := context.WithTimeout(root, o.timeout)
 	defer cancel()
 
 	runID := newRunID()
@@ -126,12 +162,16 @@ func run(argv []string) error {
 	if err != nil {
 		return err
 	}
-	// --timeout bounded the scanners. The LLM phases get their own budget (they are
-	// slow, and sharing one clock meant a long scan starved the AI review), and
-	// writing outputs gets a fresh one so a spent budget cannot lose the report.
-	llmCtx, cancelLLM := context.WithTimeout(context.Background(), o.llmBudget)
+	if root.Err() != nil {
+		return errInterrupted
+	}
+	// --timeout bounded the scanners. Every later phase gets its own clock, started
+	// when the phase starts: sharing the scanners' clock meant a long scan starved
+	// the AI review, and re-using it AFTER the AI review meant it had always already
+	// expired. All of them hang off root, so an interrupt still stops everything.
+	llmCtx, cancelLLM := context.WithTimeout(root, o.llmBudget)
 	defer cancelLLM()
-	outCtx, cancelOut := context.WithTimeout(context.Background(), 10*time.Minute)
+	outCtx, cancelOut := context.WithTimeout(root, 10*time.Minute)
 	defer cancelOut()
 
 	if err := filterFindings(o, ev, runID, absTarget, &scan); err != nil {
@@ -155,11 +195,23 @@ func run(argv []string) error {
 	if err != nil {
 		return err
 	}
+	if root.Err() != nil {
+		return errInterrupted
+	}
 
 	// Re-scan each proposed patch before anything (reports, --fix-pr, issues) presents
 	// it as a fix; a no-op unless --remediate produced diffs and --verify-fixes is on.
-	if err := verifyRemediations(ctx, o, absTarget, reg, &scan, ev, runID); err != nil {
+	// It runs scanners again, after the AI review, so it needs a clock of its own:
+	// on the scanners' --timeout every verification failed with "deadline exceeded"
+	// as soon as scan plus review took longer than that timeout.
+	verifyCtx, cancelVerify := context.WithTimeout(root, o.verifyTimeout)
+	err = verifyRemediations(verifyCtx, o, absTarget, reg, &scan, ev, runID)
+	cancelVerify()
+	if err != nil {
 		return err
+	}
+	if root.Err() != nil {
+		return errInterrupted
 	}
 
 	for _, d := range diags {
@@ -190,7 +242,10 @@ func run(argv []string) error {
 
 	// --- SBOM (supply-chain artifact, independent of findings) ---
 	if o.sbomOut != "" {
-		if err := runSBOM(ctx, runner, cfg, gate, absTarget, o.sbomOut, ev, runID); err != nil {
+		sbomCtx, cancelSBOM := context.WithTimeout(root, o.timeout) // a scanner run: a fresh --timeout
+		err := runSBOM(sbomCtx, runner, cfg, gate, absTarget, o.sbomOut, ev, runID)
+		cancelSBOM()
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "achilles: sbom: %v\n", err)
 		}
 	}

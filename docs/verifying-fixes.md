@@ -22,6 +22,10 @@ For each finding that has a diff, Achilles:
 Each tool's findings on the unpatched target are computed once and reused for
 every fix from that tool. Up to two fixes are verified at a time.
 
+Verification runs after the AI review and has its own clock, `--verify-timeout`
+(default 15 minutes), which starts when verification starts. A fix whose re-scan did
+not finish in time is reported as `error`, never as verified.
+
 ## How "gone" and "new" are decided
 
 A patch moves lines, so a finding is matched loosely. In the patched copy, the

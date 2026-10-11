@@ -257,6 +257,9 @@ func coverageLine(t *model.TriageStats) (string, bool) {
 		return "AI verification was not run: findings below are raw scanner output.", false
 	}
 	line := fmt.Sprintf("AI review (%s) gave a verdict on %d of %d findings", t.Model, t.Triaged, t.Total)
+	if t.AutoResolved > 0 {
+		line += fmt.Sprintf(" (%d of them from analyst feedback on the rule, not from a model review)", t.AutoResolved)
+	}
 	if t.Failed > 0 || t.Skipped > 0 {
 		line += fmt.Sprintf("; %d failed and %d were not reached (see the run log)", t.Failed, t.Skipped)
 		return line + ".", false

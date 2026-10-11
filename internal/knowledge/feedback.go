@@ -5,6 +5,7 @@ package knowledge
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/Warzuponus/achilles/internal/vault"
 )
@@ -25,6 +26,10 @@ type Feedback struct {
 	RuleID      string `json:"ruleId"`
 	Label       Label  `json:"label"`
 	Note        string `json:"note,omitempty"`
+
+	// At is when the label was recorded (the vault record's timestamp). It is not
+	// part of the stored payload; calibration uses it to expire old labels.
+	At time.Time `json:"-"`
 }
 
 // FeedbackStore reads and writes feedback through the Evidence Vault.
@@ -65,6 +70,7 @@ func decodeFeedback(recs []vault.Record) []Feedback {
 		}
 		var fb Feedback
 		if err := json.Unmarshal(r.Payload, &fb); err == nil {
+			fb.At = r.Timestamp
 			out = append(out, fb)
 		}
 	}

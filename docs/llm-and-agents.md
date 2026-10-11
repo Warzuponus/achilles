@@ -150,8 +150,8 @@ cap it cannot compute.
 What the estimate does and does not cover:
 
 - **Reflected:** the surfaced finding set only (post-noise, post-diff,
-  post-baseline), correlated duplicates costing nothing, and findings the
-  calibrator auto-resolves without an LLM call.
+  post-baseline), correlated duplicates costing nothing, and (with `--calibrate`)
+  findings the calibrator rules out without an LLM call.
 - **Upper bound:** with `--remediate`, every triaged finding is counted, since
   which ones turn out high-confidence is unknowable in advance.
 - **Excluded, and named in the output:** the one-per-scan whole-repo agents
@@ -194,7 +194,8 @@ and the duplicate records where its verdict came from:
 The key is deliberately strict — a finding with no CWE or no line number never
 clusters, and one tool reporting twice on a line is left alone — because a wrong
 merge costs a wrong verdict while a missed merge costs one extra LLM call. Two
-things still take precedence over an inherited verdict: **calibration** (feedback
+things still take precedence over an inherited verdict: **calibration** (with
+`--calibrate`, feedback
 about a finding's *own* rule outranks a sibling's verdict) and **remediation**,
 which is never inherited, since a patch belongs to one specific finding. Disable
 the whole thing with `--no-correlate`.
@@ -318,12 +319,19 @@ Achilles gets quieter over time from analyst feedback:
 achilles --feedback <fingerprint> --label fp --note "md5 used for a cache key"
 ```
 
-- **Calibration** — once a rule accrues enough `fp` feedback, Achilles
-  auto-resolves it *without* an LLM call (deterministic pre-triage for chronically
-  noisy rules).
+- **Calibration** (`--calibrate`, off by default) — when a rule has been labeled
+  false positive often enough, Achilles rules its findings out *without* an LLM call.
+  This takes findings out of the gate on past labels alone, so the bar is high and
+  the decision is bounded: at least 10 **distinct** labeled findings of the rule (one
+  finding labeled ten times counts once, by its latest label), at least 90% of them
+  false positive, labels no older than 180 days, and never a finding above medium
+  severity or about a credential. Every run that uses it prints which rules it ruled
+  out and how many findings, and reports say those verdicts came from feedback rather
+  than a model review. Without `--calibrate`, feedback never dismisses anything.
 - **RAG** (`--rag`, needs `--llm-embed-model`) — injects similar past findings and
   how analysts ruled them as few-shot context for triage.
-- **`--rule-health`** prints per-rule TP/FP rates so you can see what's noisy.
+- **`--rule-health`** prints per-rule TP/FP rates so you can see what's noisy, and
+  which rules `--calibrate` would rule out.
 - **`--mine-rules`** turns analyst-confirmed findings into new Opengrep rules
   (validated before they can run — see [DESIGN.md](../DESIGN.md) §9).
 

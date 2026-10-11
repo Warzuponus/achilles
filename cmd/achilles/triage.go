@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Warzuponus/achilles/internal/config"
 	"github.com/Warzuponus/achilles/internal/correlate"
@@ -83,7 +84,7 @@ func triageScan(ctx context.Context, o *options, ev vault.Store, runID string, s
 			baseURL: o.llmBaseURL, triageModel: o.llmModel, judgeModel: o.llmJudge,
 			embedModel: o.llmEmbed, remediate: o.remediateOn, rag: o.ragOn, tasks: tasks,
 			dryRun: o.dryRun, maxCost: o.maxCost, prices: priceTable, excluded: excluded,
-			noCode: o.llmNoCode, keepDismissed: o.keepDismissed, concurrency: o.llmConcurrency, samples: o.llmSamples,
+			noCode: o.llmNoCode, keepDismissed: o.keepDismissed, calibrate: o.calibrate, concurrency: o.llmConcurrency, samples: o.llmSamples,
 		}
 		if o.deepVerify > 0 {
 			opts.afterTriage = func(c context.Context) error { return deepVerifyFindings(c, o, ev, runID, scan) }
@@ -113,6 +114,7 @@ type triageOpts struct {
 
 	noCode        bool // --llm-no-code: prompts carry no source; verdicts are then never trusted to dismiss
 	keepDismissed bool // --keep-dismissed: leave AI-dismissed findings in scan.Findings
+	calibrate     bool // --calibrate: resolve chronically noisy rules from feedback, with no model call
 	concurrency   int  // findings triaged in parallel; <1 means 1
 	samples       int  // --llm-samples: re-ask borderline verdicts this many times in total; <2 means once
 
@@ -156,9 +158,12 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	en.IncludeBlame = true // best-effort git attribution in the prompt context
 	eng := triage.NewEngine(router, ev, en, scan.Target).SetNoCode(o.noCode).SetSamples(o.samples)
 
-	// Learning layer (DESIGN.md §8): calibration from accumulated feedback.
-	fb := knowledge.NewFeedbackStore(ev)
-	eng.SetCalibrator(knowledge.NewCalibrator(fb, calMinSamples, calFPThreshold))
+	// Learning layer (DESIGN.md §8): calibration from accumulated feedback. Opt-in:
+	// it takes findings out of the gate on past labels alone, with no model looking
+	// at the code in front of it, so it never happens unless the operator asks.
+	if o.calibrate {
+		eng.SetCalibrator(knowledge.NewCalibrator(knowledge.NewFeedbackStore(ev), knowledge.DefaultPolicy, time.Now()))
+	}
 
 	// RAG few-shot (opt-in; needs an embeddings model).
 	if o.rag {
@@ -382,6 +387,24 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		if f.Verdict != nil {
 			stats.Triaged++
 		}
+	}
+	// Name what calibration decided: these verdicts are feedback history, not a review.
+	calibratedRules := map[string]int{}
+	for _, f := range scan.Findings {
+		if f.Verdict != nil && f.Provenance != nil && f.Provenance.PromptVersion == "calibration" {
+			stats.AutoResolved++
+			calibratedRules[f.Tool+"/"+f.RuleID]++
+		}
+	}
+	if stats.AutoResolved > 0 {
+		names := make([]string, 0, len(calibratedRules))
+		for r, n := range calibratedRules {
+			names = append(names, fmt.Sprintf("%s (%d)", r, n))
+		}
+		sort.Strings(names)
+		fmt.Fprintf(os.Stderr, "achilles: --calibrate ruled out %d finding(s) from analyst feedback, with NO model review: %s\n"+
+			"  (run --rule-health to see the labels behind this; drop --calibrate to have them reviewed)\n",
+			stats.AutoResolved, strings.Join(names, ", "))
 	}
 	stats.Skipped = stats.Total - stats.Triaged - stats.Failed - stats.Withheld
 	if stats.Skipped < 0 {

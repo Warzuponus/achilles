@@ -83,6 +83,13 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Three `fp` labels could silence a rule forever.** Feedback-driven calibration ran on
+  every triage, ruled out all future findings of a rule after three false-positive labels
+  at 80%, never expired, and applied at any severity, with no model looking at the code.
+  It is now opt-in (`--calibrate`), needs ten distinct labeled findings at 90%, ignores
+  labels older than 180 days, never applies above medium severity or to credential
+  findings, counts each finding once by its latest label, and says in the run log and in
+  every report how many verdicts came from feedback instead of a review.
 - **The adversarial judge could silently drop real findings.** Two cases: a verdict of
   `uncertain` that the judge "refuted" was ruled out even when the judge was arguing the
   finding is real, and any true positive was ruled out on the judge's bare yes/no. Now

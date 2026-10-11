@@ -103,7 +103,8 @@ Full walkthrough: [LLM Triage & Agents](llm-and-agents.md).
 | `--feedback` | — | record analyst feedback for a finding fingerprint, then exit |
 | `--label` | — | `tp` or `fp` (with `--feedback`) |
 | `--note` | — | optional note (with `--feedback`) |
-| `--rule-health` | `false` | print per-rule TP/FP health from feedback, then exit |
+| `--calibrate` | `false` | let `--feedback` history rule out findings from chronically false-positive rules **without a model review** (needs ≥10 distinct labeled findings, ≥90% false positive, labels ≤180 days old; never above medium severity). See [LLM Triage & Agents](llm-and-agents.md) |
+| `--rule-health` | `false` | print per-rule TP/FP health from feedback (and what `--calibrate` would rule out), then exit |
 | `--metrics` | `false` | print a metrics rollup over the vault, then exit |
 | `--research` | `false` | research agents synthesize + validate new Opengrep rules |
 | `--mine-rules` | `false` | mine rules from analyst-confirmed findings (needs `--llm-model`) |

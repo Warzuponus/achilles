@@ -6,19 +6,12 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Warzuponus/achilles/internal/knowledge"
 	"github.com/Warzuponus/achilles/internal/metrics"
 	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/vault"
-)
-
-// Calibration thresholds shared by triage's auto-resolution and the rule-health
-// report: a rule is auto-suppressed once it has >= calMinSamples labels and an
-// FP rate >= calFPThreshold.
-const (
-	calMinSamples  = 3
-	calFPThreshold = 0.8
 )
 
 // runRuleHealth prints per-rule TP/FP health accumulated from analyst feedback,
@@ -28,7 +21,8 @@ func runRuleHealth(ctx context.Context, opts vault.Options) error {
 	if err != nil {
 		return err
 	}
-	cal := knowledge.NewCalibrator(knowledge.NewFeedbackStore(ev), calMinSamples, calFPThreshold)
+	pol := knowledge.DefaultPolicy
+	cal := knowledge.NewCalibrator(knowledge.NewFeedbackStore(ev), pol, time.Now())
 	rules := cal.Rules()
 	if len(rules) == 0 {
 		fmt.Println("No analyst feedback recorded yet — rule health builds up as findings are labeled (--feedback).")
@@ -39,14 +33,16 @@ func runRuleHealth(ctx context.Context, opts vault.Options) error {
 	for _, h := range rules {
 		labeled += h.Samples()
 	}
-	fmt.Printf("Rule health (%d labeled finding(s) across %d rule(s); auto-suppress at >=%d samples & >=%.0f%% FP):\n\n",
-		labeled, len(rules), calMinSamples, calFPThreshold*100)
+	fmt.Printf("Rule health (%d distinct labeled finding(s) across %d rule(s), labels from the last %d days).\n"+
+		"With --calibrate, a rule with >=%d labeled findings and >=%.0f%% of them false positive has its findings\n"+
+		"ruled out without a model review (never above %s severity). Without --calibrate nothing is auto-dismissed.\n\n",
+		labeled, len(rules), int(pol.MaxAge.Hours()/24), pol.MinFindings, pol.FPThreshold*100, pol.MaxSeverity)
 	fmt.Printf("  %-40s %4s %4s %8s %8s  %s\n", "TOOL/RULE", "TP", "FP", "SAMPLES", "FP-RATE", "STATUS")
 	for _, h := range rules {
 		status := "healthy"
 		switch {
 		case cal.Suppresses(h):
-			status = "auto-suppressed"
+			status = "noisy: --calibrate would rule it out"
 		case h.FP > 0:
 			status = "watch"
 		}

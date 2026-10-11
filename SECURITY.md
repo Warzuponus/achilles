@@ -51,6 +51,11 @@ the fleet rollup. It is protected by being reachable only from your own machine:
   `POST`s are rejected);
 - secrets found in code are redacted before they reach the UI or API.
 
+Feedback recorded through the War Room is ordinary analyst feedback: with
+`--calibrate` (off by default) enough false-positive labels on a rule will rule that
+rule's low- and medium-severity findings out of later scans. Anyone who can reach the
+port can therefore influence those scans, which is one more reason to keep it local.
+
 Do not bind it to a LAN or public address, or forward its port, expecting a login to
 protect it. To share it, put your own authenticating reverse proxy in front of it (and
 add the proxy's hostname to `--allowed-hosts`), or don't share it. See

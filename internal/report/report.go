@@ -47,6 +47,9 @@ func WriteHuman(w io.Writer, s model.Scan) {
 			fmt.Fprintf(w, " — %d failed, %d not reached; those are UNVERIFIED", t.Failed, t.Skipped)
 		}
 		fmt.Fprintln(w)
+		if t.AutoResolved > 0 {
+			fmt.Fprintf(w, "%d of those verdict(s) came from analyst feedback on the rule (--calibrate), not from a model review\n", t.AutoResolved)
+		}
 	}
 	if n := len(s.Dismissed); n > 0 {
 		fmt.Fprintf(w, "%d more finding(s) ruled out as false positives by the AI review (not counted above; see the HTML/Markdown report, or --keep-dismissed to include them)\n", n)

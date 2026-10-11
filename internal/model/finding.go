@@ -119,6 +119,10 @@ type TriageStats struct {
 	Withheld  int    `json:"withheld"`  // not sent to the model on purpose (credential findings)
 	Skipped   int    `json:"skipped"`   // not attempted (timeout, budget, aborted)
 	Dismissed int    `json:"dismissed"` // moved to Scan.Dismissed
+	// AutoResolved counts verdicts that came from analyst feedback on the rule
+	// (--calibrate), not from a model reading the finding. They are included in
+	// Triaged; reports name them so "a verdict" is never mistaken for "a review".
+	AutoResolved int `json:"autoResolved,omitempty"`
 }
 
 // Dismissed reports whether this finding's verdict rules it out.

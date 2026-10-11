@@ -188,6 +188,9 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 		if t.Failed+t.Skipped > 0 {
 			fmt.Fprintf(w, " (%d failed, %d not reached)", t.Failed, t.Skipped)
 		}
+		if t.AutoResolved > 0 {
+			fmt.Fprintf(w, "; %d of those came from analyst feedback on the rule (`--calibrate`), not from a model review", t.AutoResolved)
+		}
 		fmt.Fprint(w, ".\n\n")
 	}
 	if len(s.Findings) == 0 {

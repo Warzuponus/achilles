@@ -86,6 +86,7 @@ type options struct {
 	llmConcurrency int           // --llm-concurrency: findings triaged in parallel
 	llmNoCode      bool          // --llm-no-code: never send source snippets to the model
 	keepDismissed  bool          // --keep-dismissed: do not move AI-dismissed findings out of the gate
+	calibrate      bool          // --calibrate: let feedback history resolve chronically noisy rules without a model
 	showVersion    bool          // --version
 
 	// Verification depth (ideas adapted from the VulnHunter project's methodology).
@@ -178,6 +179,7 @@ func parseFlags(argv []string) (*options, error) {
 	fs.IntVar(&o.llmConcurrency, "llm-concurrency", 4, "findings triaged in parallel (1 = sequential)")
 	fs.BoolVar(&o.llmNoCode, "llm-no-code", false, "privacy mode: send the model only rule, message and location, never source code")
 	fs.BoolVar(&o.keepDismissed, "keep-dismissed", false, "keep findings the AI review confidently dismissed in the gate, issues and counts (default: list them separately)")
+	fs.BoolVar(&o.calibrate, "calibrate", false, "let --feedback history rule out findings from chronically false-positive rules WITHOUT a model review (off by default; never above medium severity; see --rule-health for what it would affect)")
 	fs.BoolVar(&o.showVersion, "version", false, "print the version and exit")
 	fs.BoolVar(&o.verifyFixes, "verify-fixes", true, "with --remediate: apply each proposed patch to a temp copy and re-run the scanner that reported it; the fix is marked verified only if the finding is gone and nothing new appeared")
 	fs.IntVar(&o.deepVerify, "deep-verify", 0, "let the model read and search the repository (bounded, read-only) to settle the N highest-priority findings the single-file review could not (0 = off)")

@@ -132,7 +132,7 @@ so a freshly-generated rule can never block CI before it's been observed.
 
 ```
 CLI → load tools.yaml → license gate → run engines → SARIF → normalize
-    → [--triage] calibration short-circuit? → RAG few-shot → LLM triage
+    → [--triage] [--calibrate] feedback short-circuit? → RAG few-shot → LLM triage
     → adversarial judge → [--remediate] fix → Evidence Vault + report
 [--research] inventory → research (cited issues) → synthesize rule
     → §9.3 gate (parses ∧ matches vulnerable ∧ ¬matches patched) → admit | quarantine

@@ -63,6 +63,15 @@ First public release (`v0.1.0`) is pending.
   [Benchmarking Detection](docs/benchmarking.md).
 
 ### Changed
+- **Docs for a first-time reader.** The README loses its build-diary sections (phase
+  status, an internal pipeline sketch, a partial package list) and gains a short case for
+  using Achilles over the scanners alone, a stable/experimental split, the Go 1.27.2 and
+  gosec limit, and a note on how the project was built. `TEST_PLAN.md` now says what is
+  tested, where, and what is not, instead of a per-phase checklist. `DESIGN.md` drops its
+  dated progress notes and a planned package layout that never existed, and says which
+  parts are intent rather than code. `CONTRIBUTING.md` gains a map of the code.
+- Brakeman is described by its actual license (the Brakeman Public Use License), not
+  CC BY-NC-SA. It stays excluded from `--mode commercial`.
 - **Images:** a release tag now also moves `latest` and `vX.Y` (and their `-slim`
   forms). Only the exact version tag was pushed before, so the documented
   `docker run ghcr.io/warzuponus/achilles` pulled a tag that did not exist.

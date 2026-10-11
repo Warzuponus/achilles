@@ -36,7 +36,7 @@ jobs:
         run: go vet ./...
       - name: Build
         run: go build ./...
-      - name: Tree hygiene (no local paths, key material, deployment state, old names)
+      - name: Tree hygiene (no local paths, key material, deployment state, cloud services)
         run: scripts/check-tree.sh
       - name: Dependency hygiene (no cloud SDK modules)
         run: make check-deps

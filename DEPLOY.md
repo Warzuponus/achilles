@@ -20,8 +20,8 @@ Be explicit about the evidence behind each path:
 |------|----------|
 | CLI + file vault | Unit and integration tests in CI (`make test`); the repo scans itself on every PR ([self-scan.yml](.github/workflows/self-scan.yml)). |
 | Docker image + compose stack | [quickstart.yml](.github/workflows/quickstart.yml) runs the full compose quickstart (build, start, scan the bundled sample with `--strict-tools`, check the findings in the War Room, check the Host and cross-origin protections) on every relevant change. |
-| GitHub Action + per-PR gate | [ci.yml](.github/workflows/ci.yml) runs the action from the checkout (`version: source`) against the bundled sample with `--strict-tools` on every PR; the example workflows are the reference consumers. The release-binary download path is exercised only once a release exists. |
-| Scan hub | The workflow is in the repo, but CI does not exercise it: it needs a GitHub App you create (below). Treat the setup steps as a checklist to verify in your own organisation. |
+| GitHub Action + per-PR gate | [ci.yml](.github/workflows/ci.yml) runs the action from the checkout (`version: source`) against the bundled sample with `--strict-tools` on every PR; the example workflows are the reference consumers. The release-binary download path, which is what users get by default, is **not exercised by CI**: check it by hand after each release ([CONTRIBUTING.md](CONTRIBUTING.md#releasing-maintainers)). |
+| Scan hub | An example workflow, not exercised by CI: it needs a GitHub App you create (below). Treat the setup steps as a checklist to verify in your own organisation. |
 | Fleet on cron / Kubernetes | The fleet binary is tested ([fleet.md](docs/fleet.md)); the `CronJob` and cron snippets are **patterns, not tested manifests**. |
 | Multi-user / network exposure | **Not a supported configuration.** There is no authentication. See [Security model](docs/containers.md#security-model-no-authentication). |
 

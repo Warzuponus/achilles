@@ -66,7 +66,9 @@ scanned repository an adversary: a comment in the code can try to talk the model
 dismissing a real vulnerability. Mitigations in place: every prompt tells the model
 that repository text is untrusted data; a second adversarial pass tries to refute
 each verdict; findings about credentials are never sent to the model and never
-dismissed; low-confidence and overturned verdicts are never dismissed.
+dismissed; low-confidence and overturned verdicts are never dismissed; and the
+second pass can rule a finding out only by quoting code that Achilles verifies was in
+the prompt, never on its say-so.
 
 None of that is a guarantee. **Do not rely on the AI review to gate code from authors
 you do not trust**: for that, run with `--keep-dismissed` (the gate then uses raw

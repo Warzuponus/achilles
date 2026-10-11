@@ -73,7 +73,7 @@ func confirm(f *model.Finding, d model.DeepVerification) {
 		v.Confidence = d.Confidence
 	}
 	v.Classification = model.ClassTruePositive
-	v.Refuted = false // the deep pass read the code the judge only reasoned about
+	v.Refuted, v.RefuteSupported = false, false // the deep pass read the code the judge only reasoned about
 	if v.Exploitability == model.ExploitNotReachable {
 		v.Exploitability = model.ExploitUnknown
 	}
@@ -110,7 +110,7 @@ func dismiss(f *model.Finding, d model.DeepVerification) {
 		} else {
 			v.Confidence = d.Confidence
 		}
-		v.Refuted = false
+		v.Refuted, v.RefuteSupported = false, false
 		v.Exploitability = model.ExploitNotReachable
 		v.Reasoning = deepNote("finds a false positive", d) + priorNote(prior)
 	}

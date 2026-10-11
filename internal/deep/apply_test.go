@@ -67,11 +67,11 @@ func TestApply_Confirm(t *testing.T) {
 		}
 	})
 	t.Run("lifts a refutation", func(t *testing.T) {
-		prior := vd(model.ClassTruePositive, 0.9)
-		prior.Refuted, prior.RefuteReason = true, "judge said no"
+		prior := vd(model.ClassTruePositive, 0.8)
+		prior.Refuted, prior.RefuteSupported, prior.RefuteReason = true, true, "judge said no"
 		f := finding(model.SeverityHigh, prior)
 		if !f.Dismissed() {
-			t.Fatal("precondition: a refuted finding is dismissed")
+			t.Fatal("precondition: a true positive with a backed refutation is dismissed")
 		}
 		Apply(&f, deepRes(model.ClassTruePositive, 0.8, 2))
 		if f.Verdict.Refuted || f.Dismissed() {

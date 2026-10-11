@@ -50,6 +50,13 @@ never dismissed: uncertain or low-confidence verdicts, verdicts the judge overtu
 findings about credentials (the model never sees those), and anything the review did
 not reach.
 
+A true positive the judge *refuted* is ruled out only when the judge backed the
+refutation (a stated confidence of at least 0.7 and a quote that really appears in the
+code it was shown) and the first pass was not itself sure (below 0.9). A refutation
+that falls short is shown as **disputed by judge**: the finding stays in the gate and
+in the issues, because two reviews disagreeing is a reason for a person to look, not a
+reason to drop it.
+
 ```bash
 achilles --ai --fail-on high .                  # gate on what survived the AI review
 achilles --ai --keep-dismissed --fail-on high . # gate on raw scanner severity instead

@@ -210,6 +210,8 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 			if f.Verdict != nil {
 				verdict = string(f.Verdict.Classification)
 				switch {
+				case f.Verdict.Disputed():
+					verdict += " (**disputed by judge**)"
 				case f.Verdict.Refuted:
 					verdict += " (refuted)"
 				case f.Verdict.Overturned:

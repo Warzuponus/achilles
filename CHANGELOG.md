@@ -83,6 +83,14 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **The adversarial judge could silently drop real findings.** Two cases: a verdict of
+  `uncertain` that the judge "refuted" was ruled out even when the judge was arguing the
+  finding is real, and any true positive was ruled out on the judge's bare yes/no. Now
+  (`triage/v5`) a refuted `uncertain` verdict is never ruled out, and a true positive is
+  ruled out only when the judge states a confidence of at least 0.7, quotes context that
+  Achilles verifies it actually sent, and the triage pass was below 0.9. Anything less is
+  reported as **disputed by judge** and stays in the gate. Model-reported confidences are
+  normalized to 0..1 (a reply of `85` is 0.85, not "above every threshold").
 - Opengrep under `--runner docker` asked Docker for an empty image; it now runs as the
   local binary, as documented.
 - Opengrep crashed under a non-UTF-8 locale when reading non-ASCII community rules.

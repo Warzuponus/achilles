@@ -12,7 +12,11 @@ func TestVerdictDismissed(t *testing.T) {
 		{"at the floor", Verdict{Classification: ClassFalsePositive, Confidence: DismissFloor}, true},
 		{"shaky false positive is kept", Verdict{Classification: ClassFalsePositive, Confidence: 0.5}, false},
 		{"overturned by judge is kept", Verdict{Classification: ClassFalsePositive, Confidence: 0.95, Overturned: true}, false},
-		{"refuted true positive is dismissed", Verdict{Classification: ClassTruePositive, Confidence: 0.9, Refuted: true}, true},
+		{"refuted true positive, refutation not backed, is kept", Verdict{Classification: ClassTruePositive, Confidence: 0.8, Refuted: true}, false},
+		{"refuted true positive, refutation backed, is dismissed", Verdict{Classification: ClassTruePositive, Confidence: 0.8, Refuted: true, RefuteSupported: true}, true},
+		{"a sure true positive is kept even against a backed refutation", Verdict{Classification: ClassTruePositive, Confidence: SureFloor, Refuted: true, RefuteSupported: true}, false},
+		{"refuted uncertain is kept", Verdict{Classification: ClassUncertain, Confidence: 0.5, Refuted: true, RefuteSupported: true}, false},
+		{"refuted flag on a false positive does not dismiss a shaky one", Verdict{Classification: ClassFalsePositive, Confidence: 0.5, Refuted: true, RefuteSupported: true}, false},
 		{"true positive is kept", Verdict{Classification: ClassTruePositive, Confidence: 0.9}, false},
 		{"uncertain is kept", Verdict{Classification: ClassUncertain, Confidence: 0.99}, false},
 	}
@@ -70,6 +74,32 @@ func TestIsSecret(t *testing.T) {
 	for _, f := range no {
 		if f.IsSecret() {
 			t.Errorf("%s/%s should not be secret", f.Tool, f.RuleID)
+		}
+	}
+}
+
+func TestVerdictDisputed(t *testing.T) {
+	kept := Verdict{Classification: ClassTruePositive, Confidence: 0.95, Refuted: true, RefuteSupported: true}
+	if !kept.Disputed() {
+		t.Error("refuted but not dismissed is a dispute")
+	}
+	gone := Verdict{Classification: ClassTruePositive, Confidence: 0.8, Refuted: true, RefuteSupported: true}
+	if gone.Disputed() {
+		t.Error("a dismissed finding is not disputed, it is ruled out")
+	}
+	if (Verdict{Classification: ClassTruePositive, Confidence: 0.9}).Disputed() {
+		t.Error("no refutation, no dispute")
+	}
+}
+
+func TestNormalizeConfidence(t *testing.T) {
+	nan := 0.0
+	nan = nan / nan
+	for _, c := range []struct{ in, want float64 }{
+		{0, 0}, {0.7, 0.7}, {1, 1}, {85, 0.85}, {100, 1}, {101, 0}, {-0.1, 0}, {nan, 0},
+	} {
+		if got := NormalizeConfidence(c.in); got != c.want {
+			t.Errorf("NormalizeConfidence(%v) = %v, want %v", c.in, got, c.want)
 		}
 	}
 }

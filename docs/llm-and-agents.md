@@ -216,7 +216,13 @@ pay it.
   for a structured verdict: `true_positive` / `false_positive` / `uncertain`, a
   confidence, exploitability, and reasoning. A second **adversarial judge** pass
   then tries to *refute* that verdict — only unrefuted true-positives with
-  confidence ≥ 0.7 are treated as high-confidence.
+  confidence ≥ 0.7 are treated as high-confidence. The judge has to back a
+  refutation: it states its own confidence and quotes the line(s) of the context that
+  prove it, and Achilles checks that the quote really is in the context it sent. A
+  refuted true positive is ruled out only when that check passes, the judge was at
+  least 0.7 confident, and the triage pass was itself below 0.9. Otherwise the two
+  passes simply disagree: the finding stays in the gate, marked **disputed by judge**,
+  and gets no automatic fix. Refuting an `uncertain` verdict never rules a finding out.
 - **`--remediate`** — for those high-confidence findings, propose a fix: a summary
   plus a unified diff when a clean patch is possible, or prose guidance otherwise.
   Implies `--triage`. Achilles proposes; it never auto-applies (see `--fix-pr` in

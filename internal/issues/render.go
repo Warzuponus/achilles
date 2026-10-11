@@ -225,6 +225,9 @@ func (r *renderer) writeDetail(b *strings.Builder, f model.Finding, withDiff boo
 		if v.Overturned {
 			b.WriteString("- **Note:** the first AI pass called this a false positive, but the adversarial pass found concrete evidence otherwise, so it is kept for a human to confirm.\n")
 		}
+		if v.Disputed() {
+			b.WriteString("- **Note:** the adversarial pass disagreed with this verdict, but not strongly enough to rule the finding out, so it is kept for a human to confirm.\n")
+		}
 		if reason := r.prose(v.Reasoning, maxReason); reason != "" {
 			fmt.Fprintf(b, "\n%s\n", reason)
 		}

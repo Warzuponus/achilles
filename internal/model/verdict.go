@@ -36,6 +36,17 @@ type Verdict struct {
 	Refuted      bool   `json:"refuted"`
 	RefuteReason string `json:"refuteReason,omitempty"`
 
+	// JudgeConfidence and RefuteEvidence are what the judge offered in support of a
+	// refutation: how sure it said it was, and the line(s) it quoted from the
+	// context it was shown. RefuteSupported is the pipeline's own check of that
+	// support (the judge was confident AND the quote really appears in the
+	// context); a model can never set it. A refutation that is not supported is
+	// recorded as a disagreement and the finding stays in front of a human: see
+	// Dismissed.
+	JudgeConfidence float64 `json:"judgeConfidence,omitempty"`
+	RefuteEvidence  string  `json:"refuteEvidence,omitempty"`
+	RefuteSupported bool    `json:"refuteSupported,omitempty"`
+
 	// Overturned means the judge knocked a verdict UP: triage called the finding
 	// not-a-problem, and the adversarial pass found concrete evidence that it is.
 	//
@@ -243,10 +254,33 @@ func (v Verdict) Surfaced() bool {
 // finding.
 const DismissFloor = 0.7
 
+// SureFloor is the triage confidence at and above which the adversarial judge
+// alone cannot dismiss a true positive. The deep-verification merge follows the
+// same principle (internal/deep): a review that was sure is not overruled by a
+// second opinion, it is escalated to a person.
+const SureFloor = 0.9
+
+// NormalizeConfidence maps a model-reported confidence onto 0..1. Loose models
+// answer in percent ("85"), so anything in (1, 100] is read that way. NaN,
+// negative and absurd values become 0, which every threshold treats as "not
+// confident": an out-of-range number must never clear a floor by accident.
+func NormalizeConfidence(c float64) float64 {
+	switch {
+	case c != c, c < 0, c > 100: // c != c is NaN
+		return 0
+	case c > 1:
+		return c / 100
+	}
+	return c
+}
+
 // Dismissed reports whether the AI review is confident enough that this finding is
 // not a real issue to take it out of the actionable set (gate, issues, headline
 // counts). Dismissed findings are still reported, in their own section, so the
 // call is auditable.
+//
+// A true positive the judge refuted is dismissed only when that refutation was
+// verified and the triage pass was not sure (the Refuted branch below).
 //
 // A verdict the adversarial judge overturned is never dismissed: two models
 // disagreeing is a reason for a human to look. "uncertain" and low-confidence
@@ -261,9 +295,21 @@ func (v Verdict) Dismissed() bool {
 		return false
 	}
 	if v.Refuted {
-		return true // the judge knocked down the only claim that it was real
+		// The judge's bare word is not enough to take a finding out of the gate. A
+		// refutation dismisses only a true-positive call (refuting "uncertain" says
+		// nothing about which way the truth lies), only when the pipeline verified
+		// the judge's support for it, and only when the triage pass was not itself
+		// sure. Anything else is two reviews disagreeing, which a human settles.
+		return v.Classification == ClassTruePositive && v.RefuteSupported && v.Confidence < SureFloor
 	}
 	return v.Classification == ClassFalsePositive && v.Confidence >= DismissFloor
+}
+
+// Disputed reports whether the judge refuted this verdict without that refutation
+// being strong enough to dismiss the finding. Reports label it so a reader knows
+// the two passes disagreed and the finding was kept on purpose.
+func (v Verdict) Disputed() bool {
+	return v.Refuted && !v.Dismissed()
 }
 
 // Provenance records how a verdict was produced (for the Evidence Vault).

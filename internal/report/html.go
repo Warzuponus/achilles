@@ -435,7 +435,7 @@ const htmlDoc = `<!doctype html>
       {{if .Secret}}<div class="kv">This looks like a credential, so the matched text is withheld. Rotate it, then remove it from history.</div>{{end}}
       {{if .Snippet}}<pre>{{.Snippet}}</pre>{{end}}
       {{with .Verdict}}
-      <div class="kv" style="margin-top:8px"><span class="verdict">{{.Classification}} · {{printf "%.0f%%" (pct .Confidence)}}{{if .Exploitability}} · {{.Exploitability}}{{end}}{{if .Refuted}} · refuted{{else if .Overturned}} · overturned by judge{{end}}</span></div>
+      <div class="kv" style="margin-top:8px"><span class="verdict">{{.Classification}} · {{printf "%.0f%%" (pct .Confidence)}}{{if .Exploitability}} · {{.Exploitability}}{{end}}{{if .Disputed}} · disputed by judge{{else if .Refuted}} · refuted{{else if .Overturned}} · overturned by judge{{end}}</span></div>
       {{if .Reasoning}}<div class="kv">{{.Reasoning}}</div>{{end}}
       {{end}}
       {{with .GateRows}}<table class="gates">{{range .}}<tr><td>{{.Question}}</td><td><strong>{{.Answer}}</strong></td><td>{{.Evidence}}</td></tr>{{end}}</table>{{end}}

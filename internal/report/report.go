@@ -93,6 +93,10 @@ func WriteHuman(w io.Writer, s model.Scan) {
 		if v := f.Verdict; v != nil {
 			status := string(v.Classification)
 			switch {
+			case v.Disputed():
+				// The judge disagreed but did not back it well enough to dismiss the
+				// finding, so it is still here on purpose.
+				status += " (DISPUTED by judge — kept for review)"
 			case v.Refuted:
 				status += " (refuted by judge)"
 			case v.Overturned:
@@ -102,7 +106,7 @@ func WriteHuman(w io.Writer, s model.Scan) {
 				status += " (OVERTURNED by judge — surfaced for review)"
 			}
 			fmt.Fprintf(w, "    triage: %s  confidence=%.2f  exploitability=%s\n", status, v.Confidence, v.Exploitability)
-			if v.Overturned && v.RefuteReason != "" {
+			if (v.Overturned || v.Disputed()) && v.RefuteReason != "" {
 				fmt.Fprintf(w, "    judge: %s\n", v.RefuteReason)
 			}
 			if p := f.Provenance; p != nil && p.CorrelatedFrom != "" {

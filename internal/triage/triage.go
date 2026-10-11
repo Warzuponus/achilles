@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -212,16 +213,31 @@ func (e *Engine) Triage(ctx context.Context, runID string, f *model.Finding) err
 	// true-positive suppresses it; refuting a false-positive surfaces it. Before
 	// this was symmetric, a refuted false-positive stayed suppressed, so the judge
 	// could only ever lose findings, never recover one.
-	refuted, reason := parseJudge(jResp.Content)
-	v.RefuteReason = reason
+	j := parseJudge(jResp.Content)
+	v.RefuteReason = j.Reason
 	switch v.Classification {
 	case model.ClassFalsePositive:
-		v.Overturned = refuted
+		// Surfacing is the safe direction, so the judge's word is enough.
+		v.Overturned = j.Refuted
+	case model.ClassTruePositive:
+		// Knocking a finding DOWN is the costly direction to get wrong, so the
+		// refutation is recorded together with whether the judge backed it: a
+		// stated confidence at the dismissal floor, and a quote that really is in
+		// the context it was shown. Verdict.Dismissed acts only on a supported one;
+		// an unsupported one leaves the finding in the gate, marked as disputed.
+		v.Refuted = j.Refuted
+		if j.Refuted {
+			v.JudgeConfidence = j.Confidence
+			v.RefuteEvidence = boundJudgeEvidence(j.Evidence)
+			v.RefuteSupported = j.Confidence >= model.DismissFloor && evidenceInContext(j.Evidence, codeContext)
+		}
 	default:
-		// true_positive, and uncertain — which is already not surfaced, and where
-		// "the verdict is wrong" does not say in which direction, so we do not
-		// guess. See DESIGN §7.
-		v.Refuted = refuted
+		// uncertain: "this verdict is wrong" does not say in which direction, so
+		// nothing is concluded from it — not surfaced, and above all not dismissed.
+		// The judge's reason is kept as a note for the reader. See DESIGN §7.
+		if j.Refuted && j.Reason != "" {
+			v.RefuteReason = "judge, on the uncertain verdict (no direction taken): " + j.Reason
+		}
 	}
 
 	// --- self-consistency sampling (opt-in; borderline verdicts only) ---
@@ -339,8 +355,10 @@ func consolidate(samples []model.Verdict) model.Verdict {
 	}
 	if winner == first.Classification {
 		out.Refuted, out.RefuteReason, out.Overturned = first.Refuted, first.RefuteReason, first.Overturned
+		out.JudgeConfidence, out.RefuteEvidence, out.RefuteSupported = first.JudgeConfidence, first.RefuteEvidence, first.RefuteSupported
 	} else {
 		out.Refuted, out.Overturned = false, false
+		out.JudgeConfidence, out.RefuteEvidence, out.RefuteSupported = 0, "", false
 		if first.RefuteReason != "" {
 			out.RefuteReason = "judge, reviewing the first sample (" + string(first.Classification) + "): " + first.RefuteReason
 		} else {
@@ -477,19 +495,93 @@ func parseVerdict(s string) (model.Verdict, error) {
 	if v.Gates != nil && !v.Gates.Normalize() {
 		v.Gates = nil
 	}
+	// A confidence outside 0..1 must not clear a floor by accident ("85" is 0.85).
+	v.Confidence = model.NormalizeConfidence(v.Confidence)
 	// Fields the pipeline owns are never taken from the model's reply.
 	v.Stability = nil
 	v.Refuted, v.Overturned, v.RefuteReason = false, false, ""
+	v.JudgeConfidence, v.RefuteEvidence, v.RefuteSupported = 0, "", false
 	return v, nil
 }
 
-func parseJudge(s string) (bool, string) {
-	var j struct {
-		Refuted bool   `json:"refuted"`
-		Reason  string `json:"reason"`
-	}
+// judgeReply is the adversarial judge's answer. Confidence and Evidence are what
+// it offers in support of a refutation; both are optional on the wire, and a reply
+// without them simply does not count as a supported refutation.
+type judgeReply struct {
+	Refuted    bool    `json:"refuted"`
+	Confidence float64 `json:"confidence"`
+	Evidence   string  `json:"evidence"`
+	Reason     string  `json:"reason"`
+}
+
+func parseJudge(s string) judgeReply {
+	var j judgeReply
 	// A judge response we can't parse is treated as "did not refute" — we never
 	// silently upgrade confidence, only downgrade, so failing safe here is fine.
-	_ = json.Unmarshal([]byte(llm.ExtractJSON(s)), &j)
-	return j.Refuted, j.Reason
+	if err := json.Unmarshal([]byte(llm.ExtractJSON(s)), &j); err != nil {
+		// A partly-decoded reply (say, a string where a number belongs) must not
+		// leave a half-filled refutation behind.
+		var loose struct {
+			Refuted bool   `json:"refuted"`
+			Reason  string `json:"reason"`
+		}
+		_ = json.Unmarshal([]byte(llm.ExtractJSON(s)), &loose)
+		return judgeReply{Refuted: loose.Refuted, Reason: loose.Reason}
+	}
+	j.Confidence = model.NormalizeConfidence(j.Confidence)
+	return j
+}
+
+// minEvidenceLen is the shortest quoted line that can count as evidence. Below
+// this a "quote" is a brace, a keyword or a bare name: text that appears in any
+// file and proves nothing.
+const minEvidenceLen = 8
+
+// maxJudgeEvidence bounds the judge's quote kept on a verdict.
+const maxJudgeEvidence = 600
+
+// contextGutter matches the margin enrich.Context puts before each source line
+// (">>   12 | "), which a model may or may not copy into its quote.
+var contextGutter = regexp.MustCompile(`^\s*(?:>>)?\s*\d+\s*\|\s?`)
+
+// evidenceInContext reports whether the judge's quoted evidence really appears in
+// the context it was shown. The judge is a model reading text an attacker may have
+// written; "trust me, it is sanitized" must not be enough to drop a finding, so a
+// refutation has to point at something that exists. At least one quoted line of
+// meaningful length must match a context line, ignoring the line-number gutter
+// and whitespace differences.
+func evidenceInContext(evidence, codeContext string) bool {
+	norm := func(line string) string {
+		return strings.Join(strings.Fields(contextGutter.ReplaceAllString(line, "")), " ")
+	}
+	var haystack []string
+	for _, line := range strings.Split(codeContext, "\n") {
+		if n := norm(line); n != "" {
+			haystack = append(haystack, n)
+		}
+	}
+	for _, line := range strings.Split(evidence, "\n") {
+		q := norm(strings.Trim(strings.TrimSpace(line), "`"))
+		if len(q) < minEvidenceLen || !strings.ContainsFunc(q, isWordRune) {
+			continue
+		}
+		for _, h := range haystack {
+			if strings.Contains(h, q) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isWordRune(r rune) bool {
+	return r == '_' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+func boundJudgeEvidence(s string) string {
+	s = strings.TrimSpace(s)
+	if r := []rune(s); len(r) > maxJudgeEvidence {
+		return string(r[:maxJudgeEvidence]) + "..."
+	}
+	return s
 }

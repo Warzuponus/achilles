@@ -2,6 +2,7 @@ package verifyfix
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,7 +17,7 @@ func TestCheckFix_AcceptsAnEditToTheFindingsOwnFile(t *testing.T) {
 		{hunk("src/handlers/run.go"), "src/handlers/run.go"},
 		{"diff --git a/src/a.go b/src/a.go\nindex 1..2 100644\n" + hunk("src/a.go"), "src/a.go"},
 		{hunk("src/a.go"), "./src/a.go"},                                                              // the finding's path is cleaned
-		{hunk("src/a.go"), `src\a.go`},                                                                // and may arrive with backslashes
+		{hunk("src/a.go"), filepath.FromSlash("src/a.go")},                                            // and arrives with the host separator (a backslash on Windows only)
 		{hunk("deploy/Dockerfile"), "deploy/Dockerfile"},                                              // IaC findings are fixed in place too
 		{"diff --git a/src/my file.go b/src/my file.go\n" + hunk("src/my file.go"), "src/my file.go"}, // spaces in the path
 	} {

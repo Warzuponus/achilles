@@ -1,4 +1,4 @@
-// Package advisor is the SCA dependency-upgrade advisor (DESIGN §7, Tier D). It
+// Package advisor is the SCA dependency-upgrade advisor (DESIGN §7). It
 // turns the dependency inventory plus the SCA scanners' vulnerability findings
 // into a prioritized, MERGE-SAFETY-scored upgrade plan: security-forced upgrades
 // first, each scored by how risky it is to merge (a patch bump of a leaf library

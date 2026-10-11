@@ -103,9 +103,9 @@ the image, consider mirroring the Opengrep source for the pinned tag alongside i
 | Security Code Scan | LGPL-3.0 | Yes (separate process) | container/CLI | .NET (C#/VB) SAST; Achilles-built image (deployments/security-code-scan); needs NuGet egress |
 | clang-tidy | Apache-2.0 WITH LLVM-exception | Yes | container/CLI | C/C++ SAST; Achilles-built image (deployments/clang-tidy); SARIF via clang-tidy-sarif |
 | clang-tidy-sarif (sarif-rs) | MIT | Yes | container/CLI | Converts clang-tidy output → SARIF |
-| Checkov / KICS | Apache-2.0 | Yes | container/CLI | IaC |
+| KICS | Apache-2.0 | Yes | container/CLI | IaC (candidate; not yet wired) |
 | Railroader | MIT | Yes (separate process) | container/CLI | Ruby/Rails SAST (MIT Brakeman fork); Achilles-built image (deployments/railroader); native JSON normalized |
-| Brakeman | CC BY-NC-SA | **No** | — | Excluded from commercial-mode |
+| Brakeman | Brakeman Public Use License | **No** | — | Not wired. Free to scan your own code; commercial use needs a paid license, so it is excluded from commercial-mode |
 | CodeQL | GitHub terms | Customer code needs paid license | — | BYO-license opt-in only |
 
 ## Go library dependencies

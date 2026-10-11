@@ -1,5 +1,5 @@
 // Command achillesd serves the Achilles War Room: a server-rendered UI + JSON
-// API over the per-project Evidence Vaults (DESIGN.md §13 Phase 6).
+// API over the per-project Evidence Vaults.
 //
 // The War Room is a single-user tool with NO authentication. It therefore listens
 // on loopback only unless you pass --allow-remote, and it refuses requests whose

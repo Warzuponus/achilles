@@ -1,5 +1,5 @@
 // Package metrics rolls up the Evidence Vault into a fleet-level summary
-// (DESIGN §11, Tier E): findings by severity/tool/rule/target, the analyst
+// (DESIGN §11): findings by severity/tool/rule/target, the analyst
 // feedback FP rate, and LLM token spend. It's a pure read over the vault — the
 // read-side of fleet aggregation — so it works on a single file-backed vault or
 // a shared PostgreSQL vault holding many targets/projects alike.
@@ -131,7 +131,7 @@ type TenantSummary struct {
 }
 
 // FleetSummary is the cross-tenant rollup: fleet-wide totals plus a per-tenant
-// breakdown. It's the read-side of MSSP fleet scanning (Tier E).
+// breakdown. It's the read-side of fleet scanning.
 type FleetSummary struct {
 	Tenants  int             `json:"tenants"`
 	Totals   Summary         `json:"totals"`

@@ -84,9 +84,9 @@ type Location struct {
 	Region Region `json:"region"`
 }
 
-// Finding is one normalized result from one tool. Triage fields (Verdict,
-// Explanation, SuggestedFix) are added by later phases and are absent in
-// Phase 0.
+// Finding is one normalized result from one tool. The triage fields (Verdict,
+// Explanation, SuggestedFix) are filled in by the model review and are absent
+// on a scanner-only run.
 type Finding struct {
 	ID          string          `json:"id"`
 	Tool        string          `json:"tool"`
@@ -118,10 +118,10 @@ type Finding struct {
 	// severity, and gating behaviour. It is NOT part of ID or Fingerprint.
 	Correlated []string `json:"correlated,omitempty"`
 
-	// Populated by the triage layer (Phase 2); nil before triage.
+	// Populated by the triage layer; nil before triage.
 	Verdict     *Verdict     `json:"verdict,omitempty"`
 	Provenance  *Provenance  `json:"provenance,omitempty"`
-	Remediation *Remediation `json:"remediation,omitempty"` // Phase 2.1; nil unless remediated
+	Remediation *Remediation `json:"remediation,omitempty"` // nil unless remediated
 
 	// Deep is set when --deep-verify let the model read the repository to settle this
 	// finding; nil otherwise.

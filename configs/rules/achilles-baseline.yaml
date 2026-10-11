@@ -1,6 +1,6 @@
 # Achilles baseline rules - original, authored in-house (clean IP; not imported
-# from the Semgrep registry). These are a starter set for the Phase 0 skeleton;
-# real rule packs and the generated-rule repository (DESIGN.md sec. 9) come later.
+# from the Semgrep registry). They are a small starter set: `achilles tools install`
+# adds the community rule pack, and DESIGN.md sec. 9 covers generated rules.
 # Format is Semgrep/Opengrep-compatible. Keep this file ASCII-only: the Opengrep
 # config reader decodes rule files as ASCII and errors on non-ASCII bytes.
 rules:

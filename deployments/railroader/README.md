@@ -6,7 +6,8 @@ MIT** — fully commercial-safe, invoked as a separate-process container.
 
 ## Why Railroader (not Brakeman)
 
-Brakeman is **CC-BY-NC-SA** (non-commercial) — it's blocked in commercial mode
+Brakeman's own license (the Brakeman Public Use License) requires a paid license
+for commercial use — it's blocked in commercial mode
 (see the `brakeman` entry in `configs/tools.yaml`). Railroader is the drop-in MIT
 fork; it shares Brakeman's checks and its JSON output schema.
 

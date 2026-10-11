@@ -1,4 +1,4 @@
-// Package review is the full-repo security review agent (DESIGN §7, Tier D). It
+// Package review is the full-repo security review agent (DESIGN §7). It
 // is deliberately DIFFERENT from finding-level triage: instead of judging one
 // scanner hit at a time, it reasons over the whole codebase profile + the set of
 // findings to surface systemic/architectural risks, themes across findings, and

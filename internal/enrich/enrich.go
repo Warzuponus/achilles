@@ -1,6 +1,6 @@
 // Package enrich expands a finding with the surrounding source context the LLM
-// needs to triage it well (DESIGN.md §7 step 1). Phase 2 provides file-context
-// (lines around the span); git blame and data-flow come later.
+// needs to triage it well (DESIGN.md §7 step 1): the enclosing function or block
+// around the span, entry-point hints from the same file, and optionally git blame.
 package enrich
 
 import (

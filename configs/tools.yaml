@@ -262,7 +262,7 @@ tools:
     outputFile: "{out}/results.json"
 
   # Railroader — Ruby on Rails SAST (MIT, commercial-safe, separate process).
-  # The MIT fork of Brakeman (which is CC-BY-NC-SA → blocked, see below). No
+  # The MIT fork of Brakeman (whose own license forbids commercial use; see below). No
   # public container and no SARIF, so we build our own image (deployments/
   # railroader/) and normalize its JSON (internal/normalize/railroader.go,
   # format: railroader). Scans Rails apps; static (no bundle install), no egress
@@ -278,11 +278,13 @@ tools:
     argv: ["-f", "json", "-o", "{out}/results.json", "-q", "{src}"]
     outputFile: "{out}/results.json"
 
-  # Brakeman — the original Ruby SAST, but CC-BY-NC-SA (non-commercial): blocked
-  # in commercial mode. Use Railroader (its MIT fork, above) instead.
+  # Brakeman — the original Ruby SAST. Its Brakeman Public Use License is free for
+  # scanning your own code but needs a paid license for commercial use, so it is
+  # blocked in commercial mode. Not wired (no argv or image): this entry exists so
+  # the gate has a real non-commercial-safe tool to refuse. Use Railroader (above).
   - id: brakeman
-    license: CC-BY-NC-SA
-    commercialSafe: false          # non-commercial license — blocked in commercial-mode
+    license: Brakeman-Public-Use
+    commercialSafe: false          # commercial use needs a paid license — blocked in commercial-mode
     enabled: false
     languages: [ruby]
 

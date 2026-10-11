@@ -1,8 +1,8 @@
 // Command achilles orchestrates open-source SAST tools, normalizes their SARIF
 // to Findings, records provenance to the Evidence Vault, and prints a report.
 //
-// Phase 1: config-driven tool registry (configs/tools.yaml) + license-mode
-// policy gate + Evidence Vault. A --from-sarif mode ingests existing SARIF,
+// Tools come from a config-driven registry (configs/tools.yaml) behind a
+// license-mode policy gate. A --from-sarif mode ingests existing SARIF,
 // exercising the normalize→report spine without running any scanner.
 package main
 

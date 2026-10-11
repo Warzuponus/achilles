@@ -21,7 +21,7 @@ type Target struct {
 // RawResult is a tool's native output plus metadata, before normalization.
 type RawResult struct {
 	Tool     string
-	Format   string // "sarif" in Phase 0
+	Format   string // "sarif" unless the tool declares another format
 	Data     []byte
 	ExitCode int
 	Stderr   string

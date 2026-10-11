@@ -1,6 +1,6 @@
 // Package report renders a Scan for humans and passes SARIF through for
-// machine consumers. In Phase 0 the SARIF output is the tool's own document;
-// later phases re-emit a unified SARIF across all tools.
+// machine consumers: one unified SARIF document across all tools, plus HTML,
+// Markdown and JUnit.
 package report
 
 import (

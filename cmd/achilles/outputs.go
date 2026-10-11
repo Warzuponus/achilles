@@ -93,7 +93,7 @@ func writeDiagnostics(o *options, ev vault.Store, runID string, diags []toolDiag
 	return nil
 }
 
-// runAgents runs the opt-in whole-repo agents (Tier D: security review, SCA
+// runAgents runs the opt-in whole-repo agents (security review, SCA
 // upgrade advisor, threat model) and writes the unified HTML report. An agent
 // failure only warns; its section is then missing from the report.
 func runAgents(ctx context.Context, o *options, ev vault.Store, runID, absTarget string, scan model.Scan, tasks map[string]llm.TaskModel) error {
@@ -102,7 +102,7 @@ func runAgents(ctx context.Context, o *options, ev vault.Store, runID, absTarget
 	var adviceRes *advisor.Advice
 	var threatRes *threatmodel.ThreatModel
 
-	// --- holistic full-repo security review (Tier D) ---
+	// --- holistic full-repo security review ---
 	if o.reviewOn && !o.dryRun {
 		r, err := runReview(ctx, ev, runID, absTarget, scan, o.llmBaseURL, o.llmModel, tasks)
 		if err != nil {
@@ -111,7 +111,7 @@ func runAgents(ctx context.Context, o *options, ev vault.Store, runID, absTarget
 		reviewRes = r
 	}
 
-	// --- SCA dependency-upgrade advisor (Tier D) ---
+	// --- SCA dependency-upgrade advisor ---
 	if o.scaAdvice && !o.dryRun {
 		a, err := runAdvisor(ctx, ev, runID, absTarget, scan, o.llmBaseURL, o.llmModel, tasks)
 		if err != nil {
@@ -120,7 +120,7 @@ func runAgents(ctx context.Context, o *options, ev vault.Store, runID, absTarget
 		adviceRes = a
 	}
 
-	// --- threat-model agent → OTM artifact (Tier D) ---
+	// --- threat-model agent → OTM artifact ---
 	if o.threatModelOut != "" && !o.dryRun {
 		tm, err := runThreatModel(ctx, ev, runID, absTarget, scan, o.threatModelOut, o.llmBaseURL, o.llmModel, tasks)
 		if err != nil {

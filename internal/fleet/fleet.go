@@ -1,4 +1,4 @@
-// Package fleet is the MSSP fleet-scan control plane (DESIGN §10/§11, Tier E). It
+// Package fleet is the fleet-scan control plane (DESIGN §10/§11). It
 // dispatches scans across many tenants' targets, each writing to that tenant's
 // isolated Evidence Vault, so the shared vault becomes the fleet's central store
 // (Option B — build on the vault we already have, not a separate bundle store).

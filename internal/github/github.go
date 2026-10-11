@@ -1,5 +1,5 @@
 // Package github is a minimal GitHub REST client for Achilles's outward-facing
-// PR/issue integrations (Tier C). It is deliberately small and interface-free at
+// PR/issue integrations. It is deliberately small and interface-free at
 // this layer: the caller supplies a token + repo (as GitHub Actions provides via
 // GITHUB_TOKEN / GITHUB_REPOSITORY), and every method performs one documented
 // REST call. Nothing here posts unless a command explicitly invokes it.

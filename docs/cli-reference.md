@@ -2,9 +2,9 @@
 
 Every `achilles` flag, grouped by task. (For `achilles-fleet`, see [Fleet](fleet.md).)
 
-> **Flags before the target.** `achilles [flags] <target-path>`. Go's stdlib
-> `flag` stops at the first positional, so a flag after the path is ignored.
-> The target defaults to `.` if omitted.
+> `achilles [flags] <target-path>`. Flags are accepted before or after the target.
+> The target defaults to `.` if omitted; more than one path is an error. Use `--` before
+> a path that begins with a dash.
 
 ## Subcommands
 

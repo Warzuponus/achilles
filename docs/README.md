@@ -32,6 +32,5 @@ achilles /path/to/code              # scan with the default toolset, print a rep
 achilles --html-report report.html --fail-on high /path/to/code
 ```
 
-**One rule that trips everyone up:** flags must come **before** the target path
-(`achilles --profile full ./src`, not `achilles ./src --profile full`). Achilles
-uses Go's stdlib `flag`, which stops parsing at the first positional argument.
+Flags can go before or after the target path: `achilles --profile full ./src` and
+`achilles ./src --profile full` are the same. Give one target path per run.

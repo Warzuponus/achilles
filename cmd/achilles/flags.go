@@ -194,11 +194,16 @@ func parseFlags(argv []string) (*options, error) {
 	fs.BoolVar(&o.issuesStrict, "issues-strict", false, "with --file-issues: exit non-zero if any GitHub call failed")
 	fs.BoolVar(&o.allowPublicIssues, "allow-public-issues", false, "with --file-issues: allow filing vulnerability details as issues in a PUBLIC repository")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: achilles [flags] <target-path>")
+		fmt.Fprintln(os.Stderr, "usage: achilles [flags] <target-path>   (flags may also follow the path)")
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(argv); err != nil {
+	positional, err := parseInterleaved(fs, argv)
+	if err != nil {
 		return nil, err
+	}
+	if len(positional) > 1 {
+		return nil, fmt.Errorf("expected one target path, got %d (%s); scan one path per run",
+			len(positional), strings.Join(positional, ", "))
 	}
 	if o.failOn != "" {
 		sev, ok := model.ParseSeverity(o.failOn)
@@ -208,8 +213,8 @@ func parseFlags(argv []string) (*options, error) {
 		o.failOn = string(sev) // canonical: "High" and " high" mean high
 	}
 	o.target = "."
-	if fs.NArg() > 0 {
-		o.target = fs.Arg(0)
+	if len(positional) == 1 {
+		o.target = positional[0]
 	}
 	explicit := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
@@ -217,6 +222,36 @@ func parseFlags(argv []string) (*options, error) {
 		return nil, err
 	}
 	return o, nil
+}
+
+// parseInterleaved parses flags wherever they appear, before or after the target
+// path, and returns the non-flag arguments.
+//
+// The standard flag package stops at the first non-flag argument, so
+// `achilles . --fail-on high` used to scan with no gate and exit 0: every flag
+// after the path was silently discarded. For a tool whose flags turn on the AI
+// review and the CI gate, silently dropping them is the worst available failure,
+// so parsing resumes after each positional argument instead. A bare "--" still
+// ends flag parsing; everything after it is positional (a path that starts with
+// a dash).
+func parseInterleaved(fs *flag.FlagSet, argv []string) ([]string, error) {
+	var positional []string
+	args := argv
+	for {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		rest := fs.Args()
+		if len(rest) == 0 {
+			return positional, nil
+		}
+		// Parse stopped either at a non-flag argument or just past a "--".
+		if consumed := len(args) - len(rest); consumed > 0 && args[consumed-1] == "--" {
+			return append(positional, rest...), nil
+		}
+		positional = append(positional, rest[0])
+		args = rest[1:]
+	}
 }
 
 // applyPresets expands --llm-provider and --ai. An explicitly given flag (or its

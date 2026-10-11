@@ -83,6 +83,10 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Flags after the target path were silently ignored.** `achilles . --ai` ran a plain
+  scan and `achilles . --fail-on high` ran with no gate and exited 0. Flags are now
+  accepted before or after the path, an unknown flag anywhere is an error, and so is a
+  second path.
 - **Baselines and issue de-duplication could break at random.** When a scanner supplied
   more than one fingerprint under keys Achilles does not know, one was picked by Go map
   order, so it differed between runs. The choice is now deterministic.

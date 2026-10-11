@@ -174,9 +174,6 @@ Copy-paste consumer templates (they do not run here) live in `examples/workflows
 
 ## Conventions & gotchas
 
-- **Flags before the target path** — stdlib `flag` stops at the first positional
-  (`achilles --profile full ./src`, not `./src --profile full`). cobra migration
-  is backlogged.
 - **`configs/rules/*.yaml` must be ASCII** — Opengrep's config reader is
   ASCII-only (an em-dash once caused a scan to exit 2).
 - **Self-scan baseline** — `.achilles/baseline.json` is committed. New gosec

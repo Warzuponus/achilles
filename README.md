@@ -115,9 +115,8 @@ has the architecture; [DEPLOY.md](DEPLOY.md) every way to run it.
 newly-introduced findings), exports for SARIF / JUnit / Markdown, GitHub PR
 annotations, a reusable GitHub Action, and release builds.
 
-> **Flag ordering:** flags must come *before* the target path
-> (`achilles --mode commercial --sarif-report out.sarif ./src`) — Go's stdlib
-> flag parser stops at the first positional arg. (cobra migration is on the roadmap.)
+> **Flag ordering:** flags may come before or after the target path
+> (`achilles --mode commercial ./src` and `achilles ./src --mode commercial` are the same).
 
 ### Everything through Phase 4
 

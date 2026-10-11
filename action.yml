@@ -234,8 +234,9 @@ runs:
         [ -n "$INPUT_FAIL_ON" ] && flags+=(--fail-on "$INPUT_FAIL_ON")
         # shellcheck disable=SC2162
         read -r -d '' -a extra <<< "$INPUT_ARGS" || true
-        # Flags must precede the target path (stdlib flag parsing); extras come last
-        # among the flags so they override the defaults above.
+        # Flags go before the target so this also works with releases that only
+        # parsed flags there; extras come last among them so they override the
+        # defaults above.
         achilles "${flags[@]}" ${extra[@]+"${extra[@]}"} "$INPUT_TARGET"
         code=$?
         {

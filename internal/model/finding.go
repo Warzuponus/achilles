@@ -99,6 +99,14 @@ type Finding struct {
 	Fingerprint string          `json:"fingerprint"`
 	Raw         json.RawMessage `json:"-"`
 
+	// Category is what KIND of finding the scanner said this is, when it said so
+	// (CategorySecret, CategoryDependency, or empty). A multi-purpose scanner such
+	// as Trivy reports vulnerable packages, misconfigurations and leaked secrets
+	// under one tool name with opaque rule ids, so the tool and rule alone cannot
+	// tell them apart; its own classification can. IsSecret and
+	// IsDependencyAdvisory consult it first.
+	Category string `json:"category,omitempty"`
+
 	// Shadow marks a finding produced by a generated rule still inside its
 	// shadow window (§9.4 rule flywheel): it is reported for observation but
 	// does NOT affect the --fail-on gate, issue filing, or a written baseline.
@@ -227,12 +235,21 @@ func shortHash(s string) string {
 	return hex.EncodeToString(sum[:])[:16]
 }
 
+// Finding categories, as declared by the scanner (see Finding.Category).
+const (
+	CategorySecret     = "secret"
+	CategoryDependency = "dependency"
+)
+
 // IsSecret reports whether this finding is about a credential or key. Such a
 // finding's matched text IS the secret, so its code and message must never be
 // copied into an LLM prompt, a shared report, or an issue. The test is
 // deliberately broad: wrongly withholding a snippet costs a little context,
 // wrongly including one leaks a credential.
 func (f Finding) IsSecret() bool {
+	if f.Category == CategorySecret {
+		return true // the scanner itself says so
+	}
 	switch strings.ToLower(f.Tool) {
 	case "gitleaks", "trufflehog", "detect-secrets":
 		return true
@@ -281,6 +298,9 @@ var advisoryID = regexp.MustCompile(`(?i)^(?:` +
 // AI review has nothing to read and its verdict would be a guess. The pipeline
 // therefore never sends one to the model and never dismisses one.
 func (f Finding) IsDependencyAdvisory() bool {
+	if f.Category == CategoryDependency {
+		return true // the scanner itself says so
+	}
 	if scaTools[strings.ToLower(strings.TrimSpace(f.Tool))] {
 		return true
 	}

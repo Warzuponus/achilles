@@ -83,6 +83,14 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Trivy's secret findings were sent to the model and could be dismissed, and found
+  secrets were copied into the vault.** Credential findings were recognised by tool name
+  and rule-id keywords, which Trivy's rules (`github-pat`, `slack-web-hook`, ...) do not
+  match. Findings now carry the category the scanner itself declares, so a Trivy secret
+  is withheld from the model and can never be dismissed. Separately, a credential
+  finding's matched text is no longer kept anywhere: it is dropped from the finding once
+  its fingerprint is taken, removed from the scanner output stored in the vault and
+  written by `--sarif-out`, and credential findings are never used as `--rag` examples.
 - **The War Room audit export served the vault unredacted.** `GET /runs/{id}/audit`
   returned raw scanner output (a secret scanner's report is a list of secrets), credential
   snippets and full LLM transcripts, and the run page only pattern-masked a credential

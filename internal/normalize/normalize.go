@@ -42,5 +42,19 @@ func Normalize(format, fallbackTool string, data []byte) ([]model.Finding, error
 	if !ok {
 		return nil, fmt.Errorf("no normalizer registered for format %q", format)
 	}
-	return n(fallbackTool, data)
+	fs, err := n(fallbackTool, data)
+	if err != nil {
+		return nil, err
+	}
+	// A credential finding's snippet IS the credential. Its fingerprint has
+	// already been derived from it (so two secrets stay two findings), and nothing
+	// downstream may show it: reports and issues withhold it, the model never sees
+	// it. Keeping it would only copy the secret into the vault and everything that
+	// reads the vault, so it stops here.
+	for i := range fs {
+		if fs[i].IsSecret() {
+			fs[i].CodeContext = ""
+		}
+	}
+	return fs, nil
 }

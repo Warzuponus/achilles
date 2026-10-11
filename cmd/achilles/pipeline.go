@@ -167,7 +167,7 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 			diags = append(diags, toolDiag{Tool: "opengrep-shadow", Stage: "run", Error: serr.Error()})
 		} else if fs, nerr := normalize.Normalize(raw.Format, raw.Tool, raw.Data); nerr == nil && len(fs) > 0 {
 			recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindRawOutput, Source: "opengrep-shadow"},
-				map[string]any{"sarif": json.RawMessage(raw.Data)})
+				map[string]any{"sarif": json.RawMessage(normalize.ScrubRaw(raw.Format, raw.Data, fs))})
 			relativizeFindings(absTarget, fs)
 			for i := range fs {
 				fs[i].Shadow = true

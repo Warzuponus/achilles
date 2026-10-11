@@ -48,8 +48,11 @@ and Achilles prints the destination host before it starts. Before sending:
 
 - credentials in the code and messages are masked (cloud keys, tokens, private keys,
   `password = "..."` style assignments);
-- findings **about** credentials (Gitleaks and other secret rules) are never sent to the
-  model at all, and are never dismissed by it;
+- findings **about** credentials are never sent to the model at all, and are never
+  dismissed by it. That covers Gitleaks, anything a scanner itself classes as a secret
+  (Trivy's secret results), and rules or CWEs that name a credential. The matched text
+  of such a finding is not kept either: not on the finding, not in the stored scanner
+  output, and not as a `--rag` example;
 - `--llm-no-code` sends only rule names, messages and file locations. Verdicts made
   without seeing code are weak, so in this mode the AI never dismisses a finding;
 - a local model (`--llm-provider ollama`) keeps everything on your machine.

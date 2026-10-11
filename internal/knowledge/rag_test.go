@@ -2,12 +2,14 @@ package knowledge
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"strings"
 	"testing"
 	"unicode"
 
 	"github.com/Warzuponus/achilles/internal/model"
+	"github.com/Warzuponus/achilles/internal/vault"
 )
 
 // fakeEmbed is a deterministic bag-of-words embedder: it hashes tokens into a
@@ -79,5 +81,76 @@ func TestRAG_EmptyCorpus(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("empty corpus should return nil, got %v", got)
+	}
+}
+
+// A credential finding is never a few-shot example: its context is the secret, and
+// an example is sent to the embeddings endpoint and later pasted into other
+// findings' prompts.
+func TestRAG_PopulateFromVaultSkipsCredentialFindings(t *testing.T) {
+	v := newVault(t)
+	secretText := "hunter" + "2-Xy7!q"
+	put := func(f model.Finding) {
+		b, _ := json.Marshal(f)
+		if _, err := v.Append(vault.Record{RunID: "r", Kind: vault.KindFinding, Fingerprint: f.Fingerprint, Payload: b}); err != nil {
+			t.Fatal(err)
+		}
+		if err := NewFeedbackStore(v).Record("r", Feedback{Fingerprint: f.Fingerprint, Tool: f.Tool, RuleID: f.RuleID, Label: LabelFP}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// As an older vault could hold it: the snippet still on the record.
+	put(model.Finding{Fingerprint: "sec", Tool: "gitleaks", RuleID: "generic-api-key", CodeContext: "pw: " + secretText})
+	put(model.Finding{Fingerprint: "sec2", Tool: "Trivy", RuleID: "slack-web-hook", Category: model.CategorySecret, CodeContext: secretText})
+	put(model.Finding{Fingerprint: "code", Tool: "opengrep", RuleID: "eval", CodeContext: "eval(user_input)"})
+
+	var embedded []string
+	rag, err := NewRAG(func(ctx context.Context, text string) ([]float32, error) {
+		embedded = append(embedded, text)
+		return fakeEmbed(ctx, text)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := rag.PopulateFromVault(context.Background(), v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("seeded %d example(s), want 1 (only the code finding)", n)
+	}
+	for _, text := range embedded {
+		if strings.Contains(text, secretText) {
+			t.Errorf("a credential was sent to the embeddings function: %q", text)
+		}
+	}
+}
+
+func TestRAG_AddMasksCredentialsInExamples(t *testing.T) {
+	key := "AKIA" + "IOSFODNN7EXAMPLE"
+	var embedded []string
+	rag, err := NewRAG(func(ctx context.Context, text string) ([]float32, error) {
+		embedded = append(embedded, text)
+		return fakeEmbed(ctx, text)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := rag.Add(ctx, model.Finding{Fingerprint: "fp", Tool: "opengrep", RuleID: "eval"}, LabelTP,
+		"client = connect(key='"+key+"')\neval(user_input)"); err != nil {
+		t.Fatal(err)
+	}
+	ex, err := rag.Similar(ctx, "eval(user_input)", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range append(embedded, ex...) {
+		if strings.Contains(text, key) {
+			t.Errorf("a key in ordinary code context must be masked before it is embedded or replayed: %q", text)
+		}
+	}
+	if len(ex) != 1 || !strings.Contains(ex[0], "eval(user_input)") {
+		t.Errorf("the example itself should survive masking: %v", ex)
 	}
 }

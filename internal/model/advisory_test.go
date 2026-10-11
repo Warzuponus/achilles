@@ -71,3 +71,24 @@ func TestDependencyAdvisoryIsNeverDismissed(t *testing.T) {
 			fingerprints(s.Findings), fingerprints(s.Dismissed))
 	}
 }
+
+// What the scanner declares outranks what the tool name and rule id suggest.
+func TestCategoryDecidesSecretAndAdvisory(t *testing.T) {
+	sec := Finding{Tool: "Trivy", RuleID: "slack-web-hook", Category: CategorySecret}
+	if !sec.IsSecret() {
+		t.Error("a scanner-declared secret is a credential finding whatever its rule is called")
+	}
+	if (Finding{Tool: "Trivy", RuleID: "slack-web-hook"}).IsSecret() {
+		t.Error("precondition: without the category this rule id is not recognised")
+	}
+	dep := Finding{Tool: "Trivy", RuleID: "DSA-5678-1", Category: CategoryDependency}
+	if !dep.IsDependencyAdvisory() {
+		t.Error("a scanner-declared vulnerable package is a dependency advisory whatever its id format")
+	}
+	// A confident verdict dismisses neither.
+	fp := &Verdict{Classification: ClassFalsePositive, Confidence: 0.99}
+	sec.Verdict, dep.Verdict = fp, fp
+	if sec.Dismissed() || dep.Dismissed() {
+		t.Error("neither a credential nor an advisory may be dismissed by a verdict")
+	}
+}

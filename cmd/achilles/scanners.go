@@ -24,7 +24,7 @@ func runFromSARIF(path, failOn string) error {
 	if err != nil {
 		return fmt.Errorf("read --from-sarif: %w", err)
 	}
-	findings, err := normalize.FromSARIF("unknown", data)
+	findings, err := normalize.Normalize("sarif", "unknown", data)
 	if err != nil {
 		return err
 	}
@@ -93,8 +93,14 @@ func runScanners(ctx context.Context, scanners []scanner.Scanner, tgt scanner.Ta
 					out <- r
 					continue
 				}
-				r.raw = raw
 				r.findings, r.normErr = normalize.Normalize(raw.Format, raw.Tool, raw.Data)
+				if r.normErr == nil {
+					// From here on the raw output is only stored and written out
+					// (vault, --sarif-out), so the matched text of credential
+					// findings comes out of it now.
+					raw.Data = normalize.ScrubRaw(raw.Format, raw.Data, r.findings)
+				}
+				r.raw = raw
 				out <- r
 			}
 		}()

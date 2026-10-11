@@ -31,7 +31,7 @@ These run instead of a scan. (A scan target literally named `version`, `doctor` 
 | `--timeout` | `5m` | overall scan timeout |
 | `--version` | — | print version, commit, build date, Go version and platform, then exit |
 | `--from-sarif` | — | skip scanning; normalize an existing SARIF file (exercises the report spine) |
-| `--sarif-out` | — | also write each tool's raw SARIF into this directory |
+| `--sarif-out` | — | also write each tool's SARIF into this directory. It is the tool's own output except that the matched text of credential findings is replaced with `[REDACTED]` |
 
 ## Evidence Vault
 

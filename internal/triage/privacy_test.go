@@ -112,3 +112,27 @@ func TestTriage_NoCodeModeSendsNoEntryPointHints(t *testing.T) {
 		}
 	}
 }
+
+// A scanner-declared credential finding is withheld even when neither its tool
+// nor its rule id looks like one (Trivy's "slack-web-hook", "github-pat", ...).
+func TestTriage_ScannerDeclaredSecretNeverReachesTheModel(t *testing.T) {
+	fake := &llmtest.Fake{Responses: []string{tpVerdict}}
+	eng := NewEngine(llm.NewRouter(fake), nil, enrich.New(2), "")
+	f := newFinding()
+	f.Tool, f.RuleID, f.Category = "Trivy", "slack-web-hook", model.CategorySecret
+
+	if err := eng.Triage(context.Background(), "r", f); !errors.Is(err, ErrWithheld) {
+		t.Fatalf("err = %v, want ErrWithheld", err)
+	}
+	if len(fake.Calls) != 0 || f.Verdict != nil {
+		t.Errorf("a credential finding reached the model (%d call(s)) or got a verdict", len(fake.Calls))
+	}
+
+	// Without the category the same tool and rule would have gone to the model:
+	// that is the gap the category closes.
+	g := newFinding()
+	g.Tool, g.RuleID = "Trivy", "slack-web-hook"
+	if g.IsSecret() {
+		t.Fatal("precondition: the rule id alone does not look like a credential")
+	}
+}

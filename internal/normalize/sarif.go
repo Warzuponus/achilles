@@ -51,6 +51,7 @@ func FromSARIF(fallbackTool string, data []byte) ([]model.Finding, error) {
 				Location:    loc,
 				CodeContext: snippet,
 				CWE:         cweFor(res, rules[res.RuleID]),
+				Category:    categoryFor(tool, res, rules[res.RuleID]),
 			}
 			f.Severity = severityFor(res, rules[res.RuleID], f.IsSecret())
 			f.ID = model.ComputeID(tool, res.RuleID, loc)
@@ -167,6 +168,41 @@ func scoreSeverity(res model.SarifResult, rule model.SarifRule) model.Severity {
 		return model.SeverityFromScore(score)
 	}
 	return model.SeverityUnknown
+}
+
+// categoryFor reads the scanner's own statement of what kind of finding this is.
+//
+// Trivy is the case that needs it: one tool, three kinds of result, and rule ids
+// such as "github-pat" or "slack-web-hook" that no keyword list reliably marks as
+// credentials. Trivy tags every rule with its class ("secret", "vulnerability",
+// "misconfiguration") and labels a secret result in its message. Missing this
+// sends the line holding the credential to the model and lets a verdict dismiss it.
+func categoryFor(tool string, res model.SarifResult, rule model.SarifRule) string {
+	tags := append([]string(nil), rule.Properties.Tags...)
+	if raw, ok := res.Properties["tags"].([]any); ok {
+		for _, t := range raw {
+			if s, ok := t.(string); ok {
+				tags = append(tags, s)
+			}
+		}
+	}
+	trivy := strings.EqualFold(tool, "trivy")
+	for _, t := range tags {
+		switch strings.ToLower(strings.TrimSpace(t)) {
+		case "secret", "secrets":
+			return model.CategorySecret
+		case "vulnerability":
+			// Only Trivy's use of the word is known to mean "vulnerable package";
+			// another tool may tag a code finding this way.
+			if trivy {
+				return model.CategoryDependency
+			}
+		}
+	}
+	if trivy && (strings.HasPrefix(res.Message.Text, "Secret ") || strings.Contains(res.Message.Text, "\nSecret ")) {
+		return model.CategorySecret
+	}
+	return ""
 }
 
 // cweFor collects CWE identifiers from the result and its rule metadata. Tools

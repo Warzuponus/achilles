@@ -8,6 +8,7 @@ import (
 	chromem "github.com/philippgille/chromem-go"
 
 	"github.com/Warzuponus/achilles/internal/model"
+	"github.com/Warzuponus/achilles/internal/redact"
 	"github.com/Warzuponus/achilles/internal/vault"
 )
 
@@ -58,6 +59,13 @@ func (r *RAG) PopulateFromVault(ctx context.Context, v vault.Store) (int, error)
 		if !ok {
 			continue
 		}
+		// A credential finding is never an example: its context is the secret, and
+		// an example is sent to the embeddings endpoint now and pasted into other
+		// findings' prompts later. (Vaults written before snippets were dropped at
+		// normalize time can still hold one.)
+		if f.IsSecret() {
+			continue
+		}
 		if err := r.Add(ctx, f, fb.Label, f.CodeContext); err != nil {
 			return n, err
 		}
@@ -71,6 +79,8 @@ func (r *RAG) Add(ctx context.Context, f model.Finding, label Label, codeContext
 	if codeContext == "" {
 		codeContext = f.Message
 	}
+	// Same masking as a triage prompt: this text goes to the same kind of endpoint.
+	codeContext = redact.Prompt(codeContext)
 	return r.coll.AddDocument(ctx, chromem.Document{
 		ID:      f.Fingerprint,
 		Content: codeContext,

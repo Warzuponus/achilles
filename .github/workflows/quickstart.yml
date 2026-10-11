@@ -9,6 +9,8 @@ on:
     paths:
       - "deploy/compose/**"
       - "deployments/achilles/**"
+      - "scripts/collect-licenses.sh"
+      - "third_party/**"
       - "examples/quickstart/**"
       - "configs/**"
       - "cmd/**"

@@ -87,6 +87,15 @@ First public release (`v0.1.0`) is pending.
   (scripts from the War Room's own origin only), `X-Content-Type-Options: nosniff` and
   `Referrer-Policy: no-referrer`.
 
+- Release archives and the container image now carry the notices their licenses
+  require. `NOTICE` was in neither (Apache-2.0 section 4 requires it); the image
+  redistributes the Opengrep binary (LGPL-2.1) with no copy of that license; and no
+  distribution carried the license text of the Go modules linked into the binaries.
+  The archives add `NOTICE` and `third_party/licenses/`; the image adds those plus a
+  license directory per bundled scanner under `/usr/share/doc/achilles/licenses/`, and
+  the image build fails if one is missing. CI fails if the committed license texts do
+  not match the linked modules.
+
 ### Changed (toolchain)
 - Built and tested with Go 1.27 (`go 1.27`, `toolchain go1.27.2`): `go.mod`, every workflow, the
   action, and the container base images (digest-pinned) move together. Building from source now

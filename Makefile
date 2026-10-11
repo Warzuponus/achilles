@@ -1,7 +1,7 @@
 BINARY := achilles
 BINDIR := bin
 
-.PHONY: all build install release test test-integration verify-tier2 license-check lint fmt vet run clean tidy eval-context eval-gate eval-baseline eval-verdict eval-verdict-ollama eval-detect eval-detect-gate
+.PHONY: all build install release test test-integration verify-tier2 license-check licenses lint fmt vet run clean tidy eval-context eval-gate eval-baseline eval-verdict eval-verdict-ollama eval-detect eval-detect-gate
 
 all: build
 
@@ -93,6 +93,12 @@ verify-tier2:
 # Needs: go install github.com/google/go-licenses@v1.6.0
 license-check:
 	go-licenses check ./... --disallowed_types=forbidden,restricted
+	scripts/collect-licenses.sh --check third_party/licenses ./cmd/...
+
+# Refresh the license texts shipped in the release archives and the image. Run after
+# any dependency change; CI fails if the committed copy is stale.
+licenses:
+	scripts/collect-licenses.sh third_party/licenses ./cmd/...
 
 vet:
 	go vet ./...

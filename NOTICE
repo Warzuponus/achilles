@@ -10,3 +10,7 @@ request by `achilles tools install` rather than distributed with it. The list,
 versions and licenses are in THIRD-PARTY.md. If you redistribute Achilles together
 with any of them, you take on the notice and source-offer obligations of their
 licenses (notably LGPL for Opengrep).
+
+The Achilles binaries link third-party Go modules and the Go standard library.
+Their licenses and notices are reproduced in third_party/licenses/ (in the release
+archives) and /usr/share/doc/achilles/licenses/ (in the container image).

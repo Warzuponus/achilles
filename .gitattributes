@@ -1,3 +1,6 @@
 # Check text files out with LF on every platform. Windows checkouts otherwise get
 # CRLF, which breaks gofmt checks, byte-compared fixtures and shell scripts.
 * text=auto eol=lf
+# License texts are copied byte for byte from the modules they belong to.
+third_party/licenses/** -text
+deployments/achilles/licenses/**/LICENSE -text

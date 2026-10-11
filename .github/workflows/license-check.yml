@@ -28,3 +28,7 @@ jobs:
         run: |
           export PATH="$(go env GOPATH)/bin:$PATH"
           go-licenses check ./... --disallowed_types=forbidden,restricted
+      # The release archives and the image ship third_party/licenses/. It must name
+      # exactly the modules the binaries link, at the versions in go.mod.
+      - name: Shipped license texts match the linked modules
+        run: scripts/collect-licenses.sh --check third_party/licenses ./cmd/...

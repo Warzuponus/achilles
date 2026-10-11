@@ -27,6 +27,12 @@ license check above). **No third-party scanner is included.** Embedded in the
 binary: `configs/tools.yaml` and the Achilles-authored baseline rules in
 `configs/rules/`.
 
+Every archive carries `LICENSE`, `NOTICE`, this file, and `third_party/licenses/`:
+the license (and any NOTICE or PATENTS file) of each Go module linked into the
+binaries, and of the Go standard library, copied unchanged from the module.
+`make licenses` regenerates that directory and CI fails if it does not match the
+modules in `go.mod`.
+
 `achilles tools install` downloads, on the user's machine and from the upstream
 project, the unmodified release assets listed in
 `internal/toolchain/manifest.go` (the same versions as the container image below),
@@ -55,12 +61,26 @@ run only as a separate process:
 | Gitleaks | 8.30.1 | MIT | <https://github.com/gitleaks/gitleaks> |
 | gosec | v2.27.1 | Apache-2.0 | <https://github.com/securego/gosec> |
 | OSV-Scanner | v2.4.0 | Apache-2.0 | <https://github.com/google/osv-scanner> |
-| Go toolchain (full variant) | 1.27 | BSD-3-Clause | <https://go.dev> |
+| Go toolchain (full variant) | 1.27.1 | BSD-3-Clause | <https://go.dev> |
 
 Their complete corresponding source is available at the upstream locations above for
-the pinned versions; the image also carries this file and `LICENSE` under
-`/usr/share/doc/achilles/`. The Debian base image's packages carry their own licenses
-in `/usr/share/doc/*/copyright`.
+the pinned versions. The image carries the license texts with the binaries:
+
+| Path in the image | What |
+|---|---|
+| `/usr/share/doc/achilles/{LICENSE,NOTICE,THIRD-PARTY.md}` | Achilles itself |
+| `/usr/share/doc/achilles/licenses/achilles/` | the Go modules linked into the Achilles binaries (the same `third_party/licenses/` as the archives) |
+| `/usr/share/doc/achilles/licenses/opengrep/` | the LGPL-2.1 text, and `SOURCE.md` naming the exact release asset and source commit of the unmodified binary |
+| `/usr/share/doc/achilles/licenses/{trivy,gitleaks}/` | the `LICENSE` from each project's own release archive |
+| `/usr/share/doc/achilles/licenses/{gosec,osv-scanner}/` | each tool's license and those of every module linked into it (both are built from source in the image) |
+| `/usr/local/go/LICENSE` | the Go toolchain (full variant) |
+| `/usr/share/doc/*/copyright` | the Debian base image's packages |
+
+Opengrep is LGPL-2.1 and the image redistributes its binary. The license text and a
+pointer to the exact source travel with it, and the binary is unmodified, but whether
+pointing at the upstream repository satisfies the license's source requirement for
+your distribution is a legal question this file does not settle. If you redistribute
+the image, consider mirroring the Opengrep source for the pinned tag alongside it.
 
 ## Scanner tools (invoked as external processes / containers)
 

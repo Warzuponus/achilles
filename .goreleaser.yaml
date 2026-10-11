@@ -62,20 +62,28 @@ archives:
     formats: [tar.gz]
     format_overrides:
       - {goos: windows, formats: [zip]}
+    # LICENSE and NOTICE must accompany every copy (Apache-2.0 section 4), and so
+    # must the license text of each Go module linked into the binary.
     files:
       - LICENSE
+      - NOTICE
       - README.md
       - THIRD-PARTY.md
+      - third_party/licenses/**/*
   - id: server
     ids: [achillesd, achilles-fleet]
     name_template: "achilles-server_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
       - {goos: windows, formats: [zip]}
+    # LICENSE and NOTICE must accompany every copy (Apache-2.0 section 4), and so
+    # must the license text of each Go module linked into the binary.
     files:
       - LICENSE
+      - NOTICE
       - README.md
       - THIRD-PARTY.md
+      - third_party/licenses/**/*
 
 checksum:
   name_template: checksums.txt

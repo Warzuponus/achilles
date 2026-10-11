@@ -166,3 +166,35 @@ func TestResolveRulesDirOtherPathsUnchanged(t *testing.T) {
 		t.Errorf("unexpected: %s", got)
 	}
 }
+
+// The README says Trivy covers IaC and misconfiguration. `trivy fs` runs only the
+// vuln and secret scanners unless told otherwise, so that claim is only true while
+// the registry asks for misconfig explicitly. This pins it.
+func TestEmbeddedTrivyRunsTheMisconfigScanner(t *testing.T) {
+	isolate(t)
+	c, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range c.Tools {
+		if tc.ID != "trivy" {
+			continue
+		}
+		scanners := ""
+		for i, a := range tc.Argv {
+			if a == "--scanners" && i+1 < len(tc.Argv) {
+				scanners = tc.Argv[i+1]
+			}
+		}
+		for _, want := range []string{"vuln", "misconfig", "secret"} {
+			if !strings.Contains(","+scanners+",", ","+want+",") {
+				t.Errorf("trivy --scanners = %q, missing %q", scanners, want)
+			}
+		}
+		if tc.Network != "default" {
+			t.Errorf("trivy network = %q; it downloads its DB and checks, so --runner docker must give it egress", tc.Network)
+		}
+		return
+	}
+	t.Fatal("no trivy entry in the embedded registry")
+}

@@ -83,6 +83,11 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Trivy never ran its IaC / misconfiguration checks.** It was invoked as plain
+  `trivy fs`, which runs only the vulnerability and secret scanners. The registry now
+  passes `--scanners vuln,misconfig,secret`, and gives Trivy network access under
+  `--runner docker`, where it previously could not download its database and always
+  failed.
 - **`--fail-on critical` could never fire, and a typo failed everything.** No scanner
   result was ever mapped to `critical`: only the SARIF level was read, and the
   `security-severity` score that Trivy and others publish was ignored, so a CVSS 9.8 was

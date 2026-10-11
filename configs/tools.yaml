@@ -53,10 +53,15 @@ tools:
     commercialSafe: true
     enabled: true
     languages: [generic]           # SCA/IaC/secrets/misconfig — language-agnostic
+    # Trivy downloads its vulnerability DB and its misconfiguration checks on first
+    # use, so under --runner docker it needs egress (the runner default is none).
+    network: default
     image: aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
     bin: trivy
     format: sarif
-    argv: ["fs", "--quiet", "--format", "sarif", "--output", "{out}/results.sarif", "{src}"]
+    # --scanners is explicit on purpose: `trivy fs` on its own runs only vuln and
+    # secret, so without it no IaC / misconfiguration check ever ran.
+    argv: ["fs", "--quiet", "--scanners", "vuln,misconfig,secret", "--format", "sarif", "--output", "{out}/results.sarif", "{src}"]
     outputFile: "{out}/results.sarif"
     localConfig:                   # honor the repo's own Trivy ignore list
       - file: .trivyignore

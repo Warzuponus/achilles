@@ -59,7 +59,7 @@ achilles tools list         # pinned versions and what is installed
 | Opengrep | multi-language patterns | upstream publishes no checksums; the pinned digests were computed at pin time |
 | gosec | Go SAST | needs `go` on PATH to type-check packages |
 | osv-scanner | dependency CVEs (SCA) | needs network access to the OSV database |
-| Trivy | IaC / misconfig / secrets / SCA | |
+| Trivy | IaC / misconfig / secrets / SCA | needs network access on first use for its vulnerability database and misconfiguration checks |
 | Gitleaks | secret scanning | |
 
 **Lookup order.** For each scanner Achilles uses `~/.achilles/bin` first (the pinned,

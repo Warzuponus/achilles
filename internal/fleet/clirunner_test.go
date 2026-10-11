@@ -1,6 +1,7 @@
 package fleet
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -11,7 +12,8 @@ func TestBuildArgs_NoLLM(t *testing.T) {
 	r := CLIRunner{Backend: "file", VaultRoot: "/v", ScanRunner: "local"}
 	j := Job{Tenant: "acme", Target: "/code", Mode: "commercial", Profile: "default"}
 	got := argsStr(r, j)
-	want := "--vault /v/acme/vault.jsonl --runner local --mode commercial --profile default /code"
+	// The vault path is built with the host's separator.
+	want := "--vault " + filepath.Join("/v", "acme", "vault.jsonl") + " --runner local --mode commercial --profile default /code"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}

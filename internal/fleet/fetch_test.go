@@ -90,7 +90,18 @@ func newFixtureRepo(t *testing.T) fixtureRepo {
 
 	bare := filepath.Join(t.TempDir(), "mirror.git")
 	hermeticGit(t, work, "clone", "--quiet", "--bare", work, bare)
-	return fixtureRepo{URL: "file://" + bare, C1: c1, C2: c2, Feature: feature}
+	return fixtureRepo{URL: fileURL(bare), C1: c1, C2: c2, Feature: feature}
+}
+
+// fileURL turns an absolute path into a file:// URL. On Windows the path is
+// C:\dir\repo.git, and its URL is file:///C:/dir/repo.git, not file://C:\dir\...
+// (which would make "C:" the host).
+func fileURL(path string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return "file://" + p
 }
 
 func gitJob(url, ref string, depth int) Job {
@@ -256,7 +267,16 @@ func TestFetch_CleanupOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan Result)
 	go func() { done <- fr.Scan(ctx, gitJob(repo.URL, "", 0)) }()
-	<-started
+	// Wait for the inner scan to start, but not forever: if the fetch fails first
+	// the inner runner never runs, and a bare `<-started` hung this test (and the
+	// whole package) until the 10-minute test timeout.
+	select {
+	case <-started:
+	case res := <-done:
+		t.Fatalf("Scan returned before the inner scan started: %v", res.Err)
+	case <-time.After(60 * time.Second):
+		t.Fatal("the inner scan never started")
+	}
 	cancel()
 	select {
 	case res := <-done:

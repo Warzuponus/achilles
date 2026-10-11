@@ -87,3 +87,18 @@ jobs:
           go-version: '1.27'
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+  # Windows is a release target (.goreleaser.yaml builds windows/amd64), so it is
+  # built and tested here. Three packages used to fail on Windows without anyone
+  # seeing it, one of them because the file vault had no cross-process lock there.
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27'
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test ./...

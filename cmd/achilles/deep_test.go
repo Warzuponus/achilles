@@ -317,8 +317,11 @@ func TestDeepVerifyFindings_EndpointFailureLeavesFindingsAlone(t *testing.T) {
 }
 
 func TestDeepConfig_DeniesVaultAndStateDirs(t *testing.T) {
+	// An absolute target for this OS: "/scan/target" has no drive on Windows, so
+	// it is not absolute there and the assertion below failed for the wrong reason.
+	target := filepath.Join(t.TempDir(), "scan", "target")
 	o := &options{deepMaxSteps: 9, vaultPath: "rel/vault.jsonl", ruleRepoDir: ".achilles/generated-rules"}
-	cfg := deepConfig(o, "/scan/target")
+	cfg := deepConfig(o, target)
 	if cfg.MaxSteps != 9 {
 		t.Errorf("MaxSteps = %d", cfg.MaxSteps)
 	}

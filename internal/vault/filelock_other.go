@@ -1,9 +1,10 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package vault
 
 import "os"
 
-// No advisory locking on this platform: the file backend is single-process here.
+// No file locking on this platform (neither flock nor LockFileEx): the file
+// backend is single-process here.
 func lockFile(*os.File) error { return nil }
 func unlockFile(*os.File)     {}

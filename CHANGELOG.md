@@ -89,6 +89,11 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Windows.** The file vault had no cross-process lock on Windows, so two processes
+  writing one vault produced records with duplicate ids; it now locks with `LockFileEx`.
+  The whole test suite passes on Windows and runs there in CI on every change (three
+  packages failed before, one of them by hanging for ten minutes). A `.gitattributes`
+  keeps checkouts LF on every platform.
 - **`--llm-provider anthropic` failed on every request.** Triage sends `temperature: 0`
   and Anthropic's OpenAI-compatible endpoint rejects an explicit temperature on current
   Claude models, so the run aborted after five failures with no report. Temperature is

@@ -32,7 +32,8 @@ reasoning and a suggested fix. Re-runs update those issues rather than duplicati
 them. Details: [CI & the Scan Hub](docs/ci-and-hub.md).
 
 **On your machine**, as a single binary (Linux and macOS; a Windows build is
-published too but only cross-compiled and untested):
+published too and its tests run in CI, but `install.sh` and the GitHub Action are
+Linux and macOS only, so on Windows download the zip from the release page):
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/Warzuponus/achilles/main/scripts/install.sh

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -151,13 +152,22 @@ type TriageStats struct {
 	// (--calibrate), not from a model reading the finding. They are included in
 	// Triaged; reports name them so "a verdict" is never mistaken for "a review".
 	AutoResolved int `json:"autoResolved,omitempty"`
+	// Advisories counts dependency advisories (known CVEs in dependencies). They
+	// are kept exactly as the scanner reported them and are never sent to the
+	// model: there is no code context to judge, and a verdict could only mislead.
+	Advisories int `json:"advisories,omitempty"`
 }
 
 // Dismissed reports whether this finding's verdict rules it out.
 func (f Finding) Dismissed() bool {
 	// A credential finding is never dismissed: the model was never shown it, and a
 	// leaked secret is not something a verdict can make safe.
-	return f.Verdict != nil && !f.IsSecret() && f.Verdict.Dismissed()
+	//
+	// Neither is a dependency advisory: a published CVE in a package the project
+	// depends on is a fact about a version, not a judgment about code, and nothing a
+	// model (or a verdict inherited from another finding, or feedback history) says
+	// can make the vulnerable version safe. It is resolved by upgrading.
+	return f.Verdict != nil && !f.IsSecret() && !f.IsDependencyAdvisory() && f.Verdict.Dismissed()
 }
 
 // PartitionDismissed moves every dismissed finding out of Findings into Dismissed and
@@ -241,4 +251,38 @@ func (f Finding) IsSecret() bool {
 		}
 	}
 	return false
+}
+
+// scaTools are scanners whose every finding is a dependency advisory.
+var scaTools = map[string]bool{
+	"osv-scanner": true, "govulncheck": true, "grype": true, "dependency-check": true,
+	"pip-audit": true, "npm-audit": true, "cargo-audit": true, "bundler-audit": true,
+}
+
+// advisoryID matches the identifier of a published vulnerability advisory. The
+// patterns are exact on purpose: a hand-written rule called "go-sqli-concat" must
+// not look like a Go advisory ("GO-2024-1234").
+var advisoryID = regexp.MustCompile(`(?i)^(?:` +
+	`CVE-\d{4}-\d{4,}` +
+	`|GHSA(?:-[0-9a-z]{4}){3}` +
+	`|GO-\d{4}-\d{3,}` +
+	`|PYSEC-\d{4}-\d+` +
+	`|RUSTSEC-\d{4}-\d{4}` +
+	`|OSV-\d{4}-\d+` +
+	`|MAL-\d{4}-\d+` +
+	`)$`)
+
+// IsDependencyAdvisory reports whether this finding is a known vulnerability in a
+// third-party dependency (software composition analysis) rather than a defect in
+// the project's own code: it comes from a dependency scanner, or its rule id is an
+// advisory identifier (which is how Trivy reports a vulnerable package).
+//
+// Such a finding points at a manifest or lockfile, not at code, so the per-finding
+// AI review has nothing to read and its verdict would be a guess. The pipeline
+// therefore never sends one to the model and never dismisses one.
+func (f Finding) IsDependencyAdvisory() bool {
+	if scaTools[strings.ToLower(strings.TrimSpace(f.Tool))] {
+		return true
+	}
+	return advisoryID.MatchString(strings.TrimSpace(f.RuleID))
 }

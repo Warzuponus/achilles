@@ -83,6 +83,13 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **The AI review could rule out a known CVE.** Dependency findings (osv-scanner,
+  govulncheck, Trivy vulnerabilities) went through the same prompt as code findings,
+  with a lockfile line or nothing at all as "code context", and a confident false
+  positive took them out of the gate. They are no longer sent to the model (which also
+  removes two paid calls per CVE), never receive or inherit a verdict, are skipped by
+  `--deep-verify` and `--calibrate`, and can never be dismissed. Reports count them
+  separately.
 - **Trivy never ran its IaC / misconfiguration checks.** It was invoked as plain
   `trivy fs`, which runs only the vulnerability and secret scanners. The registry now
   passes `--scanners vuln,misconfig,secret`, and gives Trivy network access under

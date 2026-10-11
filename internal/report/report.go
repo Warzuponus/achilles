@@ -47,6 +47,9 @@ func WriteHuman(w io.Writer, s model.Scan) {
 			fmt.Fprintf(w, " — %d failed, %d not reached; those are UNVERIFIED", t.Failed, t.Skipped)
 		}
 		fmt.Fprintln(w)
+		if t.Advisories > 0 {
+			fmt.Fprintf(w, "%d dependency advisory finding(s) are listed as reported: the AI review does not judge known CVEs in dependencies\n", t.Advisories)
+		}
 		if t.AutoResolved > 0 {
 			fmt.Fprintf(w, "%d of those verdict(s) came from analyst feedback on the rule (--calibrate), not from a model review\n", t.AutoResolved)
 		}

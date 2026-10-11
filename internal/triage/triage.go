@@ -54,6 +54,13 @@ type Engine struct {
 // a credential, so its content must not leave the machine. It is not a failure.
 var ErrWithheld = errors.New("finding withheld from the model (it concerns a credential)")
 
+// ErrAdvisory means a finding is a dependency advisory (a known CVE in a package)
+// and was deliberately not reviewed. The triage prompt asks whether attacker data
+// reaches a sink in the code shown; an advisory points at a lockfile line, so the
+// model would be judging nothing, and a confident "false positive" from that must
+// never be able to hide a vulnerable dependency. It is not a failure.
+var ErrAdvisory = errors.New("dependency advisory: kept as reported, not sent to the model")
+
 // Usage returns the token usage accumulated across every LLM call this engine
 // has made (triage + judge + remediation).
 func (e *Engine) Usage() llm.Usage {
@@ -127,7 +134,7 @@ func (e *Engine) SetCalibrator(c Calibrator) *Engine { e.calibrator = c; return 
 // feedback about THIS finding's rule outranks a verdict inherited from a
 // sibling reported by a different tool.
 func (e *Engine) AutoResolve(runID string, f *model.Finding) bool {
-	if e.calibrator == nil {
+	if e.calibrator == nil || f.IsSecret() || f.IsDependencyAdvisory() {
 		return false
 	}
 	v, ok := e.calibrator.AutoResolve(*f)
@@ -149,8 +156,8 @@ func (e *Engine) AutoResolve(runID string, f *model.Finding) bool {
 // specific finding, and replaying it for every tool that reported the same line
 // would hand --fix-pr the same patch several times.
 func (e *Engine) Inherit(runID string, f *model.Finding, rep model.Finding) {
-	if rep.Verdict == nil {
-		return
+	if rep.Verdict == nil || f.IsDependencyAdvisory() {
+		return // an advisory never takes a verdict, its own or a sibling's
 	}
 	v := *rep.Verdict
 	f.Verdict = &v
@@ -168,6 +175,9 @@ func (e *Engine) Inherit(runID string, f *model.Finding, rep model.Finding) {
 func (e *Engine) Triage(ctx context.Context, runID string, f *model.Finding) error {
 	if f.IsSecret() {
 		return ErrWithheld
+	}
+	if f.IsDependencyAdvisory() {
+		return ErrAdvisory
 	}
 	// Calibration short-circuit: a chronically false-positive rule is resolved
 	// from feedback history without spending an LLM call (DESIGN.md §8).

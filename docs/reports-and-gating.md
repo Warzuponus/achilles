@@ -58,8 +58,17 @@ the headline counts. It is not hidden: every report lists these findings in thei
 section ("Ruled out by the AI review", with the model's reason), and SARIF carries
 them as *suppressed* results so code scanning shows them as dismissed. These are
 never dismissed: uncertain or low-confidence verdicts, verdicts the judge overturned,
-findings about credentials (the model never sees those), and anything the review did
-not reach.
+findings about credentials (the model never sees those), dependency advisories (see
+below), and anything the review did not reach.
+
+**Dependency advisories are not reviewed by the model.** A finding that is a known
+vulnerability in a dependency (anything from osv-scanner or govulncheck, and any
+finding whose rule is a CVE / GHSA / GO / PYSEC / RUSTSEC id, which is how Trivy
+reports a vulnerable package) points at a manifest or lockfile, not at code. The AI
+review has nothing to read there, so these findings are never sent to it, never get a
+verdict, and are never ruled out. They stay in the gate exactly as the scanner
+reported them and are fixed by upgrading; `--sca-advice` plans the upgrades. Reports
+say how many there were, separately from findings the review failed to reach.
 
 A true positive the judge *refuted* is ruled out only when the judge backed the
 refutation (a stated confidence of at least 0.7 and a quote that really appears in the

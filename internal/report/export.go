@@ -191,7 +191,11 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 		if t.AutoResolved > 0 {
 			fmt.Fprintf(w, "; %d of those came from analyst feedback on the rule (`--calibrate`), not from a model review", t.AutoResolved)
 		}
-		fmt.Fprint(w, ".\n\n")
+		fmt.Fprint(w, ".")
+		if t.Advisories > 0 {
+			fmt.Fprintf(w, " %d dependency advisories are listed as reported: the AI review does not judge known CVEs in dependencies.", t.Advisories)
+		}
+		fmt.Fprint(w, "\n\n")
 	}
 	if len(s.Findings) == 0 {
 		msg := "No findings. ✅\n"

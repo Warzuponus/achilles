@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/Warzuponus/achilles/internal/knowledge"
@@ -87,5 +88,46 @@ func TestRunTriage_CalibrateNeverTouchesAHighSeverityFinding(t *testing.T) {
 	}
 	if fe.calls.Load() == 0 {
 		t.Error("it should have gone to the model instead")
+	}
+}
+
+// A known CVE in a dependency is not sent to the model and stays in the gate.
+func TestRunTriage_DependencyAdvisoriesAreKeptAsReported(t *testing.T) {
+	// The fake endpoint calls anything whose rule starts with "fp-" a confident
+	// false positive; give it every chance to dismiss the advisory.
+	fe := newFakeEndpoint(t, 200, 0, func(string, bool) string {
+		return `{"classification":"false_positive","confidence":0.99,"exploitability":"not-reachable","reasoning":"no usage shown"}`
+	})
+	scan, ev := triageFixture(t, "fp-code")
+	scan.Findings = append(scan.Findings,
+		model.Finding{Tool: "osv-scanner", RuleID: "GHSA-j8r2-6x86-q33q", Severity: model.SeverityHigh,
+			Message: "requests 2.19.1", Fingerprint: "adv1", Location: model.Location{File: "requirements.txt"}},
+		model.Finding{Tool: "Trivy", RuleID: "CVE-2024-3094", Severity: model.SeverityCritical,
+			Message: "xz 5.6.0", Fingerprint: "adv2", Location: model.Location{File: "Dockerfile", Region: model.Region{StartLine: 1}}},
+	)
+
+	if _, err := runTriage(context.Background(), ev, "run", scan, nil,
+		triageOpts{baseURL: fe.URL, triageModel: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range fe.prompts {
+		if strings.Contains(p, "GHSA-j8r2-6x86-q33q") || strings.Contains(p, "CVE-2024-3094") {
+			t.Errorf("an advisory reached the model: %s", p)
+		}
+	}
+	if len(scan.Dismissed) != 1 || scan.Dismissed[0].RuleID != "fp-code" {
+		t.Fatalf("dismissed = %+v, want only the code finding", scan.Dismissed)
+	}
+	if len(scan.Findings) != 2 {
+		t.Fatalf("both advisories must stay in the gate, kept %d", len(scan.Findings))
+	}
+	for _, f := range scan.Findings {
+		if f.Verdict != nil {
+			t.Errorf("%s must carry no verdict: %+v", f.RuleID, f.Verdict)
+		}
+	}
+	st := scan.Triage
+	if st.Advisories != 2 || st.Triaged != 1 || st.Skipped != 0 || st.Failed != 0 {
+		t.Errorf("stats = %+v; advisories are their own bucket, not \"not reached\"", st)
 	}
 }

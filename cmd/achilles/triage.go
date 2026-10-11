@@ -265,6 +265,7 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		fatal       error
 		failedN     int
 		withheldN   int
+		advisoryN   int
 		succeeded   int
 		consecutive int
 	)
@@ -278,6 +279,11 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		case errors.Is(err, triage.ErrWithheld):
 			mu.Lock()
 			withheldN++
+			mu.Unlock()
+			return
+		case errors.Is(err, triage.ErrAdvisory):
+			mu.Lock()
+			advisoryN++
 			mu.Unlock()
 			return
 		case err != nil:
@@ -382,7 +388,7 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 
 	// Coverage: how much of the scan got a verdict. Reports print this beside the
 	// verdicts so an unreviewed finding is never mistaken for a reviewed one.
-	stats := model.TriageStats{Model: o.triageModel, Total: len(scan.Findings), Failed: failedN, Withheld: withheldN}
+	stats := model.TriageStats{Model: o.triageModel, Total: len(scan.Findings), Failed: failedN, Withheld: withheldN, Advisories: advisoryN}
 	for _, f := range scan.Findings {
 		if f.Verdict != nil {
 			stats.Triaged++
@@ -406,7 +412,7 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 			"  (run --rule-health to see the labels behind this; drop --calibrate to have them reviewed)\n",
 			stats.AutoResolved, strings.Join(names, ", "))
 	}
-	stats.Skipped = stats.Total - stats.Triaged - stats.Failed - stats.Withheld
+	stats.Skipped = stats.Total - stats.Triaged - stats.Failed - stats.Withheld - stats.Advisories
 	if stats.Skipped < 0 {
 		stats.Skipped = 0
 	}
@@ -420,6 +426,10 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	scan.Triage = &stats
 	fmt.Fprintf(os.Stderr, "achilles: AI review — verdict on %d of %d finding(s); %d dismissed as false positives, %d failed, %d withheld (credentials), %d not reached\n",
 		stats.Triaged, stats.Total, stats.Dismissed, stats.Failed, stats.Withheld, stats.Skipped)
+	if stats.Advisories > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: %d dependency advisory finding(s) (known CVEs in dependencies) are kept as reported and were not sent to the model: "+
+			"an advisory is fixed by upgrading, not by a verdict (--sca-advice plans the upgrades)\n", stats.Advisories)
+	}
 	if stats.Skipped > 0 && ctx.Err() != nil {
 		fmt.Fprintln(os.Stderr, "achilles: the --llm-budget ran out; the findings above were reviewed most severe first. Raise --llm-budget or narrow the scan with --diff / --baseline.")
 	}

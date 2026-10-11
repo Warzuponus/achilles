@@ -54,6 +54,9 @@ func (e *Engine) Plan(findings []model.Finding, o PlanOpts) []cost.Call {
 	var out []cost.Call
 	for i := range findings {
 		f := findings[i]
+		if f.IsSecret() || f.IsDependencyAdvisory() {
+			continue // never sent to the model, so they cost nothing
+		}
 		if e.calibrator != nil {
 			if _, resolved := e.calibrator.AutoResolve(f); resolved {
 				continue

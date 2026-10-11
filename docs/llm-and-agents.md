@@ -224,6 +224,10 @@ pay it.
   least 0.7 confident, and the triage pass was itself below 0.9. Otherwise the two
   passes simply disagree: the finding stays in the gate, marked **disputed by judge**,
   and gets no automatic fix. Refuting an `uncertain` verdict never rules a finding out.
+  Two kinds of finding are never sent to the model at all: credential findings (their
+  matched text is the secret) and **dependency advisories** (known CVEs in
+  dependencies: there is no code to judge, and a verdict must not be able to hide a
+  vulnerable package). Both cost nothing and are counted separately in every report.
 - **`--remediate`** — for those high-confidence findings, propose a fix: a summary
   plus a unified diff when a clean patch is possible, or prose guidance otherwise.
   Implies `--triage`. Achilles proposes; it never auto-applies (see `--fix-pr` in

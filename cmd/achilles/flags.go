@@ -82,7 +82,7 @@ type options struct {
 	// One-flag AI scan, provider presets and LLM-phase controls.
 	aiOn           bool          // --ai: triage + remediate + review + SCA advice + all reports
 	reportDir      string        // --report-dir: where --ai writes report.html/.md/.sarif
-	llmProvider    string        // --llm-provider: openai | openrouter | ollama (sets the base URL)
+	llmProvider    string        // --llm-provider: openai | openrouter | ollama | anthropic (sets the base URL)
 	llmBudget      time.Duration // --llm-budget: time allowed for all LLM phases (separate from --timeout)
 	llmConcurrency int           // --llm-concurrency: findings triaged in parallel
 	llmNoCode      bool          // --llm-no-code: never send source snippets to the model
@@ -176,7 +176,7 @@ func parseFlags(argv []string) (*options, error) {
 	fs.StringVar(&o.sourceCommit, "source-commit", "", "record the scanned source's commit sha in the run metadata (used by achilles-fleet)")
 	fs.BoolVar(&o.aiOn, "ai", false, "full AI-verified scan: --triage --remediate --review --sca-advice, and write report.html, report.md and achilles.sarif into --report-dir (needs an LLM key and --llm-model or --llm-provider)")
 	fs.StringVar(&o.reportDir, "report-dir", "achilles-report", "directory --ai writes its reports into")
-	fs.StringVar(&o.llmProvider, "llm-provider", os.Getenv("ACHILLES_LLM_PROVIDER"), "LLM endpoint preset: openai | openrouter | ollama (sets --llm-base-url; an explicit --llm-base-url wins)")
+	fs.StringVar(&o.llmProvider, "llm-provider", os.Getenv("ACHILLES_LLM_PROVIDER"), "LLM endpoint preset: openai | openrouter | ollama | anthropic (experimental) (sets --llm-base-url; an explicit --llm-base-url wins)")
 	fs.DurationVar(&o.llmBudget, "llm-budget", 45*time.Minute, "time allowed for all LLM phases combined; separate from --timeout, which bounds the scanners")
 	fs.IntVar(&o.llmConcurrency, "llm-concurrency", 4, "findings triaged in parallel (1 = sequential)")
 	fs.BoolVar(&o.llmNoCode, "llm-no-code", false, "privacy mode: send the model only rule, message and location, never source code")

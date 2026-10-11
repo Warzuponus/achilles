@@ -21,7 +21,7 @@ steps:
   - uses: Warzuponus/achilles@v0.1.0
     with:
       llm-api-key: ${{ secrets.LLM_API_KEY }}
-      llm-provider: openrouter     # or openai | ollama | anthropic
+      llm-provider: openrouter     # or openai | ollama
       llm-model: ${{ vars.LLM_MODEL }}
       issues: "true"
 ```

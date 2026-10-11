@@ -89,6 +89,11 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **`--llm-provider anthropic` failed on every request.** Triage sends `temperature: 0`
+  and Anthropic's OpenAI-compatible endpoint rejects an explicit temperature on current
+  Claude models, so the run aborted after five failures with no report. Temperature is
+  now left out for that endpoint. The preset remains experimental and is labelled so in
+  the flag help, the action and the docs.
 - **A scanner that could not analyze the code was reported as a complete scan.** gosec
   exits 0 and writes a valid report when a package will not type-check, silently skipping
   its taint and other type-based rules. This is not hypothetical: Go 1.27.2 changed a

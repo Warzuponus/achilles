@@ -25,6 +25,14 @@ achilles --ai --llm-provider openrouter --llm-model <model> /path/to/code
 | Ollama (local) | `ollama` | `http://localhost:11434/v1` | none |
 | Anthropic (experimental) | `anthropic` | `https://api.anthropic.com/v1` | required |
 
+**The `anthropic` preset is experimental.** It uses Anthropic's OpenAI-compatibility
+endpoint, which Anthropic offers for trying its models rather than for production use.
+Achilles leaves `temperature` out of requests to it (current Claude models reject an
+explicit value), and that endpoint does not enforce a JSON schema, so replies are
+validated and repaired the way they are for any model without JSON mode. This project's
+tests have not run against the live Anthropic API. For Claude models today, OpenRouter
+(`--llm-provider openrouter --llm-model anthropic/<model>`) is the exercised path.
+
 Anything else (vLLM, LiteLLM, Azure OpenAI, a gateway) is `--llm-base-url`. An
 explicit `--llm-base-url` always wins over a provider preset. There is deliberately
 no default model: model names change faster than this project, so pick one that

@@ -53,7 +53,7 @@ inputs:
     required: false
     default: ""
   llm-provider:
-    description: "LLM endpoint preset: openai | openrouter | ollama | anthropic. Or set llm-base-url."
+    description: "LLM endpoint preset: openai | openrouter | ollama | anthropic (experimental). Or set llm-base-url."
     required: false
     default: ""
   llm-base-url:

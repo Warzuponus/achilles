@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,23 @@ type HTTPError struct {
 }
 
 func (e *HTTPError) Error() string { return fmt.Sprintf("llm HTTP %d: %s", e.Status, e.Body) }
+
+// fixedSampling reports whether the endpoint at baseURL is known to reject an
+// explicit temperature, so the field is left out without the operator having to
+// find ACHILLES_LLM_OMIT_TEMPERATURE.
+//
+// Anthropic's OpenAI-compatibility endpoint: current Claude models no longer take
+// sampling parameters, and answer 400 to the temperature of 0 that triage sends.
+// Every call failed, so the --llm-provider anthropic preset never produced a
+// verdict. (That endpoint also ignores response_format, which is harmless: replies
+// are validated and repaired the same way as for any model without JSON mode.)
+func fixedSampling(baseURL string) bool {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Hostname(), "api.anthropic.com")
+}
 
 // NewOpenAI builds a client. A trailing slash on baseURL is tolerated.
 func NewOpenAI(baseURL, apiKey, model string) *OpenAIClient {
@@ -105,7 +123,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, req Request) (Response, err
 	}
 
 	body := chatRequest{Model: model, Messages: req.Messages}
-	if !c.Opts.OmitTemperature {
+	if !c.Opts.OmitTemperature && !fixedSampling(c.BaseURL) {
 		t := req.Temperature
 		body.Temperature = &t
 	}

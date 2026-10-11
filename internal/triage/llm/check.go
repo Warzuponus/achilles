@@ -9,8 +9,11 @@ import (
 )
 
 // Providers are the --llm-provider presets: name -> OpenAI-compatible base URL.
-// "anthropic" is Anthropic's OpenAI-compatibility endpoint; it is not exercised by
-// this project's tests, so treat it as experimental.
+// "anthropic" is Anthropic's OpenAI-compatibility endpoint, which Anthropic
+// describes as a way to try its models, not a production interface. Requests to it
+// omit temperature (see fixedSampling) and get no enforced JSON schema. It has not
+// been run against the live API by this project's tests, so it stays experimental;
+// a native Messages-API client is the real fix.
 var Providers = map[string]string{
 	"openai":     "https://api.openai.com/v1",
 	"openrouter": "https://openrouter.ai/api/v1",

@@ -240,3 +240,58 @@ func TestRun_MissingReportStillFailsWithoutTheMarker(t *testing.T) {
 		t.Fatal("a tool that wrote no report for any other reason must still fail")
 	}
 }
+
+// reportingRunner writes a valid report, exits 0, and prints stderr: a tool that
+// looks entirely successful.
+type reportingRunner struct{ sarif, stderr string }
+
+func (r reportingRunner) Run(_ context.Context, c xexec.Command) (xexec.Result, error) {
+	for _, m := range c.Mounts {
+		if m.Name == "out" {
+			_ = os.WriteFile(filepath.Join(m.HostPath, "results.sarif"), []byte(r.sarif), 0o644)
+		}
+	}
+	return xexec.Result{ExitCode: 0, Stderr: []byte(r.stderr)}, nil
+}
+
+// gosec, when a package will not type-check, exits 0 and writes a valid report
+// with whatever its syntax-only rules found. Every analysis that needs types is
+// skipped, and the only trace is a log line. That must not read as a full scan.
+func TestRun_IncompleteWhenKeepsFindingsAndSaysWhy(t *testing.T) {
+	cfg := testCfg()
+	cfg.IncompleteWhen = []string{"skipping SSA analysis"}
+	const sarif = `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"gosec"}},"results":[{"ruleId":"G401","message":{"text":"m"}}]}]}`
+	stderr := "[gosec] Checking package: a\n" +
+		"[gosec] Error building the SSA representation of the package a: package a has type errors, skipping SSA analysis, no ssa result\n" +
+		"[gosec] Error building the SSA representation of the package b: package b has type errors, skipping SSA analysis, no ssa result\n"
+
+	raw, err := New(reportingRunner{sarif: sarif, stderr: stderr}, cfg, "").Run(context.Background(), scanner.Target{Path: "/x"})
+	if err != nil {
+		t.Fatalf("the tool ran and reported; that is not a run error: %v", err)
+	}
+	if !strings.Contains(string(raw.Data), "G401") {
+		t.Error("the findings the tool did produce must be kept")
+	}
+	if !strings.Contains(raw.Incomplete, "package a has type errors") {
+		t.Errorf("Incomplete should quote the tool's own first complaint, got %q", raw.Incomplete)
+	}
+	if !strings.Contains(raw.Incomplete, "1 more") {
+		t.Errorf("Incomplete should count the other affected packages, got %q", raw.Incomplete)
+	}
+}
+
+func TestRun_CompleteRunIsNotMarkedIncomplete(t *testing.T) {
+	cfg := testCfg()
+	cfg.IncompleteWhen = []string{"skipping SSA analysis"}
+	raw, err := New(reportingRunner{sarif: `{"version":"2.1.0","runs":[]}`, stderr: "[gosec] Checking package: a\n"}, cfg, "").
+		Run(context.Background(), scanner.Target{Path: "/x"})
+	if err != nil || raw.Incomplete != "" {
+		t.Errorf("a clean log must not mark the run incomplete: %q err=%v", raw.Incomplete, err)
+	}
+	// And a tool with no such phrases configured is never marked.
+	raw, _ = New(reportingRunner{sarif: `{"version":"2.1.0","runs":[]}`, stderr: "skipping SSA analysis"}, testCfg(), "").
+		Run(context.Background(), scanner.Target{Path: "/x"})
+	if raw.Incomplete != "" {
+		t.Errorf("no incompleteWhen configured: %q", raw.Incomplete)
+	}
+}

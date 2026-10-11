@@ -25,6 +25,10 @@ type RawResult struct {
 	Data     []byte
 	ExitCode int
 	Stderr   string
+	// Incomplete is non-empty when the tool ran and reported, but said it could
+	// not analyze part of the target. The findings in Data are real; their
+	// absence proves nothing. The caller keeps them and marks the scan incomplete.
+	Incomplete string
 }
 
 // ScannerMeta describes an engine, including the license facts the policy layer

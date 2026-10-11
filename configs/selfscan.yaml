@@ -11,5 +11,6 @@ tools:
     bin: gosec
     requires: [go]   # gosec type-checks via the Go toolchain; fail loudly if absent
     format: sarif
-    argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "{src}/..."]
+    argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "-exclude-dir=testdata", "{src}/..."]
     outputFile: "{out}/results.sarif"
+    incompleteWhen: ["skipping SSA analysis"]   # see configs/tools.yaml

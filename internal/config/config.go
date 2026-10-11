@@ -46,7 +46,14 @@ type ToolConfig struct {
 	// with no dependency manifests). Seeing one means "no results", not "the tool
 	// failed", so the scan is not marked incomplete.
 	NothingToScan []string `yaml:"nothingToScan"`
-	Rules         string   `yaml:"rules"`
+	// IncompleteWhen lists phrases a tool prints when it ran and wrote a report but
+	// could not analyze part of the target (gosec when a package will not
+	// type-check: it exits 0, writes a valid report, and silently skips every
+	// analysis that needs type information). The findings it did produce are kept,
+	// and the tool is reported as incomplete so the scan is never presented as a
+	// full one.
+	IncompleteWhen []string `yaml:"incompleteWhen"`
+	Rules          string   `yaml:"rules"`
 	// Network is the docker network policy ("none" default for containment,
 	// "default" to allow egress for tools that need it — SCA DBs, NuGet restore).
 	Network string `yaml:"network"`

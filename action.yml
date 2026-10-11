@@ -40,6 +40,13 @@ inputs:
     required: false
     default: ""
 
+  go-version:
+    description: >-
+      Go version to set up when `version` is `source`. gosec type-checks with the
+      `go` on PATH, so this is also the toolchain your Go code is scanned with.
+    required: false
+    default: "1.27"
+
   # --- AI verification ---
   llm-api-key:
     description: "API key for the LLM provider. Pass it from a secret. Empty runs scanners only."
@@ -152,7 +159,7 @@ runs:
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       if: ${{ inputs.version == 'source' }}
       with:
-        go-version: "1.27"
+        go-version: ${{ inputs.go-version }}
 
     - name: Install Achilles
       shell: bash

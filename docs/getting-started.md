@@ -57,7 +57,7 @@ achilles tools list         # pinned versions and what is installed
 | Tool | Covers | Notes |
 |------|--------|-------|
 | Opengrep | multi-language patterns | upstream publishes no checksums; the pinned digests were computed at pin time |
-| gosec | Go SAST | needs `go` on PATH to type-check packages |
+| gosec | Go SAST | needs `go` on PATH to type-check packages. No gosec release can yet read what Go 1.27.2 and newer produce: with such a `go` first on PATH, gosec skips its type-based analysis and Achilles reports it as **incomplete** rather than clean. Until gosec catches up, scan Go code with Go 1.27.1 on PATH and `GOTOOLCHAIN=local` |
 | osv-scanner | dependency CVEs (SCA) | needs network access to the OSV database |
 | Trivy | IaC / misconfig / secrets / SCA | needs network access on first use for its vulnerability database and misconfiguration checks |
 | Gitleaks | secret scanning | |

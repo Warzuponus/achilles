@@ -137,12 +137,45 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 		format = "sarif" // default/common path
 	}
 	return scanner.RawResult{
-		Tool:     s.cfg.ID,
-		Format:   format,
-		Data:     data,
-		ExitCode: res.ExitCode,
-		Stderr:   string(res.Stderr),
+		Tool:       s.cfg.ID,
+		Format:     format,
+		Data:       data,
+		ExitCode:   res.ExitCode,
+		Stderr:     string(res.Stderr),
+		Incomplete: incompleteReason(s.cfg.IncompleteWhen, res),
 	}, nil
+}
+
+// incompleteReason returns what the tool said about not analyzing part of the
+// target (see config.ToolConfig.IncompleteWhen), or "" if it said nothing of the
+// kind. It quotes the first matching line and counts the rest, so the user sees
+// the tool's own words: usually the name of the package that failed and why.
+func incompleteReason(phrases []string, res xexec.Result) string {
+	if len(phrases) == 0 {
+		return ""
+	}
+	first, n := "", 0
+	for _, line := range strings.Split(string(res.Stderr)+"\n"+string(res.Stdout), "\n") {
+		for _, p := range phrases {
+			if p != "" && strings.Contains(line, p) {
+				if n == 0 {
+					first = strings.TrimSpace(line)
+				}
+				n++
+				break
+			}
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	if r := []rune(first); len(r) > 300 {
+		first = string(r[:300]) + "..."
+	}
+	if n > 1 {
+		return fmt.Sprintf("%s (and %d more like it)", first, n-1)
+	}
+	return first
 }
 
 // nothingToScan reports whether the tool said, in its output, that the target has

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +28,10 @@ func TestMain(m *testing.M) {
 }
 
 func fakeScanner(outFile, src string) int {
+	if os.Getenv("ACHILLES_FAKE_SCANNER") == "cannot-typecheck" {
+		// What gosec does: complain on stderr, then report and exit 0 anyway.
+		fmt.Fprintln(os.Stderr, "[fakescan] Error building the SSA representation of the package p: package p has type errors, skipping SSA analysis, no ssa result")
+	}
 	var results []any
 	_ = filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -76,7 +81,8 @@ func fakeScanFixture(t *testing.T) (cfg, target, vaultPath string) {
 		"    bin: '" + filepath.ToSlash(self) + "'\n" +
 		"    format: sarif\n" +
 		"    argv: [\"{out}/results.sarif\", \"{src}\"]\n" +
-		"    outputFile: \"{out}/results.sarif\"\n"
+		"    outputFile: \"{out}/results.sarif\"\n" +
+		"    incompleteWhen: [\"skipping SSA analysis\"]\n"
 	if err := os.WriteFile(cfg, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -190,4 +196,39 @@ func lastLines(s string, n int) string {
 		lines = lines[len(lines)-n:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// A scanner that says it could not analyze part of the target keeps its findings
+// but makes the scan incomplete: --strict-tools fails, and the report says so.
+func TestRun_ScannerThatCouldNotAnalyzeEverythingMakesTheScanIncomplete(t *testing.T) {
+	cfg, target, vaultPath := fakeScanFixture(t)
+	t.Setenv("ACHILLES_FAKE_SCANNER", "cannot-typecheck")
+	sarifOut := filepath.Join(t.TempDir(), "out.sarif")
+
+	// Default: a partial scan is reported, loudly, but does not fail the run.
+	if err := run([]string{"--config", cfg, "--vault", vaultPath, "--sarif-report", sarifOut, target}); err != nil {
+		t.Fatalf("without --strict-tools an incomplete scanner is a warning: %v", err)
+	}
+	b, err := os.ReadFile(sarifOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "cmd-injection") {
+		t.Error("the findings the scanner did produce must still be reported")
+	}
+	if !strings.Contains(string(b), `"executionSuccessful":false`) && !strings.Contains(string(b), `"executionSuccessful": false`) {
+		t.Error("the SARIF report must say the scan did not complete")
+	}
+
+	// --strict-tools: an incomplete scan is not evidence of safety.
+	err = run([]string{"--config", cfg, "--vault", vaultPath, "--strict-tools", target})
+	if err == nil || !strings.Contains(err.Error(), "--strict-tools") || !strings.Contains(err.Error(), "fakescan") {
+		t.Errorf("err = %v, want a --strict-tools failure naming the scanner", err)
+	}
+
+	// The same scanner without the complaint is a complete scan.
+	t.Setenv("ACHILLES_FAKE_SCANNER", "1")
+	if err := run([]string{"--config", cfg, "--vault", vaultPath, "--strict-tools", target}); err != nil {
+		t.Errorf("a scanner that analyzed everything must pass --strict-tools: %v", err)
+	}
 }

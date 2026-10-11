@@ -198,3 +198,23 @@ func TestEmbeddedTrivyRunsTheMisconfigScanner(t *testing.T) {
 	}
 	t.Fatal("no trivy entry in the embedded registry")
 }
+
+// gosec exits 0 with a valid report when it cannot type-check, so the registry has
+// to name the log line that gives it away. Without this entry a scan on a Go
+// version gosec cannot read is reported as complete.
+func TestEmbeddedGosecDeclaresItsIncompleteMarker(t *testing.T) {
+	isolate(t)
+	c, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range c.Tools {
+		if tc.ID == "gosec" {
+			if len(tc.IncompleteWhen) == 0 {
+				t.Error("gosec has no incompleteWhen phrases")
+			}
+			return
+		}
+	}
+	t.Fatal("no gosec entry in the embedded registry")
+}

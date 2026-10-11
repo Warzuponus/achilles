@@ -45,8 +45,18 @@ tools:
     bin: gosec
     requires: [go]                 # gosec type-checks via the Go toolchain; without it: silent empty report
     format: sarif
-    argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "{src}/..."]
+    # testdata/ is skipped as the go tool itself skips it: it is never compiled
+    # into the program, and it is where repositories keep Go that is broken on
+    # purpose, which would otherwise make every such scan "incomplete" (below).
+    argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "-exclude-dir=testdata", "{src}/..."]
     outputFile: "{out}/results.sarif"
+    # When a package will not type-check, gosec still exits 0 and writes a valid
+    # report, but skips every analysis that needs types (the taint and SSA rules)
+    # for that package. Its report gives no sign of it; this log line is the only
+    # one. Known cause as of 2026-10: Go 1.27.2 changed the compiler export-data
+    # format, and no gosec release (up to v2.29.0) can read it yet, so gosec cannot
+    # type-check ANY package when the `go` it finds is 1.27.2 or newer.
+    incompleteWhen: ["skipping SSA analysis"]
 
   - id: trivy
     license: Apache-2.0

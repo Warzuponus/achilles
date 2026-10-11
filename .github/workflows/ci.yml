@@ -58,12 +58,18 @@ jobs:
   # install into a failed job instead of a quietly partial scan.
   action:
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run the action against the bundled sample
         uses: ./
         with:
           version: source # build from this checkout, not a published release
+          # The Go that gosec scans with: 1.27.2 is not readable by any gosec
+          # release yet (see self-scan.yml), and --strict-tools below would
+          # rightly fail the job over an incomplete gosec run.
+          go-version: "1.27.1"
           target: examples/quickstart
           upload-report: "false"
           args: --strict-tools

@@ -89,6 +89,16 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **A scanner that could not analyze the code was reported as a complete scan.** gosec
+  exits 0 and writes a valid report when a package will not type-check, silently skipping
+  its taint and other type-based rules. This is not hypothetical: Go 1.27.2 changed a
+  compiler format that no gosec release (through v2.29.0) can read, so gosec loses that
+  analysis for every package when the `go` on PATH is 1.27.2 or newer. A tool can now
+  declare the phrases that mean "I could not analyze everything" (`incompleteWhen` in the
+  registry); its findings are kept, the scan is marked incomplete in every report, and
+  `--strict-tools` fails. gosec skips `testdata/` directories, as the go tool does. The
+  self-scan and the image pin the Go that gosec scans with to 1.27.1 until gosec
+  supports the new format.
 - **Fix verification failed on almost every `--ai` run.** It re-used the scanners'
   `--timeout` clock after the AI review, so once scan plus review took longer than that
   timeout every fix was reported as `error` ("deadline exceeded"). Verification now has

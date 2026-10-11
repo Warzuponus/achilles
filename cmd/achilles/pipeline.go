@@ -150,6 +150,13 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 		}
 		scan.Tools = append(scan.Tools, r.id)
 		scan.Findings = append(scan.Findings, r.findings...)
+		if r.raw.Incomplete != "" {
+			// The tool ran and its findings stand, but it told us it could not
+			// analyze everything. Its silence about the rest is not a clean bill, so
+			// the scan is marked incomplete exactly as if the tool had failed.
+			fmt.Fprintf(os.Stderr, "achilles: %s ran but could not analyze all of the target, so its results are INCOMPLETE: %s\n", r.id, r.raw.Incomplete)
+			diags = append(diags, toolDiag{Tool: r.id, Stage: "partial", Error: r.raw.Incomplete})
+		}
 
 		if o.sarifOut != "" {
 			if err := os.WriteFile(filepath.Join(o.sarifOut, r.id+".sarif"), r.raw.Data, 0o600); err != nil {

@@ -21,8 +21,14 @@
 # reports gosec as FAILED rather than silently clean — see `requires:` in
 # configs/tools.yaml). Build with --build-arg WITH_GO=false for a ~250 MB smaller
 # image that does not scan Go.
+#
+# This is the toolchain gosec SCANS with, and it is held at 1.27.1 on purpose: Go
+# 1.27.2 changed the compiler export-data format and no gosec release (up to
+# v2.29.0) can read it, so with 1.27.2 here gosec could not type-check anything and
+# would silently skip its taint analysis. The build stage below, which compiles what
+# this image actually runs, uses 1.27.2. Move this pin when gosec catches up.
 ARG WITH_GO=true
-FROM golang:1.27.2@sha256:5bc7f572bbaa98885a3a1fd9c0aa76b59e3e14e8628bfc316bbfd0c701e4818c AS go-true
+FROM golang:1.27.1@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2 AS go-true
 FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS go-false
 RUN mkdir -p /usr/local/go
 FROM go-${WITH_GO} AS gotoolchain

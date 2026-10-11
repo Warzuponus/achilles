@@ -77,7 +77,7 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 // to run or normalize) + LLM token usage, to the vault and to --diagnostics.
 func writeDiagnostics(o *options, ev vault.Store, runID string, diags []toolDiag, llmUsage llm.Usage) error {
 	if len(diags) > 0 {
-		fmt.Fprintf(os.Stderr, "achilles: %d tool(s) produced no findings due to run/normalize errors (see diagnostics)\n", len(diags))
+		fmt.Fprintf(os.Stderr, "achilles: %d tool(s) failed, or ran but could not analyze everything; the scan is incomplete (see the lines above, or --diagnostics)\n", len(diags))
 		recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta, Source: "diagnostics"},
 			map[string]any{"parseFailures": diags})
 	}

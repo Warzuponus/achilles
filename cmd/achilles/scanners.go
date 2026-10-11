@@ -38,7 +38,7 @@ func runFromSARIF(path, failOn string) error {
 // silent.
 type toolDiag struct {
 	Tool  string `json:"tool"`
-	Stage string `json:"stage"` // "run" | "normalize"
+	Stage string `json:"stage"` // "run" | "normalize" | "partial" (ran, but said it could not analyze everything)
 	Error string `json:"error"`
 }
 

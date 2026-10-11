@@ -22,7 +22,8 @@ func killTree(cmd *exec.Cmd) error {
 	if cmd.Process == nil {
 		return nil
 	}
-	if err := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid)).Run(); err != nil {
+	pid := strconv.Itoa(cmd.Process.Pid)
+	if err := exec.Command("taskkill", "/T", "/F", "/PID", pid).Run(); err != nil { // #nosec G204 -- fixed binary; the argument is an integer pid
 		return cmd.Process.Kill()
 	}
 	return nil

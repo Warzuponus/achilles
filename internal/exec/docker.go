@@ -30,6 +30,12 @@ func (r DockerRunner) Run(ctx context.Context, c Command) (Result, error) {
 		image = r.Image
 	}
 
+	if image == "" {
+		// `docker run` with no image fails with "invalid reference format", which
+		// says nothing about which tool or why.
+		return Result{}, fmt.Errorf("no container image is configured for this tool, so it cannot run under --runner docker")
+	}
+
 	// Per-command network overrides the runner default. "default" means Docker's
 	// normal bridge (no flag); "none"/named are passed through as --network.
 	network := c.Network

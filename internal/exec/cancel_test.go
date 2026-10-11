@@ -132,3 +132,12 @@ func TestDockerRunner_NamesTheContainerSoItCanBeKilled(t *testing.T) {
 		t.Errorf("container names must be unique and recognisable: %q %q", a, b)
 	}
 }
+
+// `docker run` with an empty image name fails with "invalid reference format",
+// which names neither the tool nor the cause.
+func TestDockerRunner_NoImageIsAClearError(t *testing.T) {
+	_, err := DockerRunner{}.Run(context.Background(), Command{Bin: "tool", Args: []string{"scan"}})
+	if err == nil || !strings.Contains(err.Error(), "no container image") {
+		t.Errorf("err = %v, want one that says no image is configured", err)
+	}
+}

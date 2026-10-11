@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Warzuponus/achilles/internal/config"
+	xexec "github.com/Warzuponus/achilles/internal/exec"
 	"github.com/Warzuponus/achilles/internal/knowledge"
 	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/vault"
@@ -129,5 +131,33 @@ func TestRunTriage_DependencyAdvisoriesAreKeptAsReported(t *testing.T) {
 	st := scan.Triage
 	if st.Advisories != 2 || st.Triaged != 1 || st.Skipped != 0 || st.Failed != 0 {
 		t.Errorf("stats = %+v; advisories are their own bucket, not \"not reached\"", st)
+	}
+}
+
+// Under --runner docker a tool with no image (Opengrep) used to be handed to
+// `docker run` with an empty image name and fail on every scan, while the docs said
+// it runs as a local binary. It now does, and says so.
+func TestRunnerFor_ToolWithoutAnImageRunsLocallyAndSaysSo(t *testing.T) {
+	docker := xexec.DockerRunner{Network: "none"}
+
+	var warn strings.Builder
+	got := runnerFor(config.ToolConfig{ID: "opengrep", Bin: "opengrep"}, docker, &warn)
+	if _, local := got.(xexec.LocalRunner); !local {
+		t.Errorf("no image under the docker runner: got %T, want LocalRunner", got)
+	}
+	if !strings.Contains(warn.String(), "opengrep") || !strings.Contains(warn.String(), "not in a container") {
+		t.Errorf("falling back to a local binary must be announced; got %q", warn.String())
+	}
+
+	warn.Reset()
+	got = runnerFor(config.ToolConfig{ID: "gosec", Bin: "gosec", Image: "ghcr.io/securego/gosec:2"}, docker, &warn)
+	if _, isDocker := got.(xexec.DockerRunner); !isDocker || warn.Len() != 0 {
+		t.Errorf("a tool with an image stays in its container, silently: got %T, %q", got, warn.String())
+	}
+
+	// --runner local is never changed.
+	got = runnerFor(config.ToolConfig{ID: "opengrep", Bin: "opengrep"}, xexec.LocalRunner{}, &warn)
+	if _, local := got.(xexec.LocalRunner); !local || warn.Len() != 0 {
+		t.Errorf("local runner: got %T, %q", got, warn.String())
 	}
 }

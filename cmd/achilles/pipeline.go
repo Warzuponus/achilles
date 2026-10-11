@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,6 +61,7 @@ func provisionGeneratedRules(o *options, cfg *config.Config) (activeDir, shadowD
 func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexec.Runner, opengrepRules, shadowRules string) (*scanner.Registry, *opengrep.Scanner, error) {
 	var opengrepOpts []opengrep.Option
 	haveOpengrep := false
+	shadowRunner := runner
 	reg := scanner.NewRegistry()
 	for _, tc := range cfg.Tools {
 		if tc.ID == "syft" {
@@ -72,12 +74,14 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 			fmt.Fprintf(os.Stderr, "achilles: skipping %s — %v\n", tc.ID, err)
 			continue
 		}
-		sc, err := buildScanner(tc, runner, opengrepRules)
+		toolRunner := runnerFor(tc, runner, os.Stderr)
+		sc, err := buildScanner(tc, toolRunner, opengrepRules)
 		if err != nil {
 			return nil, nil, err
 		}
 		if tc.ID == "opengrep" {
 			haveOpengrep = true
+			shadowRunner = toolRunner
 			if tc.Bin != "" {
 				opengrepOpts = append(opengrepOpts, opengrep.WithBin(tc.Bin))
 			}
@@ -91,9 +95,22 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 	}
 	var shadow *opengrep.Scanner
 	if haveOpengrep && shadowRules != "" {
-		shadow = opengrep.New(runner, shadowRules, opengrepOpts...)
+		shadow = opengrep.New(shadowRunner, shadowRules, opengrepOpts...)
 	}
 	return reg, shadow, nil
+}
+
+// runnerFor picks how one tool is launched. Under --runner docker a tool with no
+// container image (Opengrep publishes none) cannot be started as a container:
+// `docker run` with an empty image name just fails, and the tool was reported as
+// broken on every such scan. It runs as the local binary instead, and says so,
+// because the user asked for containers and this one tool is not in one.
+func runnerFor(tc config.ToolConfig, runner xexec.Runner, warn io.Writer) xexec.Runner {
+	if _, docker := runner.(xexec.DockerRunner); docker && tc.Image == "" && tc.Bin != "" {
+		fmt.Fprintf(warn, "achilles: %s has no container image, so it runs as the local binary %q (not in a container, unlike the other tools under --runner docker)\n", tc.ID, tc.Bin)
+		return xexec.LocalRunner{}
+	}
+	return runner
 }
 
 // scanTarget runs each applicable scanner and the shadow pass, records raw output

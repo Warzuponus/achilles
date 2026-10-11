@@ -123,6 +123,11 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **`--runner docker` and Opengrep.** Opengrep has no container image, and the docs said
+  it runs as a local binary under `--runner docker`. The code handed it to `docker run`
+  with an empty image name instead, so it failed on every such scan. It now runs as the
+  local binary and prints a line saying it is not in a container. A tool with neither an
+  image nor a binary gets a clear error instead of Docker's "invalid reference format".
 - **Windows.** The file vault had no cross-process lock on Windows, so two processes
   writing one vault produced records with duplicate ids; it now locks with `LockFileEx`.
   The whole test suite passes on Windows and runs there in CI on every change (three

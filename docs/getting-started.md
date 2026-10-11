@@ -83,7 +83,7 @@ A missing scanner is reported, not hidden: the scan prints `N tool(s) FAILED to 
 and lists them (add `--strict-tools` to make that exit 2). To avoid installing
 anything, run the tools in containers instead: `--runner docker` (uses the pinned
 images in `configs/tools.yaml`). *Exception:* Opengrep has no public image and always
-runs as a local binary.
+runs as a local binary; Achilles prints a line saying so.
 
 ## 3. Your first scan
 

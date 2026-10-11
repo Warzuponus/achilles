@@ -30,8 +30,8 @@ tools:
     enabled: true
     bespoke: true                 # hand-written adapter (internal/scanner/opengrep)
     languages: [python, javascript, typescript, go, java, ruby, generic]
-    # No public container image: Opengrep ships as a binary (install.sh) and runs
-    # via the local binary (see action.yml). `--runner docker` is unsupported for it.
+    # No public container image: Opengrep ships as a binary. Under `--runner docker`
+    # it therefore runs as the local binary (and Achilles says so on stderr).
     bin: opengrep
     format: sarif
     rules: configs/rules

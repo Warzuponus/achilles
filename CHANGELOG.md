@@ -73,8 +73,14 @@ First public release (`v0.1.0`) is pending.
 - `--config` defaults to the embedded registry instead of `configs/tools.yaml` in the
   current directory.
 
+### Security
+- The toolchain floor moves to Go 1.27.2 and `golang.org/x/text` to v0.43.0, clearing 13
+  known vulnerabilities that `govulncheck` showed this code reaching (HTTP/1 and HTTP/2
+  request handling, `html/template`, `mime/multipart`, TLS, and an `x/text` panic). CI
+  now runs `govulncheck` on every change, and the tests run under the race detector.
+
 ### Changed (toolchain)
-- Built and tested with Go 1.27 (`go 1.27`, `toolchain go1.27.1`): `go.mod`, every workflow, the
+- Built and tested with Go 1.27 (`go 1.27`, `toolchain go1.27.2`): `go.mod`, every workflow, the
   action, and the container base images (digest-pinned) move together. Building from source now
   needs Go 1.27; release binaries and the images are unaffected for users.
 

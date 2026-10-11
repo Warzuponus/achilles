@@ -22,13 +22,13 @@
 # configs/tools.yaml). Build with --build-arg WITH_GO=false for a ~250 MB smaller
 # image that does not scan Go.
 ARG WITH_GO=true
-FROM golang:1.27@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2 AS go-true
+FROM golang:1.27.2@sha256:5bc7f572bbaa98885a3a1fd9c0aa76b59e3e14e8628bfc316bbfd0c701e4818c AS go-true
 FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS go-false
 RUN mkdir -p /usr/local/go
 FROM go-${WITH_GO} AS gotoolchain
 
 # ---- build the Go binaries and the two Go-based scanners ------------------------
-FROM --platform=$BUILDPLATFORM golang:1.27@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.2@sha256:5bc7f572bbaa98885a3a1fd9c0aa76b59e3e14e8628bfc316bbfd0c701e4818c AS build
 ARG TARGETOS=linux
 ARG TARGETARCH
 ARG GOSEC_VERSION=v2.27.1

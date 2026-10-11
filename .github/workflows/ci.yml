@@ -40,8 +40,10 @@ jobs:
         run: scripts/check-tree.sh
       - name: Dependency hygiene (no cloud SDK modules)
         run: make check-deps
-      - name: Test (hermetic)
-        run: go test ./...
+      # -race: findings are triaged, scanned and verified concurrently, and nothing
+      # else would notice a data race in those paths.
+      - name: Test (hermetic, race detector on)
+        run: go test -race ./...
       # Triage-context eval: hermetic (no model, no key), so it can gate. Fails if
       # a change takes deciding evidence out of the triage prompt for any corpus
       # case. Refresh the baseline deliberately with `make eval-baseline`.
@@ -65,3 +67,17 @@ jobs:
           target: examples/quickstart
           upload-report: "false"
           args: --strict-tools
+
+  # Known vulnerabilities in the Go standard library and in dependencies, limited to
+  # code this project actually reaches. A security scanner must not ship on a
+  # toolchain or dependency with a published fix outstanding; when this fails, bump
+  # the `toolchain` line or the module in go.mod.
+  vulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27'
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...

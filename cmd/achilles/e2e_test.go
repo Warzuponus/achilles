@@ -135,7 +135,10 @@ func TestRun_FixVerificationHasItsOwnClock(t *testing.T) {
 	}
 	cfg, target, vaultPath := fakeScanFixture(t)
 
-	const perCall = 900 * time.Millisecond // triage + judge + remediation: well past --timeout below
+	// Three model calls (triage, judge, remediation) at 1.6s each take 4.8s: longer
+	// than the 4s --timeout below however fast the scanner is, and the scanner has
+	// the whole 4s to itself, which is generous even on a loaded CI machine.
+	const perCall = 1600 * time.Millisecond
 	diff := "--- a/app.py\n+++ b/app.py\n@@ -1,3 +1,3 @@\n import os\n-os.system(cmd)\n+subprocess.run([cmd])\n print('x')\n"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -166,7 +169,7 @@ func TestRun_FixVerificationHasItsOwnClock(t *testing.T) {
 
 	err := run([]string{
 		"--config", cfg, "--vault", vaultPath,
-		"--timeout", "2s", // the scanners are done in well under this; the AI review is not
+		"--timeout", "4s", // the scanner is done in well under this; the AI review is not
 		"--triage", "--remediate", "--llm-auth", "none", "--llm-base-url", srv.URL, "--llm-model", "m",
 		target,
 	})

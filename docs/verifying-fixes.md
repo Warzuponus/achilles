@@ -71,7 +71,20 @@ sees it. A diff is rejected (`patch_failed`) if it:
 - names an absolute path, a `..` segment, or anything under `.git`;
 - uses a quoted/escaped path or a backslash;
 - is a binary patch, or creates or changes a symlink;
-- names no files, touches more than 20 files, or is larger than 256 KiB.
+- names no files, or is larger than 256 KiB;
+- **changes anything other than the file the finding is in.** The model is shown that
+  one file, so an edit anywhere else is code it wrote without seeing, and it is how a
+  "fix" for one flagged line would also add a workflow step, a build target or a
+  dependency. Creating, deleting, renaming or copying a file, and changing a file's
+  mode, are rejected too;
+- targets a file that runs by itself in CI or on checkout (`.github/`, other CI
+  pipeline definitions, `.gitmodules`, `.gitattributes`, git hooks), even when that
+  is where the finding is. Fix those by hand;
+- names a path without the usual `a/` `b/` prefix, which would leave it to git to
+  guess which file to patch.
+
+The same check runs again immediately before `--fix-pr` applies a diff, whether or
+not verification ran, so `--verify-fixes=false` does not switch it off.
 
 The copy skips `.git`, `node_modules`, `vendor`, `.achilles`, `.terraform`, virtualenvs
 and common build-output directories (`dist`, `build`, `target`, `out`, `.next`,

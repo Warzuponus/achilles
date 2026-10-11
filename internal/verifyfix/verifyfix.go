@@ -130,11 +130,16 @@ func (v *Verifier) Verify(ctx context.Context, f model.Finding, diff string) Res
 	if err := checkDiff(diff, v.opts.MaxDiffBytes, v.opts.MaxDiffFiles); err != nil {
 		return Result{Status: PatchFailed, Detail: "diff rejected: " + err.Error()}
 	}
+	file := relTo(v.target, f.Location.File)
+	// Scope comes before anything is copied or run: a diff that reaches outside the
+	// finding's own file is never applied, not even to the throwaway copy.
+	if err := checkScope(diff, file); err != nil {
+		return Result{Status: PatchFailed, Detail: "diff rejected: " + err.Error()}
+	}
 	sc, ok := v.scanners.Get(f.Tool)
 	if !ok {
 		return Result{Status: Skipped, Detail: fmt.Sprintf("scanner %q is not available to re-run (shadow or unregistered tool)", f.Tool)}
 	}
-	file := relTo(v.target, f.Location.File)
 	if file != "" && inSkippedDir(file) {
 		return Result{Status: Skipped, Detail: fmt.Sprintf("%s is in a directory excluded from the verification copy", file)}
 	}

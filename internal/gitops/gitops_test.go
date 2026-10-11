@@ -33,13 +33,13 @@ func TestBranchApplyCommitPush_Sequence(t *testing.T) {
 	if err != nil || base != "main" {
 		t.Fatalf("CurrentBranch=%q err=%v", base, err)
 	}
-	if err := r.CreateBranch(ctx, "achilles/autofix-abc", base); err != nil {
+	if err := r.AddWorktree(ctx, "/tmp/wt", "achilles/autofix-abc", base); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Apply(ctx, "PATCH-BODY"); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Commit(ctx, "fix: auto"); err != nil {
+	if err := r.Commit(ctx, "fix: auto", "src/a.go", "src/b.go"); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Push(ctx, "origin", "achilles/autofix-abc"); err != nil {
@@ -48,10 +48,10 @@ func TestBranchApplyCommitPush_Sequence(t *testing.T) {
 
 	want := []string{
 		"rev-parse --abbrev-ref HEAD",
-		"checkout -B achilles/autofix-abc main",
-		"apply --whitespace=nowarn <PATCH-BODY",
-		"add -A",
-		"commit -m fix: auto",
+		"worktree add -B achilles/autofix-abc /tmp/wt main",
+		"apply -p1 --whitespace=nowarn <PATCH-BODY",
+		"add -- src/a.go src/b.go",
+		"commit -m fix: auto -- src/a.go src/b.go",
 		"push -u origin achilles/autofix-abc",
 	}
 	if len(log) != len(want) {
@@ -60,6 +60,30 @@ func TestBranchApplyCommitPush_Sequence(t *testing.T) {
 	for i := range want {
 		if log[i] != want[i] {
 			t.Errorf("step %d = %q, want %q", i, log[i], want[i])
+		}
+	}
+}
+
+// There is no way to commit "everything": this package pushes what it commits.
+func TestCommit_NeverStagesAWholeTree(t *testing.T) {
+	var log []string
+	r := &Repo{Dir: "/repo", Run: recordingRunner(&log)}
+	ctx := context.Background()
+
+	if err := r.Commit(ctx, "msg"); err == nil {
+		t.Error("Commit with no paths must refuse, not fall back to staging everything")
+	}
+	for _, bad := range []string{"", " ", "-A", "--all", ":/", ":(glob)**"} {
+		if err := r.Commit(ctx, "msg", "src/a.go", bad); err == nil {
+			t.Errorf("Commit must refuse the path %q", bad)
+		}
+	}
+	if len(log) != 0 {
+		t.Errorf("a refused commit must run no git command, ran %v", log)
+	}
+	for _, line := range log {
+		if strings.Contains(line, "add -A") || strings.Contains(line, "add .") {
+			t.Errorf("staged wholesale: %q", line)
 		}
 	}
 }

@@ -83,6 +83,17 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **`--fix-pr` pushed the whole working tree.** It switched your checkout to the fix
+  branch and committed with `git add -A`, so an untracked `.env`, the scan's own vault
+  (every prompt and response) and its reports went into the pull request. It now builds
+  the branch in a temporary git worktree, leaves your checkout and anything uncommitted
+  alone, and commits exactly the files the fixes change.
+- **A model-written fix could change any file.** A patch could add a workflow step, a
+  build target or a new file alongside the real fix and still pass the re-scan. A fix may
+  now change only the file its finding is in, may not create, delete, rename or chmod
+  files, and may never touch CI or git control files. The check runs before the re-scan
+  and again before `--fix-pr` applies anything, including with `--verify-fixes=false`.
+  A model can no longer mark its own patch as verified in its reply.
 - **The AI review could rule out a known CVE.** Dependency findings (osv-scanner,
   govulncheck, Trivy vulnerabilities) went through the same prompt as code findings,
   with a lockfile line or nothing at all as "code context", and a confident false

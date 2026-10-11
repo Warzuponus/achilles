@@ -402,6 +402,10 @@ func (e *Engine) Remediate(ctx context.Context, runID string, f *model.Finding) 
 	if err := json.Unmarshal([]byte(llm.ExtractJSON(resp.Content)), &r); err != nil {
 		return fmt.Errorf("parse remediation for %s: %w", f.RuleID, err)
 	}
+	// Verification is the pipeline's own record of the re-scan. A reply that
+	// carries one is a model declaring its own patch verified; never keep it.
+	r.Verification = nil
+	r.Confidence = model.NormalizeConfidence(r.Confidence)
 	f.Remediation = &r
 	e.record(runID, vault.KindRemediation, "remediation", f.Fingerprint, r)
 	return nil

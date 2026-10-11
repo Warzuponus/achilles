@@ -9,6 +9,7 @@ import (
 	"embed"
 	"encoding/json"
 	"html/template"
+	"io/fs"
 	"net"
 	"net/http"
 	"sort"
@@ -24,6 +25,20 @@ import (
 
 //go:embed templates/*.html
 var templatesFS embed.FS
+
+// staticFS holds the War Room's own script. Nothing is loaded from a CDN: the page
+// has to work with no network, and a script fetched from somewhere else would run
+// with access to every finding shown here.
+//
+//go:embed static
+var staticFS embed.FS
+
+// contentSecurityPolicy is sent with every response. Scripts may come from this
+// origin only (no inline script, no eval, no third party), so text that reaches a
+// page from a scanned repository or a model cannot run as code even if an escaping
+// bug let it through. Styles stay inline because the templates carry their own.
+const contentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; " +
+	"img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
 
 // Server is the War Room HTTP application.
 //
@@ -102,8 +117,23 @@ func (s *Server) Handler() http.Handler {
 	// Liveness exposes nothing (no project data), so container health checks and
 	// orchestrators can use it without a matching Host header.
 	root.HandleFunc("GET /healthz", handleHealthz)
+	// The script is the same for every project, so it sits outside withTenant (which
+	// can set a cookie) but still behind the host guard.
+	root.Handle("GET /static/", s.guard(http.HandlerFunc(handleStatic)))
 	root.Handle("/", s.guard(s.withTenant(mux)))
 	return root
+}
+
+// handleStatic serves the embedded script. The embedded file system has no
+// directory listings worth showing, so anything that is not a file is a 404.
+func handleStatic(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/")
+	if st, err := fs.Stat(staticFS, name); err != nil || st.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeFileFS(w, r, staticFS, name)
 }
 
 // handleHealthz answers liveness probes. It touches no vault.
@@ -120,6 +150,10 @@ func (s *Server) guard(next http.Handler) http.Handler {
 	cop := http.NewCrossOriginProtection()
 	protected := cop.Handler(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
 		if !s.hostAllowed(r.Host) {
 			http.Error(w, "forbidden: host not allowed (the War Room only answers to localhost; "+
 				"to reach it by another name, start achillesd with --allowed-hosts)", http.StatusForbidden)
@@ -265,8 +299,10 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(`<div class="verdict">✓ recorded ` + string(label) + ` feedback</div>`))
+	// Plain text: the page's script shows it as text, and a browser without
+	// JavaScript shows it as the result of the form post.
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte("recorded " + string(label) + " feedback\n"))
 }
 
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {

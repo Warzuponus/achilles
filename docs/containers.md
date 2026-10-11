@@ -113,6 +113,10 @@ users:
   `http.CrossOriginProtection`): a cross-origin `POST` is rejected, so another site
   open in your browser cannot submit feedback or purge data on your behalf.
 - Secrets in findings are redacted before they reach the UI or API.
+- The pages load **nothing from the internet**. The one script is built into
+  `achillesd`, and a Content-Security-Policy allows scripts from the War Room itself
+  only, so it works with no network and text from a scanned repository cannot run as
+  code in the page.
 
 What this does **not** give you: any separation between people. Do not bind the War
 Room to a LAN or public address, and do not forward its port, expecting a login to

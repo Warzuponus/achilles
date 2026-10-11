@@ -79,6 +79,14 @@ First public release (`v0.1.0`) is pending.
   request handling, `html/template`, `mime/multipart`, TLS, and an `x/text` panic). CI
   now runs `govulncheck` on every change, and the tests run under the race detector.
 
+- The War Room no longer loads JavaScript from a CDN. It used to fetch htmx and Alpine.js
+  from unpkg, one of them at a floating version and neither with an integrity hash, so
+  the page was inert offline and a CDN compromise would have run in a page showing every
+  finding. Alpine was unused and htmx did one form post; both are replaced by a small
+  script embedded in `achillesd`. Every response now carries a Content-Security-Policy
+  (scripts from the War Room's own origin only), `X-Content-Type-Options: nosniff` and
+  `Referrer-Policy: no-referrer`.
+
 ### Changed (toolchain)
 - Built and tested with Go 1.27 (`go 1.27`, `toolchain go1.27.2`): `go.mod`, every workflow, the
   action, and the container base images (digest-pinned) move together. Building from source now

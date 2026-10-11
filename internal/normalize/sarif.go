@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -254,9 +255,17 @@ func fingerprintFor(res model.SarifResult, tool, file, snippet string) string {
 			return v
 		}
 	}
-	// Any fingerprint the tool provided is better than recomputing.
-	for _, v := range res.Fingerprints {
-		if v != "" {
+	// Any fingerprint the tool provided is better than recomputing. Keys are taken
+	// in sorted order: a tool that emits two fingerprints must yield the same one
+	// on every run, or baselines, issue de-duplication and feedback all break at
+	// random (Go randomizes map iteration).
+	keys := make([]string, 0, len(res.Fingerprints))
+	for k := range res.Fingerprints {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if v := res.Fingerprints[k]; v != "" {
 			return v
 		}
 	}

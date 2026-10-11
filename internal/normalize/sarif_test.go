@@ -171,3 +171,22 @@ func TestFromSARIF_BadJSON(t *testing.T) {
 		t.Error("expected error on malformed JSON")
 	}
 }
+
+// A tool that emits two fingerprints under keys we do not know must give the same
+// one every run. Picking "the first" from a Go map picked a different one at random,
+// so baselines reported old findings as new and issues were filed twice.
+func TestFromSARIF_FingerprintChoiceIsDeterministic(t *testing.T) {
+	doc := `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"t"}},
+	  "results":[{"ruleId":"r1","message":{"text":"m"},
+	  "fingerprints":{"zeta/v1":"ZZZ","alpha/v1":"AAA","mid/v2":"MMM","empty/v1":""},
+	  "locations":[{"physicalLocation":{"artifactLocation":{"uri":"a.py"},"region":{"startLine":1}}}]}]}]}`
+	for i := 0; i < 200; i++ {
+		f, err := FromSARIF("x", []byte(doc))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f[0].Fingerprint != "AAA" {
+			t.Fatalf("run %d chose %q; want the fingerprint under the first key in sorted order (AAA) every time", i, f[0].Fingerprint)
+		}
+	}
+}

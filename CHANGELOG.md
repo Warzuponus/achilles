@@ -83,6 +83,9 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Baselines and issue de-duplication could break at random.** When a scanner supplied
+  more than one fingerprint under keys Achilles does not know, one was picked by Go map
+  order, so it differed between runs. The choice is now deterministic.
 - **Trivy's secret findings were sent to the model and could be dismissed, and found
   secrets were copied into the vault.** Credential findings were recognised by tool name
   and rule-id keywords, which Trivy's rules (`github-pat`, `slack-web-hook`, ...) do not

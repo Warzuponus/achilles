@@ -132,6 +132,8 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **War Room:** an unknown path rendered the dashboard with a 200 (the route for `/`
+  matched everything). It is now a 404.
 - **`--runner docker` and Opengrep.** Opengrep has no container image, and the docs said
   it runs as a local binary under `--runner docker`. The code handed it to `docker run`
   with an empty image name instead, so it failed on every such scan. It now runs as the

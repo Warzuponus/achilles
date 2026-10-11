@@ -96,3 +96,21 @@ func TestRunPage_FeedbackFormPostsWithoutAScriptLibrary(t *testing.T) {
 		t.Errorf("the run page has %d script tags, want exactly the embedded one", n)
 	}
 }
+
+// "GET /" used to match every path, so a mistyped URL rendered the dashboard with
+// a 200 instead of saying the page does not exist.
+func TestUnknownPathIsNotFound(t *testing.T) {
+	s, _ := newServer(t)
+	h := s.Handler()
+	if code := do(h, "GET", "/", "", nil).Code; code != http.StatusOK {
+		t.Errorf("GET / = %d, want 200", code)
+	}
+	if code := do(h, "GET", "/?tenant=acme", "", nil).Code; code != http.StatusOK {
+		t.Errorf("GET /?tenant=acme = %d, want 200 (the project switcher)", code)
+	}
+	for _, p := range []string{"/no-such-page", "/runs", "/admin"} {
+		if code := do(h, "GET", p, "", nil).Code; code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", p, code)
+		}
+	}
+}

@@ -9,7 +9,6 @@ import (
 	"embed"
 	"encoding/json"
 	"html/template"
-	"io/fs"
 	"net"
 	"net/http"
 	"sort"
@@ -101,7 +100,8 @@ const ctxTenant ctxKey = iota
 // host and cross-origin guards.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", s.handleDashboard)
+	// {$} matches the root only: an unknown path is a 404, not the dashboard.
+	mux.HandleFunc("GET /{$}", s.handleDashboard)
 	mux.HandleFunc("GET /runs/{id}", s.handleRun)
 	mux.HandleFunc("POST /runs/{id}/feedback", s.handleFeedback)
 	mux.HandleFunc("GET /runs/{id}/audit", s.handleAudit)
@@ -119,21 +119,16 @@ func (s *Server) Handler() http.Handler {
 	root.HandleFunc("GET /healthz", handleHealthz)
 	// The script is the same for every project, so it sits outside withTenant (which
 	// can set a cookie) but still behind the host guard.
-	root.Handle("GET /static/", s.guard(http.HandlerFunc(handleStatic)))
+	root.Handle("GET /static/warroom.js", s.guard(http.HandlerFunc(handleScript)))
 	root.Handle("/", s.guard(s.withTenant(mux)))
 	return root
 }
 
-// handleStatic serves the embedded script. The embedded file system has no
-// directory listings worth showing, so anything that is not a file is a 404.
-func handleStatic(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimPrefix(r.URL.Path, "/")
-	if st, err := fs.Stat(staticFS, name); err != nil || st.IsDir() {
-		http.NotFound(w, r)
-		return
-	}
+// handleScript serves the one embedded script. The file name is fixed here, never
+// taken from the request.
+func handleScript(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
-	http.ServeFileFS(w, r, staticFS, name)
+	http.ServeFileFS(w, r, staticFS, "static/warroom.js")
 }
 
 // handleHealthz answers liveness probes. It touches no vault.

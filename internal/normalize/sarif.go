@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/Warzuponus/achilles/internal/model"
@@ -49,9 +50,9 @@ func FromSARIF(fallbackTool string, data []byte) ([]model.Finding, error) {
 				Message:     strings.TrimSpace(res.Message.Text),
 				Location:    loc,
 				CodeContext: snippet,
-				Severity:    severityFor(res, rules[res.RuleID]),
 				CWE:         cweFor(res, rules[res.RuleID]),
 			}
+			f.Severity = severityFor(res, rules[res.RuleID], f.IsSecret())
 			f.ID = model.ComputeID(tool, res.RuleID, loc)
 			f.Fingerprint = fingerprintFor(res, tool, loc.File, snippet)
 			if raw, err := json.Marshal(res); err == nil {
@@ -87,10 +88,36 @@ func firstLocation(locs []model.SarifLocation) model.Location {
 	}
 }
 
-// severityFor maps SARIF level to our normalized severity. SARIF levels are
-// error/warning/note/none. A result with no explicit level inherits the rule's
-// defaultConfiguration.level (this is how Opengrep encodes severity).
-func severityFor(res model.SarifResult, rule model.SarifRule) model.Severity {
+// severityFor derives our normalized severity from the two things a SARIF result
+// can say about it, and takes the MORE severe of the two:
+//
+//   - the level (error/warning/note/none), on the result or inherited from the
+//     rule's defaultConfiguration (this is how Opengrep encodes severity). SARIF
+//     has only three real levels, so on its own it can never say "critical";
+//   - the security-severity score (CVSS-style, 0..10) on the result or the rule,
+//     which is how Trivy, osv-scanner and others carry critical vs. high.
+//
+// Taking the maximum means a score can raise a finding (an "error" with a 9.8
+// becomes critical) but never quietly lower what the tool's own level said.
+//
+// A result with neither gets the SARIF default level, "warning" (§3.27.10), unless
+// it is a credential finding: a secret scanner that states no severity (Gitleaks)
+// is reporting a leaked credential, and that must be able to fail a gate.
+func severityFor(res model.SarifResult, rule model.SarifRule, secret bool) model.Severity {
+	sev := levelSeverity(res, rule)
+	if s := scoreSeverity(res, rule); s.Rank() > sev.Rank() {
+		sev = s
+	}
+	if sev != model.SeverityUnknown {
+		return sev
+	}
+	if secret {
+		return model.SeverityHigh
+	}
+	return model.SeverityMedium
+}
+
+func levelSeverity(res model.SarifResult, rule model.SarifRule) model.Severity {
 	level := res.Level
 	if level == "" {
 		level = rule.DefaultConfiguration.Level
@@ -105,16 +132,39 @@ func severityFor(res model.SarifResult, rule model.SarifRule) model.Severity {
 	case "none":
 		return model.SeverityInfo
 	}
-	// Last resort: infer from the rule's tags if it carries a severity-ish one.
+	// No level: infer from the rule's tags if it carries a severity-ish one.
 	for _, t := range rule.Properties.Tags {
 		switch strings.ToLower(t) {
-		case "error", "high", "critical":
+		case "critical":
+			return model.SeverityCritical
+		case "error", "high":
 			return model.SeverityHigh
 		case "warning", "medium":
 			return model.SeverityMedium
 		case "note", "low", "info":
 			return model.SeverityLow
 		}
+	}
+	return model.SeverityUnknown
+}
+
+// scoreSeverity reads a security-severity from the result's own properties (more
+// specific) or else the rule's.
+func scoreSeverity(res model.SarifResult, rule model.SarifRule) model.Severity {
+	if raw, ok := res.Properties["security-severity"]; ok {
+		var s model.SarifScore
+		switch v := raw.(type) {
+		case string:
+			s = model.SarifScore(v)
+		case float64:
+			s = model.SarifScore(strconv.FormatFloat(v, 'f', -1, 64))
+		}
+		if score, ok := s.Value(); ok {
+			return model.SeverityFromScore(score)
+		}
+	}
+	if score, ok := rule.Properties.SecuritySeverity.Value(); ok {
+		return model.SeverityFromScore(score)
 	}
 	return model.SeverityUnknown
 }

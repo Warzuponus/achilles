@@ -77,3 +77,27 @@ func TestValidateLLMFailsFastWithActionableMessages(t *testing.T) {
 		t.Errorf("no LLM features requested but validate failed: %v", err)
 	}
 }
+
+// A typo in --fail-on used to rank below every severity, so ANY finding failed the
+// gate; and "critical" looked accepted while nothing could ever be critical.
+func TestFailOnMustBeARealSeverity(t *testing.T) {
+	for _, bad := range []string{"hgih", "sev1", "none", "unknown", "5"} {
+		if _, err := parseFlags([]string{"--fail-on", bad, "."}); err == nil || !strings.Contains(err.Error(), "--fail-on") {
+			t.Errorf("--fail-on %q should be rejected, got err=%v", bad, err)
+		}
+	}
+	for in, want := range map[string]string{"high": "high", "High": "high", " CRITICAL ": "critical", "info": "info"} {
+		o, err := parseFlags([]string{"--fail-on", in, "."})
+		if err != nil {
+			t.Errorf("--fail-on %q: %v", in, err)
+			continue
+		}
+		if o.failOn != want {
+			t.Errorf("--fail-on %q normalized to %q, want %q", in, o.failOn, want)
+		}
+	}
+	o, err := parseFlags([]string{"."})
+	if err != nil || o.failOn != "" {
+		t.Errorf("no --fail-on: failOn=%q err=%v", o.failOn, err)
+	}
+}

@@ -35,8 +35,19 @@ By default Achilles exits 0 (report-only). Make it gate with `--fail-on`:
 achilles --fail-on high .     # exit 1 if any surviving finding is >= high
 ```
 
-Severity order: `critical > high > medium > low`. The gate runs *after* all
-filtering below, so it only ever considers findings you didn't suppress.
+Severity order: `critical > high > medium > low > info`. The gate runs *after* all
+filtering below, so it only ever considers findings you didn't suppress. A value that
+is not one of those five is an error (exit 2), not a threshold.
+
+**Where severity comes from.** Each scanner reports a SARIF level (`error`, `warning`,
+`note`) and some also report a CVSS-style `security-severity` score. Achilles takes
+the more severe of the two: `error` is high, `warning` medium, `note` low, and a score
+of 9.0 or more is **critical**, 7.0 high, 4.0 medium, anything above 0 low. So
+`critical` comes from scanners that publish scores (Trivy and osv-scanner for
+dependency CVEs, some rule packs); a tool that only reports levels tops out at high.
+A result with no level and no score is medium (the SARIF default), except a credential
+finding, which is high: Gitleaks states no severity, and a leaked secret has to be
+able to fail a gate.
 
 ### The gate and the AI review
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/triage/llm"
 	"github.com/Warzuponus/achilles/internal/vault"
 )
@@ -120,7 +121,7 @@ func parseFlags(argv []string) (*options, error) {
 	fs.StringVar(&o.vaultTenant, "vault-tenant", "default", "project this scan belongs to; the War Room lists results per project (postgres backend; the file backend is addressed by --vault)")
 	fs.StringVar(&o.sarifOut, "sarif-out", "", "write each tool's SARIF into this directory")
 	fs.StringVar(&o.fromSarif, "from-sarif", "", "skip scanning; normalize this existing SARIF file")
-	fs.StringVar(&o.failOn, "fail-on", "", "exit non-zero if a finding at/above this severity exists: critical|high|medium|low")
+	fs.StringVar(&o.failOn, "fail-on", "", "exit non-zero if a finding at/above this severity exists: critical|high|medium|low|info (anything else is an error)")
 	fs.DurationVar(&o.timeout, "timeout", 5*time.Minute, "scan timeout")
 	fs.BoolVar(&o.triageOn, "triage", false, "run LLM triage + adversarial judge on findings")
 	fs.BoolVar(&o.remediateOn, "remediate", false, "propose fixes for high-confidence findings (implies --triage)")
@@ -198,6 +199,13 @@ func parseFlags(argv []string) (*options, error) {
 	}
 	if err := fs.Parse(argv); err != nil {
 		return nil, err
+	}
+	if o.failOn != "" {
+		sev, ok := model.ParseSeverity(o.failOn)
+		if !ok {
+			return nil, fmt.Errorf("--fail-on %q is not a severity (want critical, high, medium, low or info)", o.failOn)
+		}
+		o.failOn = string(sev) // canonical: "High" and " high" mean high
 	}
 	o.target = "."
 	if fs.NArg() > 0 {

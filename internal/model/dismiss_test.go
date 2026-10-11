@@ -1,6 +1,9 @@
 package model
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestVerdictDismissed(t *testing.T) {
 	cases := []struct {
@@ -100,6 +103,42 @@ func TestNormalizeConfidence(t *testing.T) {
 	} {
 		if got := NormalizeConfidence(c.in); got != c.want {
 			t.Errorf("NormalizeConfidence(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestParseSeverity(t *testing.T) {
+	for in, want := range map[string]Severity{
+		"critical": SeverityCritical, "HIGH": SeverityHigh, " medium ": SeverityMedium, "low": SeverityLow, "info": SeverityInfo,
+	} {
+		if got, ok := ParseSeverity(in); !ok || got != want {
+			t.Errorf("ParseSeverity(%q) = %q, %v", in, got, ok)
+		}
+	}
+	for _, bad := range []string{"", "unknown", "hgih", "error", "warning"} {
+		if got, ok := ParseSeverity(bad); ok {
+			t.Errorf("ParseSeverity(%q) accepted as %q", bad, got)
+		}
+	}
+}
+
+func TestSarifScoreDecodesStringsAndNumbers(t *testing.T) {
+	var p SarifRuleProps
+	for in, want := range map[string]float64{`"9.8"`: 9.8, `9.8`: 9.8, `" 7 "`: 7, `10`: 10} {
+		if err := json.Unmarshal([]byte(`{"security-severity":`+in+`}`), &p); err != nil {
+			t.Fatalf("%s: %v", in, err)
+		}
+		if got, ok := p.SecuritySeverity.Value(); !ok || got != want {
+			t.Errorf("%s -> %v, %v; want %v", in, got, ok, want)
+		}
+	}
+	for _, bad := range []string{`"n/a"`, `null`, `""`, `0`, `11`, `-1`, `true`, `[1]`} {
+		p = SarifRuleProps{}
+		if err := json.Unmarshal([]byte(`{"security-severity":`+bad+`}`), &p); err != nil {
+			t.Errorf("%s must not fail the decode: %v", bad, err)
+		}
+		if _, ok := p.SecuritySeverity.Value(); ok {
+			t.Errorf("%s must not be a usable score", bad)
 		}
 	}
 }

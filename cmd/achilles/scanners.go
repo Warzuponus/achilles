@@ -201,7 +201,12 @@ func applyFailOn(failOn string, scan model.Scan) error {
 	if failOn == "" {
 		return nil
 	}
-	threshold := model.Severity(failOn)
+	threshold, ok := model.ParseSeverity(failOn)
+	if !ok {
+		// An unknown word ranks below every real severity, so without this check a
+		// typo would make ANY finding fail the gate (and "critcal" would look strict).
+		return fmt.Errorf("--fail-on %q is not a severity (want critical, high, medium, low or info)", failOn)
+	}
 	// Gate on non-shadow findings only: shadow (report-only) generated-rule
 	// findings must never fail CI until they age into the active set.
 	worst := report.GatingSeverity(scan)

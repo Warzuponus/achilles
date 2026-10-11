@@ -62,7 +62,7 @@ See [Reports & Gating](reports-and-gating.md) for how these combine.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--fail-on` | — | exit non-zero if a finding at/above this severity survives filtering: `critical\|high\|medium\|low` |
+| `--fail-on` | — | exit non-zero if a finding at/above this severity survives filtering: `critical\|high\|medium\|low\|info`; any other value is an error. See [where severity comes from](reports-and-gating.md#gating-fail-on-severity) |
 
 ## LLM triage & agents
 

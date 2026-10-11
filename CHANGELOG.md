@@ -83,6 +83,14 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **`--fail-on critical` could never fire, and a typo failed everything.** No scanner
+  result was ever mapped to `critical`: only the SARIF level was read, and the
+  `security-severity` score that Trivy and others publish was ignored, so a CVSS 9.8 was
+  reported as high. Scores are now read (9.0+ critical, 7.0+ high, 4.0+ medium), taking
+  the more severe of level and score. A result with no level at all was `unknown`, which
+  no threshold matches, so Gitleaks findings could not fail a gate; they are now high,
+  and other level-less results get the SARIF default (medium). `--fail-on` rejects a
+  value that is not a severity instead of treating it as "below everything".
 - **Three `fp` labels could silence a rule forever.** Feedback-driven calibration ran on
   every triage, ruled out all future findings of a rule after three false-positive labels
   at 80%, never expired, and applied at any severity, with no model looking at the code.

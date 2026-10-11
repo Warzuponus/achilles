@@ -1,5 +1,10 @@
 package model
 
+import (
+	"strconv"
+	"strings"
+)
+
 // Minimal SARIF 2.1.0 types — only the fields Achilles consumes. This is
 // intentionally partial: we ingest what we need and keep the raw result bytes
 // on each Finding for anything we didn't model.
@@ -78,8 +83,32 @@ type SarifRuleConfig struct {
 }
 
 type SarifRuleProps struct {
-	Tags             []string `json:"tags,omitempty"`
-	SecuritySeverity string   `json:"security-severity,omitempty"`
+	Tags             []string   `json:"tags,omitempty"`
+	SecuritySeverity SarifScore `json:"security-severity,omitempty"`
+}
+
+// SarifScore is a "security-severity": a CVSS-style score from 0.0 to 10.0. The
+// convention (set by GitHub code scanning) carries it as a string, but some tools
+// emit a bare number, so decoding accepts either and never fails: a document
+// must not become unreadable over one odd score.
+type SarifScore string
+
+func (s *SarifScore) UnmarshalJSON(b []byte) error {
+	v := strings.Trim(strings.TrimSpace(string(b)), `"`)
+	if v == "null" {
+		v = ""
+	}
+	*s = SarifScore(v)
+	return nil
+}
+
+// Value returns the score and whether it is a usable number in (0, 10].
+func (s SarifScore) Value() (float64, bool) {
+	f, err := strconv.ParseFloat(strings.TrimSpace(string(s)), 64)
+	if err != nil || f != f || f <= 0 || f > 10 {
+		return 0, false
+	}
+	return f, true
 }
 
 type SarifResult struct {

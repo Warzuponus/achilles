@@ -22,6 +22,34 @@ const (
 	SeverityUnknown  Severity = "unknown"
 )
 
+// ParseSeverity reads a severity name as a user types it (--fail-on high). It
+// reports false for anything that is not one of the five real severities, so a
+// typo is an error at the flag instead of a threshold that silently means "any".
+func ParseSeverity(s string) (Severity, bool) {
+	sev := Severity(strings.ToLower(strings.TrimSpace(s)))
+	if sev.Rank() == 0 {
+		return "", false
+	}
+	return sev, true
+}
+
+// SeverityFromScore maps a CVSS-style 0..10 score onto a severity using the CVSS
+// v3 qualitative bands, which are also what GitHub code scanning applies to a
+// SARIF security-severity: 9.0+ critical, 7.0+ high, 4.0+ medium, above 0 low.
+func SeverityFromScore(score float64) Severity {
+	switch {
+	case score >= 9.0:
+		return SeverityCritical
+	case score >= 7.0:
+		return SeverityHigh
+	case score >= 4.0:
+		return SeverityMedium
+	case score > 0:
+		return SeverityLow
+	}
+	return SeverityUnknown
+}
+
 // Rank returns a sortable weight (higher = more severe). Used for reporting
 // order and for the --fail-on gate.
 func (s Severity) Rank() int {

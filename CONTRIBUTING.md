@@ -74,6 +74,27 @@ baseline and feedback label at once.
 - **Secrets never go in argv, URLs, logs or the vault.** Pass them through the
   environment and scrub them from error text.
 
+## Releasing (maintainers)
+
+A release is a pushed tag. `release.yml` builds and signs the archives and creates the
+GitHub Release; `release-images.yml` publishes the images.
+
+1. `main` is green, including the self-scan, and `CHANGELOG.md` has a dated section
+   for the version (move the entries out of `[Unreleased]`).
+2. If a dependency changed: `make licenses`, commit, and re-check `THIRD-PARTY.md`.
+   If a bundled scanner version changed, update it in `configs/tools.yaml`,
+   `internal/toolchain/manifest.go`, the Dockerfile and (for Opengrep)
+   `deployments/achilles/licenses/opengrep/SOURCE.md` together.
+3. Dry run: Actions → Release → Run workflow builds every archive without publishing.
+4. Tag and push: `git tag -s vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`. A tag with a
+   suffix (`vX.Y.Z-rc1`) is a pre-release and does not move `latest`.
+5. Check what users will run: `VERSION=vX.Y.Z sh scripts/install.sh` on a clean machine,
+   `docker run --rm ghcr.io/warzuponus/achilles achilles --version`, and the example
+   workflow pinned at the new tag.
+
+Never move a tag that has been published. If a release is wrong, cut the next patch
+version.
+
 ## Reporting bugs and security issues
 
 Bugs and ideas: open an issue with how to reproduce it. **Security vulnerabilities:

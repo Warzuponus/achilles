@@ -63,6 +63,11 @@ First public release (`v0.1.0`) is pending.
   [Benchmarking Detection](docs/benchmarking.md).
 
 ### Changed
+- **Images:** a release tag now also moves `latest` and `vX.Y` (and their `-slim`
+  forms). Only the exact version tag was pushed before, so the documented
+  `docker run ghcr.io/warzuponus/achilles` pulled a tag that did not exist.
+- **Action:** pinned to a commit or branch rather than a release tag, it now says that
+  it is installing the latest release and how to pin the binary too.
 - `--timeout` bounds the scanners only; the AI phases have their own `--llm-budget`
   (default 45m) and run `--llm-concurrency` findings in parallel, most severe first.
 - A rejected key or exhausted credits now stops the run immediately instead of failing
@@ -95,6 +100,10 @@ First public release (`v0.1.0`) is pending.
   license directory per bundled scanner under `/usr/share/doc/achilles/licenses/`, and
   the image build fails if one is missing. CI fails if the committed license texts do
   not match the linked modules.
+
+- The image workflow passed a manually entered version straight into a shell script in
+  a job that can write packages. It now arrives through the environment and is
+  validated.
 
 ### Changed (toolchain)
 - Built and tested with Go 1.27 (`go 1.27`, `toolchain go1.27.2`): `go.mod`, every workflow, the

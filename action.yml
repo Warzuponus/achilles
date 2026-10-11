@@ -36,7 +36,8 @@ inputs:
     description: >-
       Achilles release to run: a tag such as v0.1.0, `latest`, or `source` (build from
       this action's checkout with Go; for testing the action itself). Empty uses the
-      tag you pinned the action at, else `latest`.
+      tag you pinned the action at. If you pin the action to a commit SHA, set this
+      to the matching release tag, or the latest release is installed.
     required: false
     default: ""
 
@@ -175,7 +176,10 @@ runs:
           if printf '%s' "$ACTION_REF" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$'; then
             version="$ACTION_REF"
           else
+            # Pinned to a commit or a branch: there is no release to match it to, so
+            # the binary would silently differ from the action. Say so.
             version="latest"
+            echo "::notice::The action is pinned at '${ACTION_REF:-unknown}', which is not a release tag, so the latest Achilles release is installed. Set the 'version' input (for example v0.1.0) to pin the binary as well."
           fi
         fi
         if [ "$version" = "source" ]; then

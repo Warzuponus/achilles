@@ -2,6 +2,10 @@
 # linux/arm64 when a version tag is pushed (v1.2.3). Two variants:
 #   ghcr.io/<owner>/<repo>:<version>        full: scanners + Go toolchain
 #   ghcr.io/<owner>/<repo>:<version>-slim   scanners only; does not scan Go (gosec fails loudly)
+# A release tag (vX.Y.Z, nothing after it) also moves the floating tags `vX.Y` and
+# `latest` (and `vX.Y-slim`, `latest-slim`), which is what a bare
+# `docker run ghcr.io/<owner>/<repo>` pulls. Pre-releases (v1.2.3-rc1) and manual runs
+# publish only their exact tag.
 # Build provenance and an SBOM are attached by buildx. The image name derives from
 # the repository, so a rename or fork needs no edit here.
 name: Release images
@@ -45,13 +49,27 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           sudo docker image prune --all --force >/dev/null || true
           df -h / | tail -1
-      - name: Resolve image name and version
+      - name: Resolve image name and tags
         id: meta
+        # The version reaches the script through the environment, never spliced into
+        # it: a manual run's input is free text, and this job can write packages.
+        env:
+          VERSION: ${{ github.event.inputs.version || github.ref_name }}
+          SUFFIX: ${{ matrix.suffix }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          version="${{ github.event.inputs.version || github.ref_name }}"
-          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          case "$VERSION" in
+            *[!A-Za-z0-9._-]*|"") echo "::error::refusing odd-looking version: $VERSION"; exit 1 ;;
+          esac
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tags="${image}:${VERSION}${SUFFIX}"
+          if [ "$EVENT" = "push" ] && printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            minor="${VERSION%.*}"
+            tags="${tags},${image}:${minor}${SUFFIX},${image}:latest${SUFFIX}"
+          fi
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+          echo "Publishing: ${tags}"
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -67,8 +85,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             WITH_GO=${{ matrix.with_go }}
-          tags: |
-            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}${{ matrix.suffix }}
+          tags: ${{ steps.meta.outputs.tags }}
           provenance: true
           sbom: true
           push: true

@@ -40,7 +40,7 @@
       <p>{{.Message}}</p>
       {{if .CodeContext}}<pre>{{.CodeContext}}</pre>{{end}}
       {{with .Verdict}}
-      <div class="verdict">triage: <b>{{.Classification}}</b> · confidence {{printf "%.2f" .Confidence}} · {{.Exploitability}}{{if .Refuted}} · <i>refuted by judge</i>{{end}}</div>
+      <div class="verdict">triage: <b>{{.Classification}}</b> · confidence {{printf "%.2f" .Confidence}} · {{.Exploitability}}{{if .Disputed}} · <i>disputed by judge</i>{{else if .Refuted}} · <i>refuted by judge</i>{{end}}</div>
       {{end}}
       <form hx-post="/runs/{{$.RunID}}/feedback" hx-swap="outerHTML" style="margin-top:8px">
         <input type="hidden" name="fingerprint" value="{{.Fingerprint}}">

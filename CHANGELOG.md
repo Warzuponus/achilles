@@ -83,6 +83,11 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **The War Room audit export served the vault unredacted.** `GET /runs/{id}/audit`
+  returned raw scanner output (a secret scanner's report is a list of secrets), credential
+  snippets and full LLM transcripts, and the run page only pattern-masked a credential
+  finding's snippet. Raw scanner output is no longer served, credential snippets are
+  withheld on both the page and the export, and every other string is masked.
 - **`--fix-pr` pushed the whole working tree.** It switched your checkout to the fix
   branch and committed with `git add -A`, so an untracked `.env`, the scan's own vault
   (every prompt and response) and its reports went into the pull request. It now builds

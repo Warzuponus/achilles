@@ -49,7 +49,10 @@ the fleet rollup. It is protected by being reachable only from your own machine:
   `--allowed-hosts` — this defeats DNS rebinding;
 - state-changing requests are protected against cross-site requests (cross-origin
   `POST`s are rejected);
-- secrets found in code are redacted before they reach the UI or API.
+- secrets found in code are redacted before they reach the UI or API: a credential
+  finding's matched text is withheld outright, other text is pattern-masked, and the
+  audit export never serves raw scanner output. The Evidence Vault on disk is the
+  unredacted record, so protect that file (it is created owner-only).
 
 Feedback recorded through the War Room is ordinary analyst feedback: with
 `--calibrate` (off by default) enough false-positive labels on a rule will rule that

@@ -107,7 +107,9 @@ against regressions (`make eval-gate`).
 
 **Verdict mode** runs the real triage→judge path against a live model and scores
 verdicts against the labels. Its headline is **balanced accuracy**, which weights
-both classes equally: a triager that confirms everything scores 100% on a
+both classes equally (scored on whether the review *confirmed* a finding; the report
+also prints what was actually *dismissed* from the gate, which is the number users
+feel): a triager that confirms everything scores 100% on a
 true-positive-only corpus and 50% here. It also reports TP recall, FP suppression,
 a calibration gap (`|mean confidence − accuracy|`, so an overconfident model is
 visible), and — with `--repeat` — which cases the model answers inconsistently on

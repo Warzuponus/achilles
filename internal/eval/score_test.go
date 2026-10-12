@@ -455,3 +455,59 @@ func TestContainedPath_NeverEscapesEvenForHostilePaths(t *testing.T) {
 		}
 	}
 }
+
+// The headline scores ask "did the review confirm it". The product asks a
+// three-way question: confirmed, kept for a human, or removed from the gate. A
+// review that answers "uncertain" to everything confirms nothing, so it scored
+// 100% FP suppression while every false positive stayed in the user's report, and
+// it scored a miss on a real finding that was never removed.
+func TestRunner_GateMatrixSeparatesKeptFromDismissed(t *testing.T) {
+	c, err := LoadCorpus(tinyCorpus(t, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const uncertain = `{"classification":"uncertain","confidence":0.5,"exploitability":"unknown","reasoning":"r"}`
+	// Cases run id-sorted: case-fp then case-tp.
+	eng := engineWith(t, c.Root, []string{uncertain, uncertain}, []string{judgeAccepts, judgeAccepts})
+	rep := Runner{Engine: eng, Repeat: 1}.Run(context.Background(), c, "r1")
+
+	if rep.FPSuppression != 1 || rep.TPRecall != 0 {
+		t.Fatalf("precondition: the confirmation scores read 100%% suppression and 0%% recall, got %.2f / %.2f", rep.FPSuppression, rep.TPRecall)
+	}
+	want := GateMatrix{TPKept: 1, FPKept: 1}
+	if rep.Gate != want {
+		t.Errorf("gate = %+v, want %+v: nothing was confirmed and nothing was removed", rep.Gate, want)
+	}
+	if rep.Gate.NoiseRemoved() != 0 || rep.Gate.MissRate() != 0 {
+		t.Errorf("noise removed %.2f, missed %.2f: both must be 0", rep.Gate.NoiseRemoved(), rep.Gate.MissRate())
+	}
+
+	// A confident, correct review: the false positive is dismissed, the true one confirmed.
+	eng = engineWith(t, c.Root, []string{respRealFP, respRealTP}, []string{judgeAccepts, judgeAccepts})
+	rep = Runner{Engine: eng, Repeat: 1}.Run(context.Background(), c, "r1")
+	if want := (GateMatrix{TPConfirmed: 1, FPDismissed: 1}); rep.Gate != want {
+		t.Errorf("gate = %+v, want %+v", rep.Gate, want)
+	}
+
+	// The costly error: a confident "false positive" on the genuine issue.
+	eng = engineWith(t, c.Root, []string{respRealFP, respRealFP}, []string{judgeAccepts, judgeAccepts})
+	rep = Runner{Engine: eng, Repeat: 1}.Run(context.Background(), c, "r1")
+	if rep.Gate.TPDismissed != 1 || rep.Gate.MissRate() != 1 {
+		t.Errorf("gate = %+v: the genuine issue was dismissed and must be counted as that", rep.Gate)
+	}
+
+	var b strings.Builder
+	rep.Write(&b, false)
+	for _, s := range []string{"What the product did", "genuine issues dismissed:    100.0%", "kept, unverified"} {
+		if !strings.Contains(b.String(), s) {
+			t.Errorf("report lacks %q:\n%s", s, b.String())
+		}
+	}
+
+	// An errored review leaves the finding in place: kept, never dismissed.
+	eng = triage.NewEngine(llm.NewRouter(&llmtest.Fake{Err: errFake{}}), nil, enrich.New(2), c.Root)
+	rep = Runner{Engine: eng, Repeat: 1}.Run(context.Background(), c, "r1")
+	if want := (GateMatrix{TPKept: 1, FPKept: 1}); rep.Gate != want {
+		t.Errorf("errors: gate = %+v, want %+v", rep.Gate, want)
+	}
+}

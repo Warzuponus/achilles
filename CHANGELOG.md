@@ -63,6 +63,13 @@ First public release (`v0.1.0`) is pending.
   [Benchmarking Detection](docs/benchmarking.md).
 
 ### Changed
+- **The eval reports the decision users experience, not only the one the review made.**
+  `achilles-eval --mode verdict` scored whether a finding was *confirmed*. The product's
+  decision has three outcomes (confirmed, kept unverified, dismissed), so a finding left
+  uncertain counted as "suppressed" although it stays in the report and the gate. The
+  report now adds a table of all three per ground-truth class, with the share of genuine
+  issues dismissed and of safe findings dismissed. The docs say that the recorded scores
+  are confirmation scores, taken on the cases the configuration was tuned on.
 - Vault records carry a format version (`v`), stamped by both the file and PostgreSQL
   stores, so a later release can tell what it is reading and migrate it. Records written
   before this read back as version 0; the PostgreSQL column is added on first open.

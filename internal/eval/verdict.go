@@ -24,11 +24,91 @@ type RunOutcome struct {
 	// classification is deliberate, because it is the whole shipped chain (triage
 	// prompt + judge + threshold) that decides whether a human ever sees the
 	// finding.
-	Surfaced  bool   `json:"surfaced"`
-	Predicted Label  `json:"predicted"`
-	Correct   bool   `json:"correct"`
-	LatencyMS int64  `json:"latencyMs"`
-	Err       string `json:"error,omitempty"`
+	Surfaced bool `json:"surfaced"`
+	// Outcome is what the product does with the finding (see Outcome). It is a
+	// different question from Surfaced, with a third answer.
+	Outcome   Outcome `json:"outcome,omitempty"`
+	Predicted Label   `json:"predicted"`
+	Correct   bool    `json:"correct"`
+	LatencyMS int64   `json:"latencyMs"`
+	Err       string  `json:"error,omitempty"`
+}
+
+// Outcome is what the product does with a finding once it has been reviewed.
+//
+// The headline scores (balanced accuracy, TP recall, FP suppression) are computed
+// on Surfaced: "did the review positively confirm this". That is a two-way
+// question, and the product's decision is three-way. A finding the review left
+// uncertain, or that the judge disputed without backing, is not confirmed, but it
+// is not removed either: it stays in the report and in the --fail-on gate. Scoring
+// only the two-way question counts every such finding as "suppressed", so "100% FP
+// suppression" can be reported while every false positive is still in the user's
+// report, and a real finding that was kept counts as a miss.
+type Outcome string
+
+const (
+	// OutcomeConfirmed: the review stands behind it (Verdict.Surfaced).
+	OutcomeConfirmed Outcome = "confirmed"
+	// OutcomeKept: neither confirmed nor ruled out. It remains in the report and
+	// the gate, marked as unverified. Also what happens when the review errors.
+	OutcomeKept Outcome = "kept"
+	// OutcomeDismissed: ruled out and moved out of the gate (Finding.Dismissed).
+	OutcomeDismissed Outcome = "dismissed"
+)
+
+// GateMatrix counts runs (cases x repeats) by ground truth and by what the product
+// did. It is the confusion matrix for the decision users actually experience.
+type GateMatrix struct {
+	TPConfirmed int `json:"tpConfirmed"`
+	TPKept      int `json:"tpKept"`
+	TPDismissed int `json:"tpDismissed"` // a genuine issue removed from the gate: the costly error
+	FPConfirmed int `json:"fpConfirmed"` // safe code presented as a confirmed finding
+	FPKept      int `json:"fpKept"`      // noise the user still has to read
+	FPDismissed int `json:"fpDismissed"` // noise actually removed
+}
+
+func (m *GateMatrix) add(label Label, o Outcome) {
+	switch {
+	case label == LabelTP && o == OutcomeConfirmed:
+		m.TPConfirmed++
+	case label == LabelTP && o == OutcomeDismissed:
+		m.TPDismissed++
+	case label == LabelTP:
+		m.TPKept++
+	case o == OutcomeConfirmed:
+		m.FPConfirmed++
+	case o == OutcomeDismissed:
+		m.FPDismissed++
+	default:
+		m.FPKept++
+	}
+}
+
+func ratio(n, d int) float64 {
+	if d == 0 {
+		return 0
+	}
+	return float64(n) / float64(d)
+}
+
+// MissRate is the share of genuine issues the product removed from the gate.
+func (m GateMatrix) MissRate() float64 {
+	return ratio(m.TPDismissed, m.TPConfirmed+m.TPKept+m.TPDismissed)
+}
+
+// NoiseRemoved is the share of safe findings the product removed from the gate.
+func (m GateMatrix) NoiseRemoved() float64 {
+	return ratio(m.FPDismissed, m.FPConfirmed+m.FPKept+m.FPDismissed)
+}
+
+// ConfirmedPrecision is the share of confirmed findings that were genuine.
+func (m GateMatrix) ConfirmedPrecision() float64 {
+	return ratio(m.TPConfirmed, m.TPConfirmed+m.FPConfirmed)
+}
+
+// DismissedPrecision is the share of dismissed findings that were safe.
+func (m GateMatrix) DismissedPrecision() float64 {
+	return ratio(m.FPDismissed, m.FPDismissed+m.TPDismissed)
 }
 
 // VerdictResult aggregates the repeats for one case.
@@ -60,12 +140,16 @@ type VerdictReport struct {
 
 	Correct  int     `json:"correct"`
 	Accuracy float64 `json:"accuracy"`
-	// TPRecall is the share of genuine issues surfaced (missing these is the
-	// expensive failure). FPSuppression is the share of safe-but-flagged findings
-	// correctly kept quiet (the noise the product exists to remove).
+	// TPRecall is the share of genuine issues CONFIRMED by the review, and
+	// FPSuppression the share of safe-but-flagged findings NOT confirmed. Both are
+	// about confirmation (Surfaced). "Not confirmed" is not "removed": see Gate
+	// for what leaves the report.
 	TPRecall         float64 `json:"tpRecall"`
 	FPSuppression    float64 `json:"fpSuppression"`
 	BalancedAccuracy float64 `json:"balancedAccuracy"`
+
+	// Gate is the three-way outcome the product applies, counted over every run.
+	Gate GateMatrix `json:"gate"`
 
 	MeanConfidenceCorrect float64 `json:"meanConfidenceCorrect"`
 	MeanConfidenceWrong   float64 `json:"meanConfidenceWrong"`
@@ -126,10 +210,12 @@ func (rn Runner) Run(ctx context.Context, c Corpus, runID string) VerdictReport 
 				// An unusable verdict is not a correct one; count it as the
 				// opposite of the label so failures can never flatter a score.
 				out.Predicted = flip(cs.Label)
+				out.Outcome = OutcomeKept // a finding whose review failed stays, unreviewed
 			case f.Verdict == nil:
 				out.Err = "no verdict attached"
 				rep.Errors++
 				out.Predicted = flip(cs.Label)
+				out.Outcome = OutcomeKept
 			default:
 				v := *f.Verdict
 				out.Classification = string(v.Classification)
@@ -140,8 +226,17 @@ func (rn Runner) Run(ctx context.Context, c Corpus, runID string) VerdictReport 
 				if out.Surfaced {
 					out.Predicted = LabelTP
 				}
+				switch {
+				case out.Surfaced:
+					out.Outcome = OutcomeConfirmed
+				case f.Dismissed():
+					out.Outcome = OutcomeDismissed
+				default:
+					out.Outcome = OutcomeKept
+				}
 				allConf = append(allConf, v.Confidence)
 			}
+			rep.Gate.add(cs.Label, out.Outcome)
 			out.Correct = out.Predicted == cs.Label
 			if out.Err == "" {
 				if out.Correct {
@@ -279,10 +374,12 @@ func (r VerdictReport) Write(w io.Writer, verbose bool) {
 		}
 		fmt.Fprintf(w, "\n\n")
 	}
+	fmt.Fprintf(w, "  Did the review confirm the right findings? (per case; \"not confirmed\" includes findings left for a human)\n")
 	fmt.Fprintf(w, "  balanced accuracy:   %.1f%%   <- the headline (both classes weighted equally)\n", 100*r.BalancedAccuracy)
 	fmt.Fprintf(w, "  accuracy:            %.1f%%  (%d/%d)\n", 100*r.Accuracy, r.Correct, r.Cases)
-	fmt.Fprintf(w, "  TP recall:           %.1f%%  (genuine issues surfaced, %d TP case(s))\n", 100*r.TPRecall, r.TPCases)
-	fmt.Fprintf(w, "  FP suppression:      %.1f%%  (safe code kept quiet, %d FP case(s))\n", 100*r.FPSuppression, r.FPCases)
+	fmt.Fprintf(w, "  TP recall:           %.1f%%  (genuine issues confirmed, %d TP case(s))\n", 100*r.TPRecall, r.TPCases)
+	fmt.Fprintf(w, "  FP suppression:      %.1f%%  (safe code not confirmed, %d FP case(s))\n", 100*r.FPSuppression, r.FPCases)
+	r.writeGate(w)
 	// A mean over no samples is not 0.00 — printing it as a number invites reading
 	// "no wrong answers" as "wrong answers had zero confidence".
 	fmt.Fprintf(w, "  confidence when right/wrong: %s / %s\n",
@@ -332,6 +429,29 @@ func (r VerdictReport) Write(w io.Writer, verbose bool) {
 			fmt.Fprintf(w, "  %-28s %-8s %-10s %6.2f %5s\n", res.CaseID, res.Label, res.Predicted, conf, ok)
 		}
 	}
+}
+
+// writeGate prints what the product actually did with each finding. The scores
+// above say whether the review confirmed the right ones; this says what a user
+// would have seen in the report and what would have left it.
+func (r VerdictReport) writeGate(w io.Writer) {
+	g := r.Gate
+	if g == (GateMatrix{}) {
+		return // a report recorded before the matrix existed
+	}
+	fmt.Fprintf(w, "\n  What the product did with each finding (%d run(s): cases x repeats)\n", r.Cases*r.Repeat)
+	fmt.Fprintf(w, "    %-16s %10s %18s %10s\n", "", "confirmed", "kept, unverified", "dismissed")
+	fmt.Fprintf(w, "    %-16s %10d %18d %10d\n", "genuine (tp)", g.TPConfirmed, g.TPKept, g.TPDismissed)
+	fmt.Fprintf(w, "    %-16s %10d %18d %10d\n", "safe (fp)", g.FPConfirmed, g.FPKept, g.FPDismissed)
+	fmt.Fprintf(w, "  genuine issues dismissed:    %.1f%%  <- the costly error: a real finding removed from the gate\n", 100*g.MissRate())
+	fmt.Fprintf(w, "  safe findings dismissed:     %.1f%%  (the noise actually removed; the rest is still in the report)\n", 100*g.NoiseRemoved())
+	if g.TPConfirmed+g.FPConfirmed > 0 {
+		fmt.Fprintf(w, "  confirmed that were genuine: %.1f%%\n", 100*g.ConfirmedPrecision())
+	}
+	if g.TPDismissed+g.FPDismissed > 0 {
+		fmt.Fprintf(w, "  dismissed that were safe:    %.1f%%\n", 100*g.DismissedPrecision())
+	}
+	fmt.Fprintln(w)
 }
 
 // confStr renders a mean confidence, or "n/a" when the set it averages is empty.
@@ -409,6 +529,12 @@ func CompareVerdict(base, cur VerdictReport, w io.Writer) {
 		100*base.FPSuppression, 100*cur.FPSuppression, 100*(cur.FPSuppression-base.FPSuppression))
 	fmt.Fprintf(w, "  calibration gap:   %.2f -> %.2f  (%+.2f)\n",
 		base.CalibrationGap, cur.CalibrationGap, cur.CalibrationGap-base.CalibrationGap)
+	if base.Gate != (GateMatrix{}) && cur.Gate != (GateMatrix{}) {
+		fmt.Fprintf(w, "  genuine dismissed: %.1f%% -> %.1f%%  (%+.1f pp; lower is better)\n",
+			100*base.Gate.MissRate(), 100*cur.Gate.MissRate(), 100*(cur.Gate.MissRate()-base.Gate.MissRate()))
+		fmt.Fprintf(w, "  safe dismissed:    %.1f%% -> %.1f%%  (%+.1f pp)\n",
+			100*base.Gate.NoiseRemoved(), 100*cur.Gate.NoiseRemoved(), 100*(cur.Gate.NoiseRemoved()-base.Gate.NoiseRemoved()))
+	}
 	fmt.Fprintf(w, "  tokens:            %d -> %d  (%+.1f%%)\n",
 		base.PromptTokens, cur.PromptTokens, pctChange(base.PromptTokens, cur.PromptTokens))
 

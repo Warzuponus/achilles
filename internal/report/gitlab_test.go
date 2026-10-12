@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -39,7 +40,7 @@ func gitlabScan() model.Scan {
 			{
 				ID: "id-2", Tool: "opengrep", RuleID: "python.lang.security.dangerous-system-call",
 				Message:  "os.system called with user input",
-				Location: model.Location{File: `app\views.py`, Region: model.Region{StartLine: 7}},
+				Location: model.Location{File: filepath.FromSlash("app/views.py"), Region: model.Region{StartLine: 7}},
 				Severity: model.SeverityMedium, Fingerprint: "fp-2",
 				Remediation: &model.Remediation{Summary: "Use subprocess.run", Diff: "--- a\n+++ b\n",
 					Verification: &model.FixVerification{Status: model.FixNotFixed}},
@@ -283,7 +284,7 @@ func TestGitLabSAST_ConformsAndCarriesTheFindingsInCode(t *testing.T) {
 	if !strings.Contains(first["solution"].(string), "Pass arguments as a list") {
 		t.Errorf("solution = %q", first["solution"])
 	}
-	// A Windows path is written the way GitLab links files.
+	// The platform path separator is written the way GitLab links files.
 	if f := vulns[1].(map[string]any)["location"].(map[string]any)["file"]; f != "app/views.py" {
 		t.Errorf("file = %v", f)
 	}

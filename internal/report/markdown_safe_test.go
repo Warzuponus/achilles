@@ -31,6 +31,13 @@ func TestMarkdownText_DefusesUntrustedText(t *testing.T) {
 		}
 	}
 
+	// The @ must be followed by a zero-width space exactly: anything else either
+	// still notifies or changes what the reader sees.
+	zwsp := string(rune(0x200B))
+	if got := MarkdownText("ping @octocat"); got != "ping @"+zwsp+"octocat" {
+		t.Errorf("mention not defused as expected: %q", got)
+	}
+
 	long := MarkdownText(strings.Repeat("é", 2000))
 	if len(long) > maxMarkdownText+40 || !strings.HasSuffix(long, "(truncated)") {
 		t.Errorf("long text not bounded: %d bytes", len(long))

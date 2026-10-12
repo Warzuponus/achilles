@@ -63,6 +63,8 @@ First public release (`v0.1.0`) is pending.
   [Benchmarking Detection](docs/benchmarking.md).
 
 ### Changed
+- CI runs `staticcheck` (for Linux, Windows and macOS builds) in a new `lint` job; `make
+  lint` was only `go vet`. Its two findings are fixed.
 - Less repeated work on large repositories: a source file is read once per run for code
   context instead of once per finding and prompt, and the target's languages and
   dependencies are worked out once instead of by up to six separate walks of the tree.

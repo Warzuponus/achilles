@@ -96,7 +96,11 @@ licenses:
 vet:
 	go vet ./...
 
+# staticcheck must be run with a Go it can read: 1.27.1 with GOTOOLCHAIN=local
+# until it supports the Go 1.27.2 export-data format (see .github/workflows/ci.yml).
+# Needs: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
 lint: vet
+	staticcheck ./...
 
 fmt:
 	gofmt -w .

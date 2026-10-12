@@ -90,6 +90,27 @@ jobs:
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
+  # A linter beyond `go vet`. It runs on Go 1.27.1 with GOTOOLCHAIN=local for the
+  # reason self-scan.yml does: Go 1.27.2 changed the compiler's export-data format
+  # and staticcheck, like gosec, cannot read it yet, so on 1.27.2 it reports only
+  # import errors. Lift the pin with the others when the tools catch up.
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+      - name: staticcheck (linux, windows, darwin)
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+          for os in linux windows darwin; do
+            echo "== GOOS=$os"
+            GOOS=$os "$(go env GOPATH)/bin/staticcheck" ./...
+          done
+
   # Windows is a release target (.goreleaser.yaml builds windows/amd64), so it is
   # built and tested here. Three packages used to fail on Windows without anyone
   # seeing it, one of them because the file vault had no cross-process lock there.

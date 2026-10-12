@@ -311,7 +311,7 @@ func MarkdownText(s string) string {
 	s = redact.Prompt(strings.Join(strings.Fields(s), " "))
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, "-->", "--&gt;")
-	s = mentionRE.ReplaceAllString(s, "@​$1")
+	s = mentionRE.ReplaceAllString(s, "@\u200b$1")
 	s = strings.ReplaceAll(s, "|", `\|`)
 	if len(s) > maxMarkdownText {
 		cut := maxMarkdownText

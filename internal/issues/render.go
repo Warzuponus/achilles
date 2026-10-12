@@ -442,7 +442,7 @@ func (r *renderer) prose(s string, limit int) string {
 	}
 	s = redact.Secrets(r.strip(s))
 	s = strings.ReplaceAll(s, "<!--", "&lt;!--")
-	s = mentionRE.ReplaceAllString(s, "@​$1")
+	s = mentionRE.ReplaceAllString(s, "@\u200b$1")
 	if len(s) > limit {
 		s = cutUTF8(s, limit) + " ... (truncated)"
 	}

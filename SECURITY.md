@@ -71,8 +71,10 @@ confident "false positive" verdict takes a finding out of the `--fail-on` gate, 
 issues Achilles files, and the headline counts (it stays listed in a separate
 section of every report, and in SARIF as a suppressed result). That makes the
 scanned repository an adversary: a comment in the code can try to talk the model into
-dismissing a real vulnerability. Mitigations in place: every prompt tells the model
-that repository text is untrusted data; a second adversarial pass tries to refute
+dismissing a real vulnerability. Mitigations in place: every prompt tells the model,
+first, that repository text is untrusted data, and marks where each piece of it
+begins and ends with an id that is random per request, so text in the code cannot
+pose as the end of the code or as an instruction; a second adversarial pass tries to refute
 each verdict; findings about credentials are never sent to the model and never
 dismissed; low-confidence and overturned verdicts are never dismissed; and the
 second pass can rule a finding out only by quoting code that Achilles verifies was in

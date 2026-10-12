@@ -272,7 +272,12 @@ and an answer outside a gate's vocabulary is stored as `unknown`. They can only 
 dismissal *harder* — a verdict whose own gates say reachable + attacker-controlled +
 not (effectively) sanitized + new capability is never dismissed, whatever its
 classification. The prompt also tells the model that comments, docstrings and names
-are claims, not evidence, and that the repository text is untrusted data.
+are claims, not evidence, and that the repository text is untrusted data. Since
+`triage/v6` that text (the scanner's message, the code, past findings, and for the
+judge the first pass's reasoning) sits between markers carrying a random per-request
+id, so a line in the code cannot pass itself off as the end of the code. The prompt
+also defines `confidence`: below 0.7 means "I would need to see more code", and such
+a finding is kept for a person.
 
 ### Self-consistency sampling: `--llm-samples N`
 

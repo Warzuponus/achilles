@@ -195,6 +195,12 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **A failed AI review no longer discards the scan.** When the model endpoint rejected the
+  key, ran out of credits or failed every call, the run stopped with "no report was
+  written", throwing away a scan that may have taken many minutes. The reports are now
+  written from the scanners' results, each stating that the AI review did not complete and
+  that the findings are unreviewed. Nothing is dismissed, nothing is posted to GitHub
+  (comments, issues, fix PR), no further model calls are made, and the run still exits 2.
 - **War Room:** an unknown path rendered the dashboard with a 200 (the route for `/`
   matched everything). It is now a 404.
 - **`--runner docker` and Opengrep.** Opengrep has no container image, and the docs said

@@ -374,13 +374,13 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	fmt.Fprintf(os.Stderr, "achilles: llm usage — %d prompt + %d completion = %d total token(s)\n",
 		u.PromptTokens, u.CompletionTokens, u.TotalTokens)
 
+	// A broken key or endpoint ends the AI review, not the run. The scanners have
+	// already done their work, possibly for many minutes; that result is still
+	// reported, labeled as unreviewed, and the caller exits non-zero afterwards.
+	var aborted *triageAbortedError
 	if fatal != nil {
-		return u, fmt.Errorf("AI review aborted after %d failed finding(s) with no success: %s\n"+
-			"  check the API key, --llm-base-url / --llm-provider and --llm-model, then re-run (no report was written)",
-			failedN, oneLine(fatal))
-	}
-
-	if o.afterTriage != nil {
+		aborted = &triageAbortedError{failed: failedN, cause: oneLine(fatal)}
+	} else if o.afterTriage != nil {
 		if err := o.afterTriage(ctx); err != nil {
 			return u, err
 		}
@@ -416,6 +416,14 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	if stats.Skipped < 0 {
 		stats.Skipped = 0
 	}
+	if aborted != nil {
+		// Nothing is dismissed on the strength of a review that fell over: whatever
+		// verdicts exist came from before the endpoint broke, and are too few to trust
+		// as a pass over the scan.
+		stats.Aborted = aborted.cause
+		scan.Triage = &stats
+		return u, aborted
+	}
 	switch {
 	case o.keepDismissed:
 	case o.noCode:
@@ -434,6 +442,20 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		fmt.Fprintln(os.Stderr, "achilles: the --llm-budget ran out; the findings above were reviewed most severe first. Raise --llm-budget or narrow the scan with --diff / --baseline.")
 	}
 	return u, nil
+}
+
+// triageAbortedError is returned when the AI review had to stop: the key was
+// rejected, the credits ran out, or every call failed. The scan itself is intact,
+// so the caller still writes the reports (without verdicts) and then exits 2.
+type triageAbortedError struct {
+	failed int
+	cause  string
+}
+
+func (e *triageAbortedError) Error() string {
+	return fmt.Sprintf("AI review aborted after %d failed finding(s) with no success: %s\n"+
+		"  check the API key, --llm-base-url / --llm-provider and --llm-model, then re-run",
+		e.failed, e.cause)
 }
 
 // fatalLLMError reports failures that no retry or later finding can fix: a rejected

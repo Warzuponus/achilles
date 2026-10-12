@@ -171,6 +171,10 @@ type TriageStats struct {
 	// are kept exactly as the scanner reported them and are never sent to the
 	// model: there is no code context to judge, and a verdict could only mislead.
 	Advisories int `json:"advisories,omitempty"`
+	// Aborted is why the AI review stopped early (a rejected key, no credits, an
+	// endpoint failing every call); empty when it ran to the end. Reports must say
+	// so: the findings are then scanner output that nobody reviewed.
+	Aborted string `json:"aborted,omitempty"`
 }
 
 // Dismissed reports whether this finding's verdict rules it out.

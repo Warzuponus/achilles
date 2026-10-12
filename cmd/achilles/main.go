@@ -199,7 +199,22 @@ func run(argv []string) error {
 	clusters := correlateFindings(o, ev, runID, &scan)
 
 	llmUsage, err := triageScan(llmCtx, o, ev, runID, &scan, clusters, tasks)
-	if err != nil {
+	// The AI review giving up is not a reason to discard a finished scan. The
+	// reports are still written from what the scanners found, marked as unreviewed;
+	// nothing is published to GitHub on the strength of it; no further model calls
+	// are made; and the run still ends as an error.
+	var aiAborted *triageAbortedError
+	if errors.As(err, &aiAborted) {
+		fmt.Fprintf(os.Stderr, "achilles: %v\nachilles: writing the reports from the scanners' results, WITHOUT AI verdicts\n", aiAborted)
+		offline := *o
+		offline.reviewOn, offline.scaAdvice, offline.threatModelOut = false, false, ""
+		offline.researchOn, offline.mineRules = false, false
+		offline.prComment, offline.prReview, offline.fileIssues, offline.fixPR = 0, 0, false, false
+		if o.prComment > 0 || o.prReview > 0 || o.fileIssues || o.fixPR {
+			fmt.Fprintln(os.Stderr, "achilles: not posting to GitHub (comments, issues, fix PR): the findings were not reviewed")
+		}
+		o = &offline
+	} else if err != nil {
 		return err
 	}
 	if root.Err() != nil {
@@ -259,6 +274,12 @@ func run(argv []string) error {
 
 	if err := runAgents(llmCtx, o, ev, runID, absTarget, scan, tasks); err != nil {
 		return err
+	}
+
+	// Everything that can be written has been. The AI review failing is an error
+	// (exit 2), whatever the gate would have said about unreviewed findings.
+	if aiAborted != nil {
+		return aiAborted
 	}
 
 	// A scan whose evidence didn't persist must not look like a clean success —

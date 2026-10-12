@@ -195,6 +195,14 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Fix verification no longer skips source directories named like build output.** The
+  verification copy leaves out `build`, `dist`, `target` and `out`, and a finding inside
+  one was reported `skipped`. Those are also ordinary names for source directories
+  (`src/build/`, a Maven module called `target`). When the finding is inside one, that
+  directory is now copied and the fix verified.
+- **Fix verification copies the target once per worker, not once per fix.** Each proposed
+  fix copied the whole target (up to 200 MiB and 50,000 files). The copy is now reused:
+  after each check the one file a patch may change is put back.
 - **The model client rides out ordinary network trouble.** Only HTTP 429, 502, 503 and 504
   were retried. A dropped connection, a reply cut off mid-body, a 500, a 408 or an
   "overloaded" 529 failed the finding at once. Those are now retried too, waits are

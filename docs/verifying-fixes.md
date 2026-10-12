@@ -17,7 +17,9 @@ For each finding that has a diff, Achilles:
 4. Compares the re-scan with the original:
    - the original finding must be gone, and
    - the scanner must not report anything new.
-5. Deletes the temporary copy, whatever the outcome.
+5. Puts the patched file back and reuses the copy for the next fix, so a run makes
+   one copy per concurrent verification rather than one per fix. Every copy is
+   deleted at the end, whatever the outcome.
 
 Each tool's findings on the unpatched target are computed once and reused for
 every fix from that tool. Up to two fixes are verified at a time.
@@ -64,7 +66,7 @@ and test every fix. Achilles still never merges anything.
 | `not_fixed` | The diff applied but the scanner still reports the finding. |
 | `introduces_new` | The finding is gone but the scanner reports new findings; they are listed in `newFindings` (at most 20). |
 | `patch_failed` | The diff was rejected as unsafe (see below) or does not apply cleanly to the code. The scanner is not run. |
-| `skipped` | Verification was not attempted: the target is over the size cap, the finding is in an excluded directory, or the reporting tool cannot be re-run (a shadow rule, or a tool no longer registered). Says nothing about the patch. |
+| `skipped` | Verification was not attempted: the target is over the size cap, the finding is inside version-control state, or the reporting tool cannot be re-run (a shadow rule, or a tool no longer registered). Says nothing about the patch. |
 | `error` | Verification started but the baseline or re-scan failed (tool crash, timeout, unreadable output). Never treated as verified. |
 
 ## Safety and size caps
@@ -93,7 +95,10 @@ not verification ran, so `--verify-fixes=false` does not switch it off.
 The copy skips `.git`, `node_modules`, `vendor`, `.achilles`, `.terraform`, virtualenvs
 and common build-output directories (`dist`, `build`, `target`, `out`, `.next`,
 `.gradle`, `__pycache__`), and never follows or recreates symlinks or special files.
-A finding inside a skipped directory is reported as `skipped`.
+Those build-output names are also ordinary names for source directories, so when the
+finding itself is inside one, that directory is copied for that verification. Only a
+finding inside version-control or Achilles state (`.git`, `.hg`, `.svn`, `.achilles`)
+is reported as `skipped`.
 
 If the target is larger than **200 MiB** or more than **50,000 files**, the result is
 `skipped: target too large`, not an error, and the scan carries on.

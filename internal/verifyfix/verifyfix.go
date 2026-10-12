@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -73,6 +72,12 @@ type Options struct {
 	Apply Applier
 	// TempDir is where the copy is made. Default: the system temp directory.
 	TempDir string
+	// ReuseCopies keeps a copy of the target after a verification and hands it to
+	// the next one, restoring the single file the patch changed, instead of
+	// copying the whole target for every fix. The caller must call Close. It is
+	// ignored when Apply is overridden, since only the default applier is known to
+	// honor the scope rule that makes restoring one file sufficient.
+	ReuseCopies bool
 }
 
 func (o Options) withDefaults() Options {
@@ -93,6 +98,8 @@ func (o Options) withDefaults() Options {
 	}
 	if o.Apply == nil {
 		o.Apply = gitApply
+	} else {
+		o.ReuseCopies = false
 	}
 	return o
 }
@@ -110,6 +117,8 @@ type Verifier struct {
 
 	mu        sync.Mutex
 	baselines map[string]*baseline
+	pool      []*workspace // copies waiting to be reused (Options.ReuseCopies)
+	closed    bool
 }
 
 type baseline struct {
@@ -140,22 +149,26 @@ func (v *Verifier) Verify(ctx context.Context, f model.Finding, diff string) Res
 	if !ok {
 		return Result{Status: Skipped, Detail: fmt.Sprintf("scanner %q is not available to re-run (shadow or unregistered tool)", f.Tool)}
 	}
-	if file != "" && inSkippedDir(file) {
-		return Result{Status: Skipped, Detail: fmt.Sprintf("%s is in a directory excluded from the verification copy", file)}
+	if file != "" && inDir(file, neverCopied) {
+		return Result{Status: Skipped, Detail: fmt.Sprintf("%s is in a directory that is never copied for verification", file)}
 	}
 
-	tmp, err := os.MkdirTemp(v.opts.TempDir, "achilles-verifyfix-*")
+	ws, err := v.workspace(file)
 	if err != nil {
-		return Result{Status: Error, Detail: "create temp dir: " + err.Error()}
-	}
-	defer os.RemoveAll(tmp)
-
-	if err := copyTree(v.target, tmp, v.opts.MaxCopyBytes, v.opts.MaxCopyFiles); err != nil {
 		if isTooLarge(err) {
 			return Result{Status: Skipped, Detail: "skipped: target too large to copy (" + err.Error() + ")"}
 		}
-		return Result{Status: Error, Detail: "copy target: " + err.Error()}
+		return Result{Status: Error, Detail: err.Error()}
 	}
+	defer v.release(ws)
+	if ws.pooled {
+		// If the file cannot be saved the copy cannot be restored: use it once.
+		if err := ws.remember(file); err != nil {
+			ws.pooled = false
+		}
+	}
+	tmp := ws.dir
+
 	if err := v.opts.Apply(ctx, tmp, diff); err != nil {
 		return Result{Status: PatchFailed, Detail: "patch does not apply cleanly: " + firstLine(err.Error())}
 	}
@@ -258,16 +271,6 @@ func firstLine(s string) string {
 }
 
 func isTooLarge(err error) bool { return errors.Is(err, errTooLarge) }
-
-func inSkippedDir(rel string) bool {
-	segs := strings.Split(rel, "/")
-	for _, s := range segs[:len(segs)-1] {
-		if skipDirs[s] {
-			return true
-		}
-	}
-	return false
-}
 
 // relTo returns file relative to root with forward slashes. A path already relative
 // is cleaned; an absolute path outside root is returned cleaned but absolute (it

@@ -308,7 +308,7 @@ func TestVerify_ExcludedDirsAndSymlinksNotCopied(t *testing.T) {
 		t.Skip("symlinks unsupported")
 	}
 	dst := t.TempDir()
-	if err := copyTree(root, dst, DefaultMaxCopyBytes, DefaultMaxCopyFiles); err != nil {
+	if err := copyTree(root, dst, DefaultMaxCopyBytes, DefaultMaxCopyFiles, ""); err != nil {
 		t.Fatal(err)
 	}
 	var got []string
@@ -321,16 +321,6 @@ func TestVerify_ExcludedDirsAndSymlinksNotCopied(t *testing.T) {
 	})
 	if len(got) != 1 || got[0] != "app.py" {
 		t.Errorf("copied %v, want only app.py", got)
-	}
-}
-
-func TestVerify_FindingInExcludedDirIsSkipped(t *testing.T) {
-	root := writeTree(t, map[string]string{"vendor/v.go": "VULN\n"})
-	sc := &fakeScanner{id: "fake", rules: map[string]string{"VULN": "r"}}
-	res := newVerifier(t, root, sc, Options{}).Verify(context.Background(), orig("fake", "r", "vendor/v.go", "VULN", 1),
-		"--- a/vendor/v.go\n+++ b/vendor/v.go\n@@ -1 +1 @@\n-VULN\n+ok\n")
-	if res.Status != Skipped {
-		t.Fatalf("got %s (%s), want skipped", res.Status, res.Detail)
 	}
 }
 

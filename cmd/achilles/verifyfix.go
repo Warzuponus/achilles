@@ -38,7 +38,10 @@ func verifyRemediations(ctx context.Context, o *options, absTarget string, reg *
 		langs = inv.Languages
 	}
 	known := append(append([]model.Finding{}, scan.Findings...), scan.Dismissed...)
-	v := verifyfix.New(reg, absTarget, verifyfix.Options{Languages: langs, Known: known})
+	// One copy of the target per concurrent verification, reused across fixes,
+	// instead of one per fix.
+	v := verifyfix.New(reg, absTarget, verifyfix.Options{Languages: langs, Known: known, ReuseCopies: true})
+	defer v.Close()
 	verifyScanFixes(ctx, v, scan, ev, runID)
 	return nil
 }

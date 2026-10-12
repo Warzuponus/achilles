@@ -210,3 +210,33 @@ func TestRun_DiffThatEditsTheBaselineSaysSo(t *testing.T) {
 		t.Errorf("the report must say the change edits the baseline:\n%s", report)
 	}
 }
+
+// Deleting the whole rule repository is the largest change to it there is.
+func TestRepoState_GeneratedRulesDeletedOutright(t *testing.T) {
+	repo := gitRepo(t, map[string]string{
+		"app.py":                                "x = 1\n",
+		".achilles/generated-rules/rule-a.yaml": "rules: []\n",
+	})
+	git(t, repo, "checkout", "-q", "-b", "change")
+	git(t, repo, "rm", "-q", "-r", ".achilles/generated-rules")
+	git(t, repo, "commit", "-q", "-m", "drop every rule")
+
+	o := &options{diffRef: "main", ruleRepoDir: filepath.Join(repo, ".achilles", "generated-rules")}
+	var scan model.Scan
+	var out bytes.Buffer
+	applyRepoStatePolicy(o, repo, &scan, &out)
+	if len(scan.RepoConfigChanged) != 1 {
+		t.Errorf("flagged = %v, want the deleted rule repository", scan.RepoConfigChanged)
+	}
+
+	// A repository that never had generated rules has nothing to flag.
+	plain := gitRepo(t, map[string]string{"app.py": "x = 1\n"})
+	git(t, plain, "checkout", "-q", "-b", "change")
+	writeFile(t, filepath.Join(plain, "app.py"), "x = 2\n")
+	git(t, plain, "commit", "-q", "-am", "edit")
+	o.ruleRepoDir, scan = filepath.Join(plain, ".achilles", "generated-rules"), model.Scan{}
+	applyRepoStatePolicy(o, plain, &scan, &out)
+	if len(scan.RepoConfigChanged) != 0 {
+		t.Errorf("flagged = %v, want nothing", scan.RepoConfigChanged)
+	}
+}

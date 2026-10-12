@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -84,10 +83,9 @@ func applyRepoStatePolicy(o *options, absTarget string, scan *model.Scan, warn i
 	if feedbackInUse {
 		states = append(states, state{"feedback", vaultRel})
 	}
+	// No check that the directory exists: one the change deleted is the case that matters most.
 	if rel, ok := insideTarget(absTarget, o.ruleRepoDir); ok {
-		if st, err := os.Stat(o.ruleRepoDir); err == nil && st.IsDir() {
-			states = append(states, state{"generated rules", rel})
-		}
+		states = append(states, state{"generated rules", rel})
 	}
 	var changed []string
 	for _, s := range states {

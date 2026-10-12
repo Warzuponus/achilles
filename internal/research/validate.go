@@ -147,7 +147,7 @@ func (v *OpengrepValidator) Validate(ctx context.Context, r GeneratedRule) (Vali
 	// language with no control snippet is not checked this way.
 	cc := 0
 	if control, ok := controlSnippets[r.Language]; ok && ok1 && ok2 {
-		if err := os.WriteFile(filepath.Join(controlDir, "control"+ext), []byte(control), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(controlDir, "control"+ext), []byte(control), 0o600); err != nil {
 			return ValidationResult{}, err
 		}
 		cc, _ = v.matchCount(ctx, rulesDir, controlDir)

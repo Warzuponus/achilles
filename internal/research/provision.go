@@ -89,11 +89,16 @@ func (r *RuleRepo) Provision(baselineDir string, shadowWindow time.Duration, now
 	return set, cleanup, nil
 }
 
-// admittedMeta reads a rule's meta.json sidecar; the zero value if it is missing.
+// admittedMeta reads a rule's meta.json sidecar; the zero value if it is missing
+// or unreadable.
 func (r *RuleRepo) admittedMeta(id string) ruleMeta {
 	var m ruleMeta
-	if b, err := os.ReadFile(filepath.Join(r.AdmittedDir(), id+".meta.json")); err == nil {
-		_ = json.Unmarshal(b, &m)
+	b, err := os.ReadFile(filepath.Join(r.AdmittedDir(), id+".meta.json"))
+	if err != nil {
+		return ruleMeta{}
+	}
+	if json.Unmarshal(b, &m) != nil {
+		return ruleMeta{}
 	}
 	return m
 }
@@ -101,12 +106,8 @@ func (r *RuleRepo) admittedMeta(id string) ruleMeta {
 // admittedCreated reads a rule's admission date from its meta.json sidecar. A
 // zero time means "unknown" (treated as active by the caller).
 func (r *RuleRepo) admittedCreated(id string) time.Time {
-	b, err := os.ReadFile(filepath.Join(r.AdmittedDir(), id+".meta.json"))
-	if err != nil {
-		return time.Time{}
-	}
-	var m ruleMeta
-	if json.Unmarshal(b, &m) != nil || m.Provenance.Created == "" {
+	m := r.admittedMeta(id)
+	if m.Provenance.Created == "" {
 		return time.Time{}
 	}
 	t, err := time.Parse(admittedCreatedFmt, m.Provenance.Created)

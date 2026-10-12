@@ -195,6 +195,15 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **The model client rides out ordinary network trouble.** Only HTTP 429, 502, 503 and 504
+  were retried. A dropped connection, a reply cut off mid-body, a 500, a 408 or an
+  "overloaded" 529 failed the finding at once. Those are now retried too, waits are
+  jittered so parallel workers do not retry in step, and a `Retry-After` given as a date
+  is honored.
+- **A reply cut off at the model's output limit is reported as that.** It looked like
+  malformed JSON, earned a repair request that was cut off at the same limit, and ended in
+  an error that did not name the cause. Achilles now reads `finish_reason`, skips the
+  pointless second call, and says to raise `ACHILLES_LLM_MAX_TOKENS`.
 - **A scanner that crashes after writing part of its report is no longer a clean run.** For
   config-driven scanners the only test of success was that the report file existed; the
   exit code was ignored. The registry can now list a tool's `successExitCodes`, and any

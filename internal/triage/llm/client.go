@@ -62,6 +62,11 @@ type Response struct {
 	Content string
 	Model   string
 	Usage   Usage
+	// Truncated reports that the model stopped because it reached its output
+	// limit (finish_reason "length"), not because it had finished. The content is
+	// then cut off mid-answer; for JSON that means it will not parse, and asking
+	// again with the same limit cuts it off again.
+	Truncated bool
 }
 
 // Client completes a chat request.

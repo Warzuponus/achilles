@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# A newer push to a pull request replaces the run of the older one: only the last
+# result matters, and the repository is billed for every minute while it is private.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -114,7 +121,12 @@ jobs:
   # Windows is a release target (.goreleaser.yaml builds windows/amd64), so it is
   # built and tested here. Three packages used to fail on Windows without anyone
   # seeing it, one of them because the file vault had no cross-process lock there.
+  #
+  # Not on pull requests: a Windows runner is billed at twice the Linux rate. It runs
+  # on every push to main and on demand (Actions -> CI -> Run workflow, on any
+  # branch), so run it by hand for a change that touches paths, locking or processes.
   test-windows:
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

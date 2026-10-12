@@ -18,6 +18,21 @@ Optional, for the pieces that need infrastructure (they skip themselves when abs
   `internal/vault/postgres_test.go`). CI runs them against a service container.
 - **The container quickstart:** `deploy/compose/smoke.sh` (needs Docker).
 
+**What CI runs, and when.** A pull request gets the Linux build and tests (with the
+race detector), the linter, `govulncheck`, the license check, the self-scan and the
+composite action. Three heavier jobs are kept off pull requests because every minute
+is billed while the repository is private:
+
+- the **Windows** tests run on every push to `main`, and on demand: Actions -> CI ->
+  Run workflow, on your branch. Do that for a change that touches file paths, file
+  locking or process handling;
+- the **container quickstart** runs on a pull request only when the image, the
+  compose files or the sample change, and on `main` for any code change;
+- **Tier-2 verify** runs on `main` when a tool image or the registry changes, and on
+  demand.
+
+A newer push to a pull request cancels the run of the older one.
+
 Achilles is local-first and links no cloud SDKs. `make check-deps` asserts that
 `go.mod` contains no cloud SDK modules — run it if you touch vault or LLM wiring or
 add a dependency.

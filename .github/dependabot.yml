@@ -1,19 +1,21 @@
 # Keeps the SHA-pinned actions, the digest-pinned base images and Go modules current.
-# Updates are grouped per ecosystem so each week is one PR, not one per dependency.
+# Updates are grouped per ecosystem and checked monthly, so each month is at most one
+# PR per ecosystem: every PR costs a full CI run. Security updates, when they are
+# enabled in the repository settings, do not wait for this schedule.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
     groups:
       actions: { patterns: ["*"] }
   - package-ecosystem: gomod
     directory: /
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
     groups:
       go: { patterns: ["*"] }
   - package-ecosystem: docker
     directories: ["/deployments/*"]   # the all-in-one image and every tool image
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
     groups:
       docker: { patterns: ["*"] }

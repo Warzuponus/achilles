@@ -1,12 +1,16 @@
 # End-to-end verification of the Tier-2 scanners (SpotBugs+find-sec-bugs, Psalm)
 # that can't be run on a dev laptop without Docker + the language runtimes.
 # GitHub's runners have Docker, so this is where these tools actually get proven.
-# Runs on demand and when the tool integration changes (heavy: builds images).
+# Runs on demand and when the tool integration changes on main (heavy: builds
+# images). It used to run on a push to any branch, so every push to a pull request
+# or a Dependabot branch that touched a tool image paid for a full run; to check a
+# branch before it merges, start it by hand (Actions -> Tier-2 verify -> Run workflow).
 name: Tier-2 verify
 
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - "deployments/**"
       - "verify/tier2/**"

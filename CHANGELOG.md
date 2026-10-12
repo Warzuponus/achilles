@@ -97,6 +97,11 @@ First public release (`v0.1.0`) is pending.
   [Benchmarking Detection](docs/benchmarking.md).
 
 ### Changed
+- **CI uses fewer minutes per pull request.** The Windows tests run on pushes to `main`
+  and on demand instead of on every pull request push; the container quickstart runs on
+  a pull request only when the image, compose files or sample change (and on `main` for
+  code changes); Tier-2 verify runs on `main` and on demand instead of on any branch; a
+  newer push cancels the older run; Dependabot checks monthly. See CONTRIBUTING.md.
 - **The eval reports the decision users experience, not only the one the review made.**
   `achilles-eval --mode verdict` scored whether a finding was *confirmed*. The product's
   decision has three outcomes (confirmed, kept unverified, dismissed), so a finding left

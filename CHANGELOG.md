@@ -88,6 +88,14 @@ First public release (`v0.1.0`) is pending.
   current directory.
 
 ### Security
+- **The installer no longer accepts a missing signature quietly.** `install.sh` verified the
+  cosign signature of `checksums.txt` only if `cosign` was installed and the signature
+  bundle could be downloaded; otherwise it printed a note and installed on the checksum
+  alone, which a tampered mirror can satisfy by serving its own checksum file. With
+  `cosign` installed, a missing bundle is now a refusal. New `ACHILLES_REQUIRE_SIGNATURE`:
+  `1` refuses to install without a verified signature, `0` opts out explicitly. The
+  GitHub Action now installs `cosign` and sets it to `1`, so the action never runs an
+  unverified binary. The installer has tests, run in CI.
 - **Tool containers run with less privilege.** Under `--runner docker` each scanner
   container now gets `--security-opt no-new-privileges`, `--cap-drop ALL` (with only
   `DAC_OVERRIDE` added back, which the tool needs to read the mounted source and write

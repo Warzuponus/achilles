@@ -12,11 +12,20 @@
 #   ACHILLES_DOWNLOAD_BASE
 #                override the release download URL prefix (mirrors, offline tests);
 #                the archive is still verified against checksums.txt from there
+#   ACHILLES_REQUIRE_SIGNATURE
+#                1: refuse to install unless the cosign signature of checksums.txt
+#                   verifies (so `cosign` must be installed). The GitHub Action sets it.
+#                0: skip the signature check even when `cosign` is installed
+#                unset: verify when `cosign` is installed, and say so when it is not
 #
 # What it does: downloads achilles_<version>_<os>_<arch>.tar.gz and checksums.txt
-# from github.com/Warzuponus/achilles/releases, verifies the archive's sha256 (and the
-# cosign signature of checksums.txt when `cosign` is installed), extracts ONLY the
-# `achilles` binary, and installs it. It runs nothing it downloaded.
+# from github.com/Warzuponus/achilles/releases, verifies the archive's sha256 and the
+# cosign signature of checksums.txt, extracts ONLY the `achilles` binary, and
+# installs it. It runs nothing it downloaded.
+#
+# The sha256 check alone only proves the archive matches the checksums.txt served
+# next to it; whoever can replace one can replace the other. The signature is what
+# ties checksums.txt to this repository's release workflow.
 #
 # Scanners are separate: afterwards run `achilles tools install` and `achilles doctor`.
 
@@ -100,19 +109,28 @@ if [ "$got" != "$want" ]; then
 fi
 say "sha256 ok"
 
-if command -v cosign >/dev/null 2>&1; then
-  if fetch "$base/checksums.txt.sigstore.json" "$tmp/checksums.txt.sigstore.json" 2>/dev/null; then
-    cosign verify-blob \
-      --certificate-identity "https://github.com/$REPO/.github/workflows/release.yml@refs/tags/$tag" \
-      --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-      --bundle "$tmp/checksums.txt.sigstore.json" "$tmp/checksums.txt" >/dev/null 2>&1 \
-      || die "cosign signature verification of checksums.txt FAILED; refusing to install"
-    say "cosign signature ok"
-  else
-    say "note: no signature bundle published for $tag; relying on sha256 only"
-  fi
+require_sig="${ACHILLES_REQUIRE_SIGNATURE:-}"
+case "$require_sig" in
+  ""|0|1) ;;
+  *) die "ACHILLES_REQUIRE_SIGNATURE must be 0 or 1, got '$require_sig'" ;;
+esac
+if [ "$require_sig" = 0 ]; then
+  say "note: ACHILLES_REQUIRE_SIGNATURE=0; skipping the signature check (sha256 verified)"
+elif command -v cosign >/dev/null 2>&1; then
+  # Every release publishes the bundle. A missing one is treated like a bad one:
+  # leaving it out is the first thing someone serving a tampered release would do.
+  fetch "$base/checksums.txt.sigstore.json" "$tmp/checksums.txt.sigstore.json" 2>/dev/null \
+    || die "no signature bundle (checksums.txt.sigstore.json) for $tag; refusing to install. Set ACHILLES_REQUIRE_SIGNATURE=0 to install on the sha256 check alone"
+  cosign verify-blob \
+    --certificate-identity "https://github.com/$REPO/.github/workflows/release.yml@refs/tags/$tag" \
+    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+    --bundle "$tmp/checksums.txt.sigstore.json" "$tmp/checksums.txt" >/dev/null 2>&1 \
+    || die "cosign signature verification of checksums.txt FAILED; refusing to install"
+  say "cosign signature ok"
+elif [ "$require_sig" = 1 ]; then
+  die "ACHILLES_REQUIRE_SIGNATURE=1 but cosign is not installed; refusing to install (https://docs.sigstore.dev/cosign/system_config/installation/)"
 else
-  say "note: cosign not installed; skipping signature check (sha256 verified)"
+  say "note: cosign not installed; the release signature was NOT checked (sha256 verified). Install cosign, or set ACHILLES_REQUIRE_SIGNATURE=1 to make this an error"
 fi
 
 # --- install ----------------------------------------------------------------

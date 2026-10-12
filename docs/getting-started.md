@@ -8,8 +8,10 @@ Achilles is a single static Go binary (Go 1.27, no cgo). Its tool registry
 (`configs/tools.yaml`) and baseline Opengrep rules are **embedded in the binary**, so
 it runs from any directory with no repository checkout. Pick one:
 
-**Install script** (Linux and macOS; verifies the release checksum, and the cosign
-signature if `cosign` is installed):
+**Install script** (Linux and macOS). It verifies the archive against the release's
+checksum file, and the checksum file's cosign signature when `cosign` is installed.
+Without `cosign` it says the signature was not checked; set
+`ACHILLES_REQUIRE_SIGNATURE=1` to make that an error instead:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/Warzuponus/achilles/main/scripts/install.sh

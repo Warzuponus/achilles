@@ -40,6 +40,8 @@ jobs:
         run: scripts/check-tree.sh
       - name: Dependency hygiene (no cloud SDK modules)
         run: make check-deps
+      - name: Installer (checksum and signature checks, against a fake release)
+        run: sh scripts/install_test.sh
       # -race: findings are triaged, scanned and verified concurrently, and nothing
       # else would notice a data race in those paths.
       - name: Test (hermetic, race detector on)

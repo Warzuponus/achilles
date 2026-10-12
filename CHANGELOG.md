@@ -9,6 +9,16 @@ All notable changes to this project are recorded here. The format follows
 First public release (`v0.1.0`) is pending.
 
 ### Added
+- **SARIF output that code scanning can use fully.** The report now has a rule table
+  with a `security-severity` per rule (so alerts sort as critical/high/medium/low
+  instead of by level alone) and CWE tags; `partialFingerprints.primaryLocationLineHash`
+  from Achilles' line-independent fingerprint, so an alert survives code moving;
+  `baselineState: "new"` when a baseline was applied; and a patch that passed re-scan
+  verification as a SARIF `fixes` entry.
+- **`--json-report`:** the scan as one JSON document (findings with verdicts, dismissed
+  findings, failed scanners, review coverage), with a `schemaVersion` and a `complete`
+  flag, for scripts and dashboards. Credential messages are masked; raw scanner output
+  is never included.
 - **One-flag AI scan:** `--ai` turns on triage, fix suggestions, the repo review and
   the dependency advisor, and writes `report.html`, `report.md` and `achilles.sarif`
   into `--report-dir`.

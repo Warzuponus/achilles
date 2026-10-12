@@ -118,7 +118,8 @@ Full walkthrough: [LLM Triage & Agents](llm-and-agents.md).
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--html-report` | — | self-contained HTML report (findings + AI review/advice/threat-model) |
-| `--sarif-report` | — | unified SARIF 2.1.0 report (for GitHub code scanning etc.) |
+| `--sarif-report` | — | unified SARIF 2.1.0 report (for GitHub code scanning etc.): a rule table with severities, stable fingerprints, and verified fixes as SARIF `fixes` |
+| `--json-report` | — | the scan as one JSON document (findings, verdicts, dismissed findings, coverage), for scripts and dashboards |
 | `--junit` | — | JUnit XML report (for CI test panels) |
 | `--markdown` | — | Markdown summary (good for a PR comment) |
 | `--github` | `false` | emit GitHub Actions annotations to stdout |

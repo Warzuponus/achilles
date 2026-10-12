@@ -148,6 +148,9 @@ type Scan struct {
 	// RepoConfigChanged is the subset of RepoConfig that the diff under review
 	// (--diff) itself modifies.
 	RepoConfigChanged []string `json:"repoConfigChanged,omitempty"`
+	// BaselineApplied is true when the scan was compared with a baseline, so
+	// Findings holds only what is new relative to it.
+	BaselineApplied bool `json:"baselineApplied,omitempty"`
 	// Triage summarizes how much of the scan the AI review actually covered; nil
 	// when no triage was requested.
 	Triage *TriageStats `json:"triage,omitempty"`

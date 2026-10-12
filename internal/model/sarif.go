@@ -59,8 +59,9 @@ type SarifDriver struct {
 type SarifRule struct {
 	ID                   string              `json:"id"`
 	Name                 string              `json:"name,omitempty"`
-	DefaultConfiguration SarifRuleConfig     `json:"defaultConfiguration,omitempty"`
-	Properties           SarifRuleProps      `json:"properties,omitempty"`
+	ShortDescription     *SarifMessage       `json:"shortDescription,omitempty"`
+	DefaultConfiguration SarifRuleConfig     `json:"defaultConfiguration,omitzero"`
+	Properties           SarifRuleProps      `json:"properties,omitzero"`
 	Relationships        []SarifRelationship `json:"relationships,omitempty"`
 }
 
@@ -127,6 +128,32 @@ type SarifResult struct {
 	PartialFingerprints map[string]string  `json:"partialFingerprints,omitempty"`
 	Suppressions        []SarifSuppression `json:"suppressions,omitempty"`
 	Properties          map[string]any     `json:"properties,omitempty"`
+	// BaselineState says how the result relates to a baseline: "new" when the
+	// scan was compared with one and this finding was not in it.
+	BaselineState string `json:"baselineState,omitempty"`
+	// Fixes are proposed changes that resolve the result.
+	Fixes []SarifFix `json:"fixes,omitempty"`
+}
+
+// SarifFix is a proposed change: a description and the edits, per file.
+type SarifFix struct {
+	Description     SarifMessage          `json:"description"`
+	ArtifactChanges []SarifArtifactChange `json:"artifactChanges"`
+}
+
+type SarifArtifactChange struct {
+	ArtifactLocation SarifArtifactLocation `json:"artifactLocation"`
+	Replacements     []SarifReplacement    `json:"replacements"`
+}
+
+// SarifReplacement replaces the text of DeletedRegion with InsertedContent.
+type SarifReplacement struct {
+	DeletedRegion   SarifRegion           `json:"deletedRegion"`
+	InsertedContent *SarifArtifactContent `json:"insertedContent,omitempty"`
+}
+
+type SarifArtifactContent struct {
+	Text string `json:"text"`
 }
 
 // SarifRuleRef is a reportingDescriptorReference: a rule named by id or index.

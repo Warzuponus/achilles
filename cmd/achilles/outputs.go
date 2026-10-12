@@ -27,6 +27,11 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 			return err
 		}
 	}
+	if o.jsonReport != "" {
+		if err := writeToFile(o.jsonReport, func(w io.Writer) error { return report.WriteJSON(w, scan) }); err != nil {
+			return err
+		}
+	}
 	if o.junitOut != "" {
 		if err := writeToFile(o.junitOut, func(w io.Writer) error { return report.WriteJUnit(w, scan) }); err != nil {
 			return err

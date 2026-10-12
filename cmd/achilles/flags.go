@@ -58,6 +58,7 @@ type options struct {
 	writeBl           string
 	prMini            string
 	sarifReport       string
+	jsonReport        string
 	junitOut          string
 	markdownOut       string
 	htmlReport        string
@@ -155,6 +156,7 @@ func parseFlags(argv []string) (*options, error) {
 	fs.StringVar(&o.writeBl, "write-baseline", "", "write current findings' fingerprints as a baseline to this file")
 	fs.StringVar(&o.prMini, "pr-mini", "", "auto baseline: if this file is absent, seed it (full scan, no gate); if present, delta-scan against it")
 	fs.StringVar(&o.sarifReport, "sarif-report", "", "write a unified SARIF report to this file")
+	fs.StringVar(&o.jsonReport, "json-report", "", "write the scan as one JSON document (findings, verdicts, dismissed findings, coverage) to this file")
 	fs.StringVar(&o.junitOut, "junit", "", "write a JUnit XML report to this file")
 	fs.StringVar(&o.markdownOut, "markdown", "", "write a Markdown summary to this file")
 	fs.StringVar(&o.htmlReport, "html-report", "", "write a self-contained HTML report (findings + AI review/advice/threat-model) to this file")

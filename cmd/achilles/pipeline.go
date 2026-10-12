@@ -299,6 +299,7 @@ func applyBaseline(o *options, ev vault.Store, runID string, scan *model.Scan) e
 	}
 	c := b.Classify(scan.Findings)
 	scan.Findings = c.Introduced
+	scan.BaselineApplied = true
 	fmt.Fprintf(os.Stderr, "achilles: baseline — %d introduced, %d pre-existing, %d fixed\n",
 		len(c.Introduced), len(c.PreExisting), len(c.Fixed))
 	recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta, Source: "baseline"},

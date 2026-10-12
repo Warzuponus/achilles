@@ -30,18 +30,29 @@ func sarifLevel(s model.Severity) string {
 func WriteSARIFReport(w io.Writer, s model.Scan) error {
 	// Results must be a non-nil array: SARIF requires `results` to be an array,
 	// and GitHub code scanning rejects `"results": null` (which a nil slice emits).
+	rules, ruleIndex := sarifRules(s.Findings, s.Dismissed)
 	run := model.SarifRun{
-		Tool:    model.SarifTool{Driver: model.SarifDriver{Name: "achilles"}},
+		Tool:    model.SarifTool{Driver: model.SarifDriver{Name: "achilles", Rules: rules}},
 		Results: []model.SarifResult{},
 	}
-	for _, f := range s.Findings {
-		run.Results = append(run.Results, sarifResult(f, false))
-	}
-	// Findings the AI review ruled out are still emitted, marked suppressed, so
-	// code scanning shows them as dismissed (with the reason) and does not re-open
-	// them as new alerts on the next run.
-	for _, f := range s.Dismissed {
-		run.Results = append(run.Results, sarifResult(f, true))
+	all := append(append([]model.Finding{}, s.Findings...), s.Dismissed...)
+	hashes := lineHashes(all)
+	for i, f := range all {
+		// Findings the AI review ruled out are still emitted, marked suppressed, so
+		// code scanning shows them as dismissed (with the reason) and does not
+		// re-open them as new alerts on the next run.
+		r := sarifResult(f, i >= len(s.Findings))
+		if idx, ok := ruleIndex[f.RuleID]; ok {
+			r.RuleIndex = &idx
+		}
+		if hashes[i] != "" {
+			r.PartialFingerprints = map[string]string{"primaryLocationLineHash": hashes[i]}
+		}
+		if s.BaselineApplied {
+			r.BaselineState = "new"
+		}
+		r.Fixes = sarifFix(f)
+		run.Results = append(run.Results, r)
 	}
 	if len(s.FailedTools) > 0 {
 		inv := model.SarifInvocation{ExecutionSuccessful: false}

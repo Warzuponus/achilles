@@ -55,6 +55,7 @@ var errInterrupted = errors.New("interrupted; stopped before the scan finished (
 
 func run(argv []string) error {
 	resetInventory()
+	runMeter = nil
 	if handled, err := runSubcommand(argv, os.Stdout, os.Stderr); handled {
 		return err
 	}
@@ -277,6 +278,9 @@ func run(argv []string) error {
 	if err := runAgents(llmCtx, o, ev, runID, absTarget, scan, tasks); err != nil {
 		return err
 	}
+	if runMeter != nil {
+		fmt.Fprintln(os.Stderr, runMeter.summary())
+	}
 
 	// Everything that can be written has been. The AI review failing is an error
 	// (exit 2), whatever the gate would have said about unreviewed findings.
@@ -316,7 +320,11 @@ var llmAuthMode = "key"
 // newLLMFactory builds the client constructor for this run from --llm-auth and
 // the ACHILLES_LLM_* environment (see llm.NewFactory for the modes).
 func newLLMFactory() (func(string, string) llm.Client, error) {
-	return llm.NewFactory(llmAuthMode)
+	factory, err := llm.NewFactory(llmAuthMode)
+	if err != nil {
+		return nil, err
+	}
+	return metered(factory, runMeter), nil // counted against --max-cost when it is set
 }
 
 func envOr(key, fallback string) string {

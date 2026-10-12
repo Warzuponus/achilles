@@ -223,6 +223,14 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **`--max-cost` is now a cap on the run, not only on an estimate.** It was checked once,
+  before the review started, against an estimate of the per-finding review alone, so
+  `--max-cost 1 --deep-verify 50` could spend many times the cap, and the repo review,
+  advisor, threat model and research were never counted. Every chat call of a run is now
+  priced from the usage the endpoint reports, and no further call starts once the total
+  reaches the cap. Findings not reached stay in the report as unreviewed. A model with no
+  price is not called while a cap is set. The pre-flight now also names `--deep-verify`
+  among the work its estimate leaves out.
 - **Cross-tool correlation actually finds the overlap.** Two findings clustered only if
   they had the identical set of CWEs, so tools that describe one defect with different
   ids (CWE-78 and CWE-77, or one CWE against two) never did, and each got its own model

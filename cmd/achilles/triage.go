@@ -56,9 +56,17 @@ func triageScan(ctx context.Context, o *options, ev vault.Store, runID string, s
 		return llm.Usage{}, fmt.Errorf("--max-cost needs --price-config: dollars require per-model prices, " +
 			"which Achilles does not ship (see configs/prices.example.yaml)")
 	}
+	// From here every model call of the run is counted, and refused once the cap
+	// is reached: the estimate below is a forecast of one phase, not a limit.
+	if o.maxCost > 0 && !o.dryRun {
+		runMeter = newSpendMeter(o.maxCost, priceTable)
+	}
 	// Other LLM work is not part of the per-finding estimate; name it rather than
 	// let a partial number read as the whole bill.
 	var excluded []string
+	if o.deepVerify > 0 {
+		excluded = append(excluded, fmt.Sprintf("--deep-verify (up to %d findings, several calls each)", o.deepVerify))
+	}
 	if o.reviewOn {
 		excluded = append(excluded, "--review (one whole-repo call per scan)")
 	}
@@ -286,6 +294,11 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 			advisoryN++
 			mu.Unlock()
 			return
+		case errors.Is(err, errCostCap):
+			// Not a failure of the endpoint: the cap stopped the call. This finding and
+			// those after it are "not reached", as when the time budget runs out. Calls
+			// already in flight are left to finish: their tokens are spent either way.
+			return
 		case err != nil:
 			if llmCtx.Err() != nil {
 				return
@@ -306,7 +319,7 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		consecutive = 0
 		mu.Unlock()
 		if o.remediate {
-			if err := eng.Remediate(llmCtx, runID, f); err != nil && llmCtx.Err() == nil {
+			if err := eng.Remediate(llmCtx, runID, f); err != nil && llmCtx.Err() == nil && !errors.Is(err, errCostCap) {
 				fmt.Fprintf(os.Stderr, "achilles: remediation failed for %s: %s\n", f.RuleID, oneLine(err))
 			}
 		}
@@ -437,6 +450,9 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	if stats.Advisories > 0 {
 		fmt.Fprintf(os.Stderr, "achilles: %d dependency advisory finding(s) (known CVEs in dependencies) are kept as reported and were not sent to the model: "+
 			"an advisory is fixed by upgrading, not by a verdict (--sca-advice plans the upgrades)\n", stats.Advisories)
+	}
+	if stats.Skipped > 0 && runMeter.reached() {
+		fmt.Fprintf(os.Stderr, "achilles: --max-cost stopped the AI review: %d finding(s) were not reviewed (most severe were reviewed first). Raise --max-cost or narrow the scan with --diff / --baseline.\n", stats.Skipped)
 	}
 	if stats.Skipped > 0 && ctx.Err() != nil {
 		fmt.Fprintln(os.Stderr, "achilles: the --llm-budget ran out; the findings above were reviewed most severe first. Raise --llm-budget or narrow the scan with --diff / --baseline.")

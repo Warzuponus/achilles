@@ -49,7 +49,7 @@ These run instead of a scan. (A scan target literally named `version`, `doctor` 
 | `--no-default-excludes` | `false` | disable the built-in vendored/generated/minified filter |
 | `--no-correlate` | `false` | disable cross-tool correlation (triage every duplicate report separately) |
 | `--dry-run` | `false` | scan, print the LLM cost estimate, stop before any model call or outward action |
-| `--max-cost` | `0` | refuse to start LLM work above this estimated USD spend (needs `--price-config`) |
+| `--max-cost` | `0` | cap on LLM spend in USD (needs `--price-config`): refuse to start if the per-finding estimate exceeds it, and stop making model calls once the spend counted during the run reaches it |
 | `--price-config` | — | YAML per-model token prices (see `configs/prices.example.yaml`) |
 | `--baseline` | — | suppress findings whose fingerprint is in this baseline file |
 | `--write-baseline` | — | write current findings' fingerprints as a baseline to this file |

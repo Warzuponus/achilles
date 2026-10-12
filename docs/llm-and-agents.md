@@ -151,6 +151,21 @@ achilles: estimated LLM spend $0.0340 exceeds --max-cost $0.0100; no model was
 called (raise the cap, narrow the scan with --diff/--baseline, or route cheaper models)
 ```
 
+The cap also holds **during** the run, against what is actually spent. Every chat
+call (the review, the judge, fix suggestions, deep verification, the repo review, the
+dependency advisor, the threat model, research) is priced from the token usage the
+endpoint reports, and once the total reaches the cap no further call is started:
+
+```
+achilles: --max-cost stopped the AI review: 12 finding(s) were not reviewed (most severe were reviewed first). ...
+achilles: LLM spend counted against --max-cost: $1.0042 of $1.0000 over 187 call(s); 31 further call(s) were NOT made
+```
+
+Findings the review did not reach stay in the report, marked as unreviewed, exactly
+as when the time budget runs out. Calls already in flight finish, so the total can
+pass the cap by at most what `--llm-concurrency` calls cost. A model with no price
+is not called at all while a cap is set. Embedding calls for `--rag` are not counted.
+
 **You supply the prices.** Achilles ships no built-in price table: prices change
 without notice, differ per provider for the same model name, and are often
 negotiated, so a cap computed from prices we guessed would be worse than no cap.

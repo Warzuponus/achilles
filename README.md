@@ -186,7 +186,7 @@ The complete, current list is in the **[CLI Reference](docs/cli-reference.md)**
 | `--baseline`, `--diff` | only new findings, only changed files |
 | `--strict-tools` | fail if any scanner could not run or could not analyze everything |
 | `--file-issues` | open and maintain GitHub issues (`--issues-*` options) |
-| `--dry-run`, `--max-cost` | cost estimate before any model call |
+| `--dry-run`, `--max-cost` | cost estimate before any model call; a cap on what the run may spend |
 | `--html-report`, `--sarif-report`, `--markdown` | write a report |
 
 Flags may come before or after the target path. Subcommands: `achilles doctor`,

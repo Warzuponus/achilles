@@ -149,7 +149,7 @@ func parseFlags(argv []string) (*options, error) {
 	fs.BoolVar(&o.noDefaultExcludes, "no-default-excludes", false, "disable the built-in vendored/generated/minified noise filter")
 	fs.BoolVar(&o.noCorrelate, "no-correlate", false, "disable cross-tool finding correlation (triage every duplicate report separately)")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "run the scan, print the LLM cost estimate, and stop before any model call or outward-facing action")
-	fs.Float64Var(&o.maxCost, "max-cost", 0, "refuse to start LLM work if the estimated spend exceeds this many USD (needs --price-config)")
+	fs.Float64Var(&o.maxCost, "max-cost", 0, "cap on LLM spend in USD (needs --price-config): refuse to start if the per-finding estimate exceeds it, and stop making model calls once the spend counted during the run reaches it")
 	fs.StringVar(&o.priceConfig, "price-config", "", "YAML per-model token prices for cost estimation (see configs/prices.example.yaml)")
 	fs.StringVar(&o.baselinePath, "baseline", "", "suppress findings present in this baseline file")
 	fs.StringVar(&o.writeBl, "write-baseline", "", "write current findings' fingerprints as a baseline to this file")

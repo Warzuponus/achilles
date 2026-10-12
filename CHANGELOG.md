@@ -88,6 +88,12 @@ First public release (`v0.1.0`) is pending.
   current directory.
 
 ### Security
+- **The code shown to the model can only come from the scanned tree.** The step that adds
+  the lines around a finding read whatever path the scanner reported: a `..` path, an
+  absolute path elsewhere, or a symlink in the repository pointing at a file in your home
+  directory was followed, and its contents were sent to the model and written to reports.
+  Reads now go through an OS-enforced root at the scan target; anything outside falls back
+  to the snippet the scanner itself provided.
 - **Credential masking covers more shapes.** Text sent to a model, written to reports and
   issues, or shown in the War Room now also masks: the password in a URL
   (`postgres://user:password@host`), `Authorization: Basic` and opaque `Bearer` tokens,

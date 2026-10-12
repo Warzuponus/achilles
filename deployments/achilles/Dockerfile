@@ -22,13 +22,13 @@
 # configs/tools.yaml). Build with --build-arg WITH_GO=false for a ~250 MB smaller
 # image that does not scan Go.
 ARG WITH_GO=true
-FROM golang:1.27@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2 AS go-true
-FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS go-false
+FROM golang:1.27@sha256:e432b43af23a9328d56a7c499be0476810aa344acbcf65fc7c455d4ff5a40602 AS go-true
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS go-false
 RUN mkdir -p /usr/local/go
 FROM go-${WITH_GO} AS gotoolchain
 
 # ---- build the Go binaries and the two Go-based scanners ------------------------
-FROM --platform=$BUILDPLATFORM golang:1.27@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27@sha256:e432b43af23a9328d56a7c499be0476810aa344acbcf65fc7c455d4ff5a40602 AS build
 ARG TARGETOS=linux
 ARG TARGETARCH
 ARG GOSEC_VERSION=v2.27.1
@@ -55,7 +55,7 @@ RUN set -eux; \
     done
 
 # ---- download + verify the non-Go scanners --------------------------------------
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS fetch
+FROM --platform=$BUILDPLATFORM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS fetch
 ARG TARGETARCH
 ARG TRIVY_VERSION=0.72.0
 ARG GITLEAKS_VERSION=8.30.1
@@ -84,7 +84,7 @@ RUN set -eux; \
 
 # ---- runtime ---------------------------------------------------------------------
 # glibc base: the Opengrep release binary is a manylinux build.
-FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates git \
  && rm -rf /var/lib/apt/lists/* \

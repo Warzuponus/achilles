@@ -13,7 +13,7 @@ updates:
     groups:
       go: { patterns: ["*"] }
   - package-ecosystem: docker
-    directory: /deployments/achilles
+    directories: ["/deployments/*"]   # the all-in-one image and every tool image
     schedule: { interval: weekly }
     groups:
       docker: { patterns: ["*"] }

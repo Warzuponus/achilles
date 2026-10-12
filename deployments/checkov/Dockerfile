@@ -9,8 +9,8 @@
 #
 # Build:
 #   docker build -t achilles/checkov:3.3.8 deployments/checkov
-FROM python:3.12-slim
-# TODO: pin the base image by digest before release.
+FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+# Pinned by digest so a rebuild gets the same base; Dependabot proposes updates.
 
 ARG CHECKOV_VERSION=3.3.8
 RUN pip install --no-cache-dir "checkov==${CHECKOV_VERSION}"

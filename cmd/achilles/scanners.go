@@ -197,7 +197,12 @@ func buildRunner(kind string) (xexec.Runner, error) {
 	case "local":
 		return xexec.LocalRunner{}, nil
 	case "docker":
-		return xexec.DockerRunner{Network: "none"}, nil // per-tool image comes from config
+		r := xexec.DockerRunner{Network: "none"} // per-tool image comes from config
+		if os.Getenv("ACHILLES_DOCKER_UNCONFINED") == "true" {
+			fmt.Fprintln(os.Stderr, "achilles: ACHILLES_DOCKER_UNCONFINED is set: tool containers run with Docker's default capabilities, not the reduced set")
+			r.Unconfined = true
+		}
+		return r, nil
 	default:
 		return nil, fmt.Errorf("unknown --runner %q (want local|docker)", kind)
 	}

@@ -27,7 +27,7 @@ These run instead of a scan. (A scan target literally named `version`, `doctor` 
 | `--profile` | `default` | `default` (baseline tools) or `full` (adds heavy per-language tools) |
 | `--mode` | `oss` | license mode: `oss` or `commercial` (strict — refuses non-`commercialSafe` tools) |
 | `--attest` | — | comma-separated tool IDs you hold a license attestation for (satisfies the gate in `commercial`) |
-| `--runner` | `local` | run tools `local` (PATH) or `docker` (pinned images) |
+| `--runner` | `local` | run tools `local` (PATH) or `docker` (pinned images). Tool containers get no network unless the tool needs it, a read-only source mount, no new privileges, and all capabilities dropped except the one needed to read the source and write the report. They still run as the image's user. `ACHILLES_DOCKER_UNCONFINED=true` turns the capability and process limits off |
 | `--timeout` | `5m` | time allowed for the scanners. When it runs out (or on Ctrl-C) each scanner and everything it started is stopped, and that tool is reported as failed. The AI review (`--llm-budget`) and fix verification (`--verify-timeout`) have their own clocks |
 | `--version` | — | print version, commit, build date, Go version and platform, then exit |
 | `--from-sarif` | — | skip scanning; normalize an existing SARIF file (exercises the report spine) |

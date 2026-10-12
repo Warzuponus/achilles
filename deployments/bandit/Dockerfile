@@ -7,8 +7,8 @@
 #
 # Build:
 #   docker build -t achilles/bandit:1.9.4 deployments/bandit
-FROM python:3.12-slim
-# TODO: pin the base image by digest before release.
+FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+# Pinned by digest so a rebuild gets the same base; Dependabot proposes updates.
 
 ARG BANDIT_VERSION=1.9.4
 RUN pip install --no-cache-dir "bandit==${BANDIT_VERSION}"

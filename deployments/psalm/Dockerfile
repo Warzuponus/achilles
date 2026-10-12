@@ -9,8 +9,8 @@
 # <projectFiles> resolve relative to that config. Achilles points --config at the
 # target's own psalm.xml (most Psalm-using PHP projects have one). Run
 # `composer install` in the target first so Psalm can resolve types/autoload.
-FROM php:8.3-cli
-# TODO: pin the base image by digest before release.
+FROM php:8.3-cli@sha256:aafe21201943a8a6e497ddfb471e2ce68ada76adede38c7d61fede8918b24319
+# Pinned by digest so a rebuild gets the same base; Dependabot proposes updates.
 
 # Psalm needs ext-mbstring (not built into the base image) + curl/unzip to fetch.
 RUN apt-get update \

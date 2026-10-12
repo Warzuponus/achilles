@@ -88,6 +88,15 @@ First public release (`v0.1.0`) is pending.
   current directory.
 
 ### Security
+- **Tool containers run with less privilege.** Under `--runner docker` each scanner
+  container now gets `--security-opt no-new-privileges`, `--cap-drop ALL` (with only
+  `DAC_OVERRIDE` added back, which the tool needs to read the mounted source and write
+  its report) and a process limit. Some full-profile tools run code from the repository
+  they scan, as root, with Docker's default capabilities until now. Containers still
+  run as the image's user and with a writable filesystem; the docs say so.
+  `ACHILLES_DOCKER_UNCONFINED=true` restores the old behavior if an image needs it.
+- The ten `--profile full` tool images pin their base image by digest (they carried a
+  TODO), and Dependabot now watches them.
 - **The scanned repository's own scanner configuration is no longer applied silently.**
   Files such as `.gitleaks.toml`, `.trivyignore`, `.semgrepignore` and `osv-scanner.toml`
   can remove findings before Achilles sees them, and a pull request can add a secret and

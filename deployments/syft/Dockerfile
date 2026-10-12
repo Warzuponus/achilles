@@ -8,8 +8,8 @@
 #
 # Build:
 #   docker build -t achilles/syft:1.46.0 deployments/syft
-FROM debian:bookworm-slim
-# TODO: pin the base image by digest before release.
+FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
+# Pinned by digest so a rebuild gets the same base; Dependabot proposes updates.
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates \

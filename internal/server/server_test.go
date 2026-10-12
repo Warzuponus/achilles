@@ -252,3 +252,26 @@ func TestSSE(t *testing.T) {
 		t.Errorf("SSE stream missing events:\n%s", w.Body.String())
 	}
 }
+
+// Anything that can reach the port could otherwise make the server read an
+// arbitrarily large body into memory.
+func TestCreateTenant_BodyIsBounded(t *testing.T) {
+	s, _ := newServer(t)
+	h := s.Handler()
+
+	post := func(body string) int {
+		r := httptest.NewRequest("POST", "/admin/tenants", strings.NewReader(body))
+		r.Host = "localhost:8080"
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	if code := post(`{"id":"acme","name":"Acme"}`); code != http.StatusCreated {
+		t.Fatalf("a normal project definition: %d, want 201", code)
+	}
+	huge := `{"id":"big","name":"` + strings.Repeat("a", maxTenantBody*2) + `"}`
+	if code := post(huge); code != http.StatusBadRequest {
+		t.Errorf("an oversized body: %d, want 400", code)
+	}
+}

@@ -198,19 +198,36 @@ func resolveTenant(w http.ResponseWriter, r *http.Request) string {
 		return v
 	}
 	if v := r.URL.Query().Get("tenant"); tenantRE.MatchString(v) {
-		http.SetCookie(w, &http.Cookie{
-			Name: tenantCookie, Value: v, Path: "/",
-			HttpOnly: true, SameSite: http.SameSiteLaxMode,
-			// The cookie only remembers a selection. Mark it Secure whenever the
-			// request itself arrived over HTTPS (directly or via a TLS-terminating proxy).
-			Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
-		})
+		// This is a GET that changes something (which project later pages and
+		// feedback apply to), so a link on another site must not be able to do it:
+		// following one shows that project for this page only. The switcher on our
+		// own page, a bookmark and a typed URL still remember the choice.
+		if !startedByAnotherSite(r) {
+			http.SetCookie(w, &http.Cookie{
+				Name: tenantCookie, Value: v, Path: "/",
+				HttpOnly: true, SameSite: http.SameSiteLaxMode,
+				// The cookie only remembers a selection. Mark it Secure whenever the
+				// request itself arrived over HTTPS (directly or via a TLS-terminating proxy).
+				Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+			})
+		}
 		return v
 	}
 	if c, err := r.Cookie(tenantCookie); err == nil && tenantRE.MatchString(c.Value) {
 		return c.Value
 	}
 	return "default"
+}
+
+// startedByAnotherSite reports whether the browser says another site initiated this
+// request (Fetch Metadata). Clients that do not send the header are not browsers
+// following a hostile link, so they are not treated as cross-site.
+func startedByAnotherSite(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "cross-site", "same-site":
+		return true
+	}
+	return false
 }
 
 // tenantOptions is the switcher's list: every tenant that holds data (discovered
@@ -344,7 +361,9 @@ func (s *Server) handleListTenants(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	var t tenant.Tenant
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+	// A project definition is a few short fields. Without a bound, anything that can
+	// reach the port could make the server buffer an arbitrarily large body.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxTenantBody)).Decode(&t); err != nil {
 		http.Error(w, "invalid tenant JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -356,6 +375,9 @@ func (s *Server) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, created)
 }
+
+// maxTenantBody bounds the JSON accepted by POST /admin/tenants.
+const maxTenantBody = 64 << 10
 
 // handlePurge applies a tenant's retention policy: delete vault records older
 // than RetentionDays. RetentionDays == 0 means keep forever (no-op).

@@ -109,3 +109,27 @@ func TestResolveTenant_CookieIsSecureOverHTTPS(t *testing.T) {
 		t.Errorf("want a Secure cookie when the request arrived over HTTPS, got %+v", sc)
 	}
 }
+
+// ?tenant= is a GET that changes which project later pages and feedback apply to.
+// A link on another site must not be able to make that stick.
+func TestResolveTenant_ACrossSiteLinkDoesNotSetTheCookie(t *testing.T) {
+	for site, wantCookie := range map[string]bool{
+		"":            true,  // not a browser (curl, a script): no header at all
+		"none":        true,  // typed URL or bookmark
+		"same-origin": true,  // the switcher on our own page
+		"same-site":   false, // another origin on the same site
+		"cross-site":  false, // a link or form on another site
+	} {
+		r := httptest.NewRequest("GET", "/?tenant=acme", nil)
+		if site != "" {
+			r.Header.Set("Sec-Fetch-Site", site)
+		}
+		w := httptest.NewRecorder()
+		if got := resolveTenant(w, r); got != "acme" {
+			t.Errorf("Sec-Fetch-Site %q: tenant = %q, want acme for this request", site, got)
+		}
+		if got := len(w.Result().Cookies()) == 1; got != wantCookie {
+			t.Errorf("Sec-Fetch-Site %q: cookie set = %v, want %v", site, got, wantCookie)
+		}
+	}
+}

@@ -88,6 +88,10 @@ First public release (`v0.1.0`) is pending.
   current directory.
 
 ### Security
+- **War Room:** a link on another site could change which project the War Room remembers
+  (the `?tenant=` switcher set its cookie on any GET); the choice now sticks only for
+  same-origin and direct navigation. `POST /admin/tenants` no longer reads an unbounded
+  request body.
 - **Endpoints named in `--model-config` get the same checks as `--llm-base-url`.** A
   per-task `baseURL` receives the API key and the code too, but was never validated, so it
   could send the key over plain http or to another provider. Each one is now checked

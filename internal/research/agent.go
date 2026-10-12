@@ -22,10 +22,17 @@ type Synthesizer interface {
 // LLMAgent is an Agent backed by an LLM. It enforces the citation guardrail:
 // any issue without a resolvable citation is discarded before it leaves here.
 type LLMAgent struct {
-	client llm.Client
+	client   llm.Client
+	grounder Grounder // nil: citations are only required to be present
 }
 
 func NewLLMAgent(c llm.Client) *LLMAgent { return &LLMAgent{client: c} }
+
+// WithGrounder makes the agent keep only issues whose cited advisory exists.
+func (a *LLMAgent) WithGrounder(g Grounder) *LLMAgent {
+	a.grounder = g
+	return a
+}
 
 func (a *LLMAgent) Research(ctx context.Context, t Target) ([]Issue, error) {
 	resp, err := llm.CompleteJSON(ctx, a.client, researchMessages(t), &llm.Schema{Name: "issues", Definition: issuesSchema})
@@ -39,11 +46,22 @@ func (a *LLMAgent) Research(ctx context.Context, t Target) ([]Issue, error) {
 		return nil, fmt.Errorf("parse issues: %w", err)
 	}
 
-	// Anti-hallucination: drop any issue lacking a real citation (DESIGN.md §9.2).
+	// Anti-hallucination: drop any issue lacking a citation, and, when a grounder
+	// is set, any whose cited advisory cannot be found (DESIGN.md §9.2). A lookup
+	// that cannot be made fails the target: nothing is kept unverified.
 	kept := out.Issues[:0]
 	for _, iss := range out.Issues {
 		if strings.TrimSpace(iss.Citation) == "" {
 			continue
+		}
+		if a.grounder != nil {
+			ok, err := grounded(ctx, a.grounder, iss.Citation)
+			if err != nil {
+				return nil, fmt.Errorf("could not verify the citation for %q, so nothing from this target is used: %w", iss.Title, err)
+			}
+			if !ok {
+				continue
+			}
 		}
 		if iss.Language == "" {
 			iss.Language = t.Tech // best-effort
@@ -94,6 +112,7 @@ func (s *LLMSynthesizer) Synthesize(ctx context.Context, i Issue) (GeneratedRule
 		PatchedSnippet:    out.PatchedSnippet,
 		Provenance: Provenance{
 			SourceCitation: i.Citation,
+			Origin:         i.Origin,
 			IssueTitle:     i.Title,
 			Model:          resp.Model,
 			PromptVersion:  PromptVersion,

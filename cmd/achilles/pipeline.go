@@ -36,6 +36,11 @@ func provisionGeneratedRules(o *options, cfg *config.Config) (activeDir, shadowD
 	if repo.Count("admitted") == 0 {
 		return "", "", cleanup
 	}
+	if !communityRulesAllowed {
+		// --mode commercial: a rule mined from a finding of the community pack is
+		// kept out, as the pack is.
+		repo.ExcludeOrigins(research.OriginExternalRule)
+	}
 	baselineRules := ""
 	for _, tc := range cfg.Tools {
 		if tc.ID == "opengrep" && tc.Rules != "" {
@@ -51,6 +56,9 @@ func provisionGeneratedRules(o *options, cfg *config.Config) (activeDir, shadowD
 	}
 	fmt.Fprintf(os.Stderr, "achilles: generated rules — %d active, %d in %dd shadow window\n",
 		set.ActiveGenerated, set.Shadow, o.ruleShadow)
+	if set.Excluded > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: %d generated rule(s) not loaded in --mode commercial: they were mined from findings of rules Achilles did not write (the community pack's licence forbids commercial use)\n", set.Excluded)
+	}
 	return set.ActiveDir, set.ShadowDir, done
 }
 

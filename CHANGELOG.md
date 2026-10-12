@@ -223,6 +223,18 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Research agents check that a cited advisory exists.** "Citation-mandatory" meant the
+  citation field was not empty, so an invented `CVE-2023-12345` passed. With `--research`,
+  each advisory id the model cites is now looked up (OSV, and the CVE Program's records
+  for a CVE); an issue whose advisory cannot be found, or that cites nothing checkable, is
+  discarded, and nothing from a target is used if the lookup itself fails.
+- **The generated-rule gate rejects degenerate rules.** A rule passed if it matched its own
+  vulnerable example and not its own patched one, which an empty patched example makes
+  true for any rule. The gate now requires two different, non-empty examples and rejects
+  a rule that also fires on ordinary code in the same language.
+- **Rules mined from another rule pack's findings stay out of `--mode commercial`.** A rule
+  mined from a finding reported by the community Opengrep pack was loaded in commercial
+  scans, where the pack itself is not allowed.
 - **`--max-cost` is now a cap on the run, not only on an estimate.** It was checked once,
   before the review started, against an estimate of the per-finding review alone, so
   `--max-cost 1 --deep-verify 50` could spend many times the cap, and the repo review,

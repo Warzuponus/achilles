@@ -191,3 +191,21 @@ func TestInventoryOf_WalksOncePerRun(t *testing.T) {
 		t.Errorf("a new run must walk the tree again: %v", next.Languages)
 	}
 }
+
+// Achilles' own Opengrep rules are named achilles.*; any other Opengrep rule id
+// came from another pack (in practice the community pack, which may not be used
+// commercially). A rule mined from such a finding carries that origin.
+func TestSeedOrigin(t *testing.T) {
+	for _, c := range []struct {
+		tool, rule, want string
+	}{
+		{"opengrep", "achilles.python.dangerous-eval", ""},
+		{"opengrep", "gen.abc123", ""},
+		{"opengrep", "python.lang.security.audit.eval-detected.eval-detected", "external-rule"},
+		{"gosec", "G204", ""},
+	} {
+		if got := seedOrigin(model.Finding{Tool: c.tool, RuleID: c.rule}); got != c.want {
+			t.Errorf("seedOrigin(%s, %s) = %q, want %q", c.tool, c.rule, got, c.want)
+		}
+	}
+}

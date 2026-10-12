@@ -43,11 +43,7 @@ func (m *Miner) Mine(ctx context.Context, runID string, seeds []Issue) (MineSumm
 		if err != nil {
 			continue
 		}
-		res, err := m.validator.Validate(ctx, rule)
-		if err != nil {
-			continue
-		}
-		if ok, reason := Admit(res); ok {
+		if res, ok, reason := Judge(ctx, m.validator, rule); ok {
 			if err := m.repo.Admit(runID, rule, res); err == nil {
 				sum.Admitted++
 			}

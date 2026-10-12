@@ -23,7 +23,9 @@ func (a *fakeAgent) Research(_ context.Context, t Target) ([]Issue, error) {
 type fakeSynth struct{}
 
 func (fakeSynth) Synthesize(_ context.Context, i Issue) (GeneratedRule, error) {
-	return GeneratedRule{ID: ruleID(i.Title, i.Title), Language: "python", RuleYAML: "rules: []", Provenance: Provenance{SourceCitation: i.Citation}}, nil
+	return GeneratedRule{ID: ruleID(i.Title, i.Title), Language: "python", RuleYAML: "rules: []",
+		VulnerableSnippet: "eval(x)", PatchedSnippet: "ast.literal_eval(x)",
+		Provenance: Provenance{SourceCitation: i.Citation, Origin: i.Origin}}, nil
 }
 
 type fakeValidator struct{ res ValidationResult }

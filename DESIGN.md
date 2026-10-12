@@ -335,7 +335,7 @@ The agent generates both snippets, ideally seeded from the advisory's real PoC a
 - Rate-limit + cache research per `tech@version`; full re-research only on TTL expiry or a new disclosure.
 - Per-scan budget cap; research is **async/best-effort and never blocks** the core scan from returning results.
 
-**Known gaps.** Citations are checked for presence, not resolved against OSV or NVD. The same model writes the rule and both fixtures, so the gate proves the rule matches its own example, not that the example is a real vulnerability. Rules are not yet demoted automatically when they turn out noisy. Treat generated rules as proposals for a human to review, which is why they start in a report-only shadow window.
+**What the guardrails do and do not establish.** An advisory id the model cites (CVE, GHSA, Go, PyPI, RustSec, OSV) is looked up in OSV, and for a CVE also in the CVE Program's records; an issue whose advisory cannot be found, or that cites no checkable id, is discarded, and if the lookup itself fails nothing from that target is used. The gate rejects a rule with an empty patched example or one identical to the vulnerable example, and a rule that also fires on a small piece of ordinary code in the same language, which catches patterns as broad as `$F(...)`. What remains: the same model still writes the rule and both examples, so the gate shows the rule matches its own example, not that the example is a faithful instance of the advisory. Rules are not yet demoted automatically when they turn out noisy. Treat generated rules as proposals for a human to review, which is why they start in a report-only shadow window. A rule mined from a finding of a rule pack Achilles did not write is not loaded under `--mode commercial`.
 
 ---
 

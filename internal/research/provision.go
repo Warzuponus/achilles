@@ -21,6 +21,7 @@ type RuleSet struct {
 	ShadowDir       string // "" when no rules are currently shadowed
 	ActiveGenerated int    // admitted generated rules promoted to active
 	Shadow          int    // admitted generated rules still shadowed
+	Excluded        int    // admitted rules left out because of where they came from
 }
 
 // admittedCreatedFmt is the date layout the synthesizer writes into a rule's
@@ -63,6 +64,10 @@ func (r *RuleRepo) Provision(baselineDir string, shadowWindow time.Duration, now
 			continue
 		}
 		id := strings.TrimSuffix(e.Name(), ".yaml")
+		if r.excluded[r.admittedMeta(id).Provenance.Origin] {
+			set.Excluded++
+			continue
+		}
 		created := r.admittedCreated(id)
 		shadowed := !created.IsZero() && now.Sub(created) < shadowWindow
 
@@ -82,6 +87,15 @@ func (r *RuleRepo) Provision(baselineDir string, shadowWindow time.Duration, now
 		set.ShadowDir = shadowDir
 	}
 	return set, cleanup, nil
+}
+
+// admittedMeta reads a rule's meta.json sidecar; the zero value if it is missing.
+func (r *RuleRepo) admittedMeta(id string) ruleMeta {
+	var m ruleMeta
+	if b, err := os.ReadFile(filepath.Join(r.AdmittedDir(), id+".meta.json")); err == nil {
+		_ = json.Unmarshal(b, &m)
+	}
+	return m
 }
 
 // admittedCreated reads a rule's admission date from its meta.json sidecar. A

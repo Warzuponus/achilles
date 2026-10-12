@@ -107,8 +107,8 @@ Full walkthrough: [LLM Triage & Agents](llm-and-agents.md).
 | `--calibrate` | `false` | let `--feedback` history rule out findings from chronically false-positive rules **without a model review** (needs ≥10 distinct labeled findings, ≥90% false positive, labels ≤180 days old; never above medium severity). See [LLM Triage & Agents](llm-and-agents.md) |
 | `--rule-health` | `false` | print per-rule TP/FP health from feedback (and what `--calibrate` would rule out), then exit |
 | `--metrics` | `false` | print a metrics rollup over the vault, then exit |
-| `--research` | `false` | research agents synthesize + validate new Opengrep rules |
-| `--mine-rules` | `false` | mine rules from analyst-confirmed findings (needs `--llm-model`) |
+| `--research` | `false` | research agents synthesize + validate new Opengrep rules (experimental). Each advisory id the model cites is looked up at `api.osv.dev` and `cveawg.mitre.org` (only the id is sent); an issue whose advisory cannot be found is discarded |
+| `--mine-rules` | `false` | mine rules from analyst-confirmed findings (needs `--llm-model`; experimental). A rule mined from a finding of a rule pack Achilles did not write is not loaded under `--mode commercial` |
 | `--rule-repo` | `.achilles/generated-rules` | generated-rule repository directory |
 | `--rule-shadow-days` | `7` | admitted generated rules are report-only until this many days old |
 | `--research-max` | `20` | max dependencies to research per run (budget cap) |

@@ -17,6 +17,19 @@ import (
 type RuleRepo struct {
 	dir   string
 	vault vault.Store // may be nil
+	// excluded are provenance origins whose rules Provision must not load.
+	excluded map[string]bool
+}
+
+// ExcludeOrigins makes Provision leave out admitted rules with these provenance
+// origins (see OriginExternalRule). The rules stay in the repository.
+func (r *RuleRepo) ExcludeOrigins(origins ...string) {
+	if r.excluded == nil {
+		r.excluded = map[string]bool{}
+	}
+	for _, o := range origins {
+		r.excluded[o] = true
+	}
 }
 
 func NewRuleRepo(dir string, v vault.Store) *RuleRepo { return &RuleRepo{dir: dir, vault: v} }

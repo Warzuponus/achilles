@@ -169,6 +169,9 @@ Full walkthrough: [LLM Triage & Agents](llm-and-agents.md).
 | `--html-report` | — | self-contained HTML report (findings + AI review/advice/threat-model) |
 | `--sarif-report` | — | unified SARIF 2.1.0 report (for GitHub code scanning etc.): a rule table with severities, stable fingerprints, and verified fixes as SARIF `fixes` |
 | `--json-report` | — | the scan as one JSON document (findings, verdicts, dismissed findings, coverage), for scripts and dashboards |
+| `--gitlab-sast` | — | GitLab SAST security report (publish with `artifacts:reports:sast`): findings in code, with the AI verdict in each finding's details and verified fixes as remediations. See [GitLab CI](ci-and-hub.md#gitlab-ci) |
+| `--gitlab-secret-detection` | — | GitLab secret detection security report (`artifacts:reports:secret_detection`): credential findings, never the matched text |
+| `--gitlab-code-quality` | — | GitLab Code Quality report (`artifacts:reports:codequality`): every finding, shown in the merge request widget on every GitLab tier |
 | `--junit` | — | JUnit XML report (for CI test panels) |
 | `--markdown` | — | Markdown summary (good for a PR comment) |
 | `--github` | `false` | emit GitHub Actions annotations to stdout |

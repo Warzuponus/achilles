@@ -67,6 +67,7 @@ func run(argv []string) error {
 		printVersion(os.Stdout)
 		return nil
 	}
+	o.startedAt = time.Now()
 	o.announceSettings(os.Stderr)
 
 	// One root context for the whole run. Ctrl-C or SIGTERM cancels it, which stops

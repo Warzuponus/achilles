@@ -104,8 +104,10 @@ gating, the GitHub Action, issue filing, `achilles tools install` and `achilles 
 their flags or behavior may change): `--fix-pr`, `--deep-verify`, `--llm-samples`,
 `--calibrate` and `--feedback`, `--rag`, `--threat-model`, `--sbom`, the research
 agents (`--research`, `--mine-rules`), the `anthropic` provider preset, the War Room
-(`achillesd`), the fleet dispatcher (`achilles-fleet`), and `--profile full` with its
-per-language tool images. The [User Guides](docs/README.md) cover each of them.
+(`achillesd`), the fleet dispatcher (`achilles-fleet`), `--profile full` with its
+per-language tool images, and the GitLab report outputs (`--gitlab-sast`,
+`--gitlab-secret-detection`, `--gitlab-code-quality`: checked against GitLab's published
+report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/README.md) cover each of them.
 
 ## Know the limits
 
@@ -148,7 +150,7 @@ scan      load the tool registry → license-mode gate → run the scanners → 
           → baseline and --diff → group the same defect reported by several tools
 review    (--ai) add code context → model verdict → adversarial judge
           → fix suggestion → re-scan the fix
-report    human, HTML, Markdown, SARIF, JUnit → GitHub issues → --fail-on gate
+report    human, HTML, Markdown, SARIF, JUnit, GitLab → GitHub issues → --fail-on gate
 record    every step is appended to the Evidence Vault (a local file, or PostgreSQL)
 ```
 

@@ -32,6 +32,24 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 			return err
 		}
 	}
+	if o.gitlabSAST != "" || o.gitlabSecrets != "" {
+		meta := report.GitLabMeta{Version: currentVersion().Version, Start: o.startedAt, End: time.Now(), Commit: scannedCommit(o)}
+		if o.gitlabSAST != "" {
+			if err := writeToFile(o.gitlabSAST, func(w io.Writer) error { return report.WriteGitLabSAST(w, scan, meta) }); err != nil {
+				return err
+			}
+		}
+		if o.gitlabSecrets != "" {
+			if err := writeToFile(o.gitlabSecrets, func(w io.Writer) error { return report.WriteGitLabSecretDetection(w, scan, meta) }); err != nil {
+				return err
+			}
+		}
+	}
+	if o.gitlabCodeQuality != "" {
+		if err := writeToFile(o.gitlabCodeQuality, func(w io.Writer) error { return report.WriteGitLabCodeQuality(w, scan) }); err != nil {
+			return err
+		}
+	}
 	if o.junitOut != "" {
 		if err := writeToFile(o.junitOut, func(w io.Writer) error { return report.WriteJUnit(w, scan) }); err != nil {
 			return err
@@ -76,6 +94,15 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 		fmt.Fprintf(os.Stderr, "achilles: wrote baseline (%d finding(s)) to %s\n", len(inScope), o.writeBl)
 	}
 	return issuesErr
+}
+
+// scannedCommit is the commit under scan, when the run was told or the CI system
+// says: --source-commit, then GitLab's CI_COMMIT_SHA. Empty when unknown.
+func scannedCommit(o *options) string {
+	if o.sourceCommit != "" {
+		return o.sourceCommit
+	}
+	return os.Getenv("CI_COMMIT_SHA")
 }
 
 // writeDiagnostics is the observability sidecar: coverage gaps (tools that failed

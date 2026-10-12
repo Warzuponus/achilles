@@ -9,6 +9,15 @@ All notable changes to this project are recorded here. The format follows
 First public release (`v0.1.0`) is pending.
 
 ### Added
+- **GitLab reports.** `--gitlab-sast`, `--gitlab-secret-detection` and
+  `--gitlab-code-quality` write the formats GitLab reads from job artifacts
+  (`artifacts:reports:sast`, `secret_detection`, `codequality`). The security reports
+  follow GitLab's security report schema 15.0.0 and carry the AI verdict and reasoning
+  in each finding's details, verified fixes as remediations, a "likely false positive"
+  flag on findings kept with `--keep-dismissed`, and a `failure` status naming any
+  scanner that did not run. The Code Quality report holds every finding and is the one
+  GitLab shows on merge requests on every tier. Credential findings never include the
+  matched text. An example job is in `examples/gitlab/.gitlab-ci.yml`.
 - **Settings files.** Flags can be written down as a flat YAML mapping. `.achilles.yaml`
   in the scanned repository may set the flags that shape its own scan (`profile`,
   `timeout`, `exclude`, `no-default-excludes`, `fail-on`, `baseline`, `keep-dismissed`,

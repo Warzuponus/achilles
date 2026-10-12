@@ -135,6 +135,69 @@ Download the report from **the run → Artifacts → `achilles-report`**: it hol
 `report.html`, `report.md` and `achilles.sarif`. There is no cloud vault: the
 artifacts are the record.
 
+## GitLab CI
+
+Achilles writes the report formats GitLab reads from job artifacts, so it runs as an
+ordinary job. A complete example is in
+[`examples/gitlab/.gitlab-ci.yml`](../examples/gitlab/.gitlab-ci.yml):
+
+```yaml
+achilles:
+  stage: test
+  image: ghcr.io/warzuponus/achilles:latest   # pin a release tag
+  script:
+    - >-
+      achilles
+      --gitlab-sast gl-sast-report.json
+      --gitlab-secret-detection gl-secret-detection-report.json
+      --gitlab-code-quality gl-code-quality-report.json
+      --fail-on high
+      .
+  artifacts:
+    when: always
+    reports:
+      sast: gl-sast-report.json
+      secret_detection: gl-secret-detection-report.json
+      codequality: gl-code-quality-report.json
+```
+
+| Flag | GitLab report | Holds | Where GitLab shows it |
+|------|---------------|-------|-----------------------|
+| `--gitlab-sast` | `artifacts:reports:sast` | findings in code | merge request security widget, pipeline Security tab, vulnerability report (Ultimate) |
+| `--gitlab-secret-detection` | `artifacts:reports:secret_detection` | credential findings, never the matched text | the same places (Ultimate) |
+| `--gitlab-code-quality` | `artifacts:reports:codequality` | every finding, credential messages masked | merge request widget and diff, on every tier |
+
+What to know:
+
+- **Without Ultimate, use the Code Quality report.** GitLab accepts the security
+  reports on any tier but only displays them on Ultimate. The Code Quality report is
+  the one every tier shows on a merge request, which is why it carries all findings,
+  dependency advisories included.
+- **`when: always`** uploads the reports when `--fail-on` fails the job, which is the
+  run you most want them from.
+- **Only findings that count are written**: the ones the gate sees. Findings the AI
+  review dismissed are left out; with `--keep-dismissed` they are written and marked
+  with GitLab's "likely false positive" flag, with the reason. Each finding carries
+  the AI verdict and reasoning in its details, and a fix that passed re-scan
+  verification is attached as a remediation.
+- **An incomplete scan says so.** If a scanner could not run, the report's scan
+  status is `failure` and a message names the tool; the findings from the scanners
+  that did run are still there.
+- **Dependency advisories** are not written as a GitLab dependency scanning report
+  (that format needs per-package data Achilles does not keep). They are in the Code
+  Quality report and in Achilles' own reports.
+- **Schema.** The security reports declare version 15.0.0 of GitLab's
+  [security report schemas](https://gitlab.com/gitlab-org/security-products/security-report-schemas),
+  the oldest of the 15.x line, and use only fields present in every 15.x version.
+  Secret findings name the scanned commit (`$CI_COMMIT_SHA`, or `--source-commit`).
+- **Only new findings on a merge request:** add
+  `--diff origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME` in merge request pipelines
+  (fetch that branch first, or set `GIT_DEPTH: "0"`), and a committed baseline as
+  described in [Reports & Gating](reports-and-gating.md).
+
+The GitHub-specific outputs (`--github`, `--pr-comment`, `--pr-review`,
+`--file-issues`, `--fix-pr`) have no GitLab counterpart yet.
+
 ## Keeping history across CI runs
 
 By default a CI scan's Evidence Vault is ephemeral — it lives and dies with the
@@ -165,3 +228,4 @@ the run exits non-zero rather than silently reporting success.
 | Deep AI analysis with per-task models | B2 (routed full scan) |
 | One place to scan many repos, no per-repo setup | C (scan hub) |
 | Many repos on a schedule, from one machine | [Fleet](fleet.md) |
+| A GitLab pipeline | [GitLab CI](#gitlab-ci) |

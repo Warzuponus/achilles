@@ -195,6 +195,11 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **The JUnit report no longer shows an incomplete scan as a pass.** It listed findings as
+  failures and nothing else, so a run in which scanners failed and nothing was found was
+  an empty, green suite. Each failed or incomplete scanner (and an AI review that did not
+  complete) is now a test case in error. Credential findings' messages are masked there
+  as in the other reports.
 - **A vault that cannot be read is an error, not an empty result.** The vault's read methods
   return no error, so a PostgreSQL outage came back as "nothing there": the War Room showed
   "No runs yet", `--metrics` said no scans were recorded, and a scan ran as if there were

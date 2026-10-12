@@ -113,3 +113,52 @@ func TestWriteGitHubAnnotations(t *testing.T) {
 		t.Errorf("medium finding should be a warning annotation:\n%s", out)
 	}
 }
+
+// A JUnit report with no failing case is shown as a green run. A scan in which a
+// scanner did not run found nothing because it looked at nothing.
+func TestWriteJUnit_AnIncompleteScanIsNotGreen(t *testing.T) {
+	scan := model.Scan{
+		FailedTools: []string{"gitleaks", "trivy"},
+		Triage:      &model.TriageStats{Aborted: "401 invalid api key"},
+	}
+	var buf bytes.Buffer
+	if err := WriteJUnit(&buf, scan); err != nil {
+		t.Fatal(err)
+	}
+	var suites junitSuites
+	if err := xml.Unmarshal(buf.Bytes(), &suites); err != nil {
+		t.Fatalf("output is not valid JUnit XML: %v\n%s", err, buf.String())
+	}
+	if suites.Errors != 3 || suites.Failures != 0 || suites.Tests != 3 {
+		t.Errorf("tests=%d failures=%d errors=%d, want 3 tests, all errors (two scanners and the review)", suites.Tests, suites.Failures, suites.Errors)
+	}
+	out := buf.String()
+	for _, want := range []string{"scanner gitleaks completed", "scanner trivy completed", "AI review completed", "<error "} {
+		if !strings.Contains(out, want) {
+			t.Errorf("JUnit report lacks %q:\n%s", want, out)
+		}
+	}
+
+	// A complete scan with no findings is still an empty, passing suite.
+	buf.Reset()
+	if err := WriteJUnit(&buf, model.Scan{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := xml.Unmarshal(buf.Bytes(), &suites); err != nil || suites.Errors != 0 || suites.Failures != 0 {
+		t.Errorf("a clean, complete scan must have no errors or failures: %+v (%v)", suites, err)
+	}
+}
+
+func TestWriteJUnit_CredentialMessagesAreMasked(t *testing.T) {
+	scan := model.Scan{Findings: []model.Finding{{
+		Tool: "gitleaks", RuleID: "generic-api-key", Category: model.CategorySecret,
+		Message: "found 0123456789abcdef0123456789abcdef0123 in config",
+	}}}
+	var buf bytes.Buffer
+	if err := WriteJUnit(&buf, scan); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "0123456789abcdef0123456789abcdef0123") {
+		t.Errorf("the JUnit report quotes a credential:\n%s", buf.String())
+	}
+}

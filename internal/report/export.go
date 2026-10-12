@@ -131,6 +131,7 @@ type junitSuites struct {
 	XMLName  xml.Name     `xml:"testsuites"`
 	Tests    int          `xml:"tests,attr"`
 	Failures int          `xml:"failures,attr"`
+	Errors   int          `xml:"errors,attr"`
 	Suites   []junitSuite `xml:"testsuite"`
 }
 
@@ -138,6 +139,7 @@ type junitSuite struct {
 	Name     string      `xml:"name,attr"`
 	Tests    int         `xml:"tests,attr"`
 	Failures int         `xml:"failures,attr"`
+	Errors   int         `xml:"errors,attr"`
 	Cases    []junitCase `xml:"testcase"`
 }
 
@@ -145,6 +147,7 @@ type junitCase struct {
 	Name      string        `xml:"name,attr"`
 	Classname string        `xml:"classname,attr"`
 	Failure   *junitFailure `xml:"failure,omitempty"`
+	Error     *junitFailure `xml:"error,omitempty"`
 }
 
 type junitFailure struct {
@@ -152,22 +155,49 @@ type junitFailure struct {
 	Text    string `xml:",chardata"`
 }
 
-// WriteJUnit emits JUnit XML (each finding is a failing test case) for CI
-// systems that render test reports.
+// WriteJUnit emits JUnit XML for CI systems that render test reports. Each
+// finding is a failing test case. Each scanner that failed, or could not analyze
+// everything, is a test case in error: a JUnit report with no failures is rendered
+// as a green run, and a scan whose scanners did not run is not one.
 func WriteJUnit(w io.Writer, s model.Scan) error {
-	suite := junitSuite{Name: "achilles", Tests: len(s.Findings), Failures: len(s.Findings)}
+	suite := junitSuite{Name: "achilles"}
+	for _, tool := range s.FailedTools {
+		suite.Errors++
+		suite.Cases = append(suite.Cases, junitCase{
+			Name:      fmt.Sprintf("scanner %s completed", tool),
+			Classname: "achilles.scan",
+			Error: &junitFailure{
+				Message: fmt.Sprintf("%s failed to run or could not analyze everything; the scan is incomplete", tool),
+				Text:    "A missing result from this scanner is not evidence of safety. See the run log, --diagnostics, or `achilles doctor`.",
+			},
+		})
+	}
+	if t := s.Triage; t != nil && t.Aborted != "" {
+		suite.Errors++
+		suite.Cases = append(suite.Cases, junitCase{
+			Name:      "AI review completed",
+			Classname: "achilles.review",
+			Error:     &junitFailure{Message: "the AI review did not complete: " + t.Aborted, Text: "The findings in this report were not reviewed."},
+		})
+	}
 	for _, f := range s.Findings {
 		loc := f.Location.File
 		if f.Location.Region.StartLine > 0 {
 			loc = fmt.Sprintf("%s:%d", loc, f.Location.Region.StartLine)
 		}
+		msg := f.Message
+		if f.IsSecret() {
+			msg = redact.Secrets(msg) // a test report is a CI artifact many people can open
+		}
+		suite.Failures++
 		suite.Cases = append(suite.Cases, junitCase{
 			Name:      fmt.Sprintf("%s (%s)", f.RuleID, loc),
 			Classname: f.Tool,
-			Failure:   &junitFailure{Message: f.Message, Text: fmt.Sprintf("[%s] %s at %s", f.Severity, f.RuleID, loc)},
+			Failure:   &junitFailure{Message: msg, Text: fmt.Sprintf("[%s] %s at %s", f.Severity, f.RuleID, loc)},
 		})
 	}
-	doc := junitSuites{Tests: len(s.Findings), Failures: len(s.Findings), Suites: []junitSuite{suite}}
+	suite.Tests = len(suite.Cases)
+	doc := junitSuites{Tests: suite.Tests, Failures: suite.Failures, Errors: suite.Errors, Suites: []junitSuite{suite}}
 	if _, err := io.WriteString(w, xml.Header); err != nil {
 		return err
 	}

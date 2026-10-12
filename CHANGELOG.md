@@ -88,6 +88,13 @@ First public release (`v0.1.0`) is pending.
   current directory.
 
 ### Security
+- **Credential masking covers more shapes.** Text sent to a model, written to reports and
+  issues, or shown in the War Room now also masks: the password in a URL
+  (`postgres://user:password@host`), `Authorization: Basic` and opaque `Bearer` tokens,
+  Stripe `sk_live_`/`rk_live_` keys, `secretKey`/`SECRET_KEY`/`secret_access_key`
+  assignments, Slack and Discord webhook URLs, and PGP private key blocks. A placeholder
+  in a password position (`%s`, `${VAR}`, `{password}`) is left alone, so a reviewer can
+  still tell a templated credential from a hardcoded one.
 - The toolchain floor moves to Go 1.27.2 and `golang.org/x/text` to v0.43.0, clearing 13
   known vulnerabilities that `govulncheck` showed this code reaching (HTTP/1 and HTTP/2
   request handling, `html/template`, `mime/multipart`, TLS, and an `x/text` panic). CI

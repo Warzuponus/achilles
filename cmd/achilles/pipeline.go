@@ -314,10 +314,11 @@ func correlateFindings(o *options, ev vault.Store, runID string, scan *model.Sca
 	clusters := correlate.Clusters(scan.Findings)
 	correlate.Annotate(scan.Findings, clusters)
 	if len(clusters) > 0 {
+		saved := correlate.Saved(scan.Findings, clusters)
 		fmt.Fprintf(os.Stderr, "achilles: correlated %d finding(s) into %d cross-tool cluster(s) — %d LLM triage pass(es) saved (--no-correlate to disable)\n",
-			len(clusters)+correlate.Saved(clusters), len(clusters), correlate.Saved(clusters))
+			correlate.Size(clusters), len(clusters), saved)
 		recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta, Source: "correlate"},
-			map[string]any{"clusters": len(clusters), "triagePassesSaved": correlate.Saved(clusters)})
+			map[string]any{"clusters": len(clusters), "triagePassesSaved": saved})
 	}
 	return clusters
 }

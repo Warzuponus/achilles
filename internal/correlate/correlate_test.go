@@ -32,8 +32,8 @@ func TestClusters_MergesSameLocationAndCWEAcrossTools(t *testing.T) {
 	if !reflect.DeepEqual(got[0].Members, []int{0}) {
 		t.Errorf("members = %v, want [0]", got[0].Members)
 	}
-	if Saved(got) != 1 {
-		t.Errorf("Saved = %d, want 1", Saved(got))
+	if Saved(fs, got) != 1 {
+		t.Errorf("Saved = %d, want 1", Saved(fs, got))
 	}
 }
 
@@ -143,8 +143,8 @@ func TestClusters_TieOnSeverityPicksLowestIndex(t *testing.T) {
 	if !reflect.DeepEqual(got[0].Members, []int{1, 2}) {
 		t.Errorf("members = %v, want [1 2]", got[0].Members)
 	}
-	if Saved(got) != 2 {
-		t.Errorf("Saved = %d, want 2", Saved(got))
+	if Saved(fs, got) != 2 {
+		t.Errorf("Saved = %d, want 2", Saved(fs, got))
 	}
 }
 
@@ -212,7 +212,82 @@ func TestClusters_EmptyInput(t *testing.T) {
 	if got := Clusters(nil); len(got) != 0 {
 		t.Errorf("nil input should yield no clusters, got %+v", got)
 	}
-	if Saved(nil) != 0 {
-		t.Error("Saved(nil) should be 0")
+	if Saved(nil, nil) != 0 {
+		t.Error("Saved(nil, nil) should be 0")
+	}
+}
+
+// The key used to be the identical SET of CWEs, so two tools describing one defect
+// with slightly different ids never clustered: gosec says CWE-78, Opengrep says
+// CWE-77 and CWE-78, and each got its own pair of model calls.
+func TestClusters_MergesOverlappingAndRelatedCWEs(t *testing.T) {
+	cases := []struct {
+		name string
+		a, b []string
+		want bool
+	}{
+		{"one shared CWE among several", []string{"CWE-78"}, []string{"CWE-77", "CWE-78"}, true},
+		{"parent and child", []string{"CWE-78"}, []string{"CWE-77"}, true},
+		{"two children of one parent", []string{"CWE-259"}, []string{"CWE-321"}, true},
+		{"weak hash and weak cryptography", []string{"CWE-328"}, []string{"CWE-327"}, true},
+		{"unrelated weaknesses on one line", []string{"CWE-89"}, []string{"CWE-306"}, false},
+		{"injection kinds are not one family", []string{"CWE-89"}, []string{"CWE-78"}, false},
+	}
+	for _, c := range cases {
+		fs := []model.Finding{
+			f("opengrep", "r1", 42, model.SeverityHigh, c.a...),
+			f("gosec", "r2", 42, model.SeverityHigh, c.b...),
+		}
+		if got := len(Clusters(fs)) == 1; got != c.want {
+			t.Errorf("%s: clustered = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// Sharing is transitive at one place: A and B share one CWE, B and C another.
+func TestClusters_SharedLabelsChainWithinOneLine(t *testing.T) {
+	fs := []model.Finding{
+		f("opengrep", "a", 42, model.SeverityLow, "CWE-22"),
+		f("gosec", "b", 42, model.SeverityHigh, "CWE-22", "CWE-73"),
+		f("bandit", "c", 42, model.SeverityMedium, "CWE-73"),
+		f("trivy", "d", 42, model.SeverityHigh, "CWE-798"), // same line, another defect
+	}
+	got := Clusters(fs)
+	want := []Cluster{{Rep: 1, Members: []int{0, 2}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestClusters_CredentialsAndAdvisories(t *testing.T) {
+	secret := func(tool, rule string, line int) model.Finding {
+		x := f(tool, rule, line, model.SeverityHigh)
+		x.Category = model.CategorySecret
+		return x
+	}
+	advisory := func(tool, id, file string) model.Finding {
+		return model.Finding{Tool: tool, RuleID: id, Severity: model.SeverityHigh, Category: model.CategoryDependency,
+			Fingerprint: tool + ":" + id, Location: model.Location{File: file}}
+	}
+	fs := []model.Finding{
+		secret("gitleaks", "aws-access-token", 7),
+		secret("trivy", "aws-access-key-id", 7), // same line, another tool's name for it
+		secret("trivy", "github-pat", 9),        // another line: another credential
+		advisory("osv-scanner", "CVE-2024-1234", "go.mod"),
+		advisory("trivy", "cve-2024-1234", "go.mod"),                // same advisory, same manifest, no line
+		advisory("trivy", "CVE-2024-9999", "go.mod"),                // another advisory
+		advisory("trivy", "CVE-2024-1234", "web/package-lock.json"), // same id, another manifest
+	}
+	got := Clusters(fs)
+	want := []Cluster{{Rep: 0, Members: []int{1}}, {Rep: 3, Members: []int{4}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	// Neither kind is ever sent to a model, so nothing is saved by clustering them.
+	if Saved(fs, got) != 0 {
+		t.Errorf("Saved = %d, want 0: credentials and advisories are not triaged", Saved(fs, got))
+	}
+	if Size(got) != 4 {
+		t.Errorf("Size = %d, want 4", Size(got))
 	}
 }

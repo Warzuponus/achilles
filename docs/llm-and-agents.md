@@ -179,11 +179,16 @@ spend outpaces the estimate.
 ## Cross-tool correlation (before triage)
 
 Achilles runs overlapping engines on purpose, so the same defect often arrives from
-two or three tools — Opengrep and gosec on one Go line, Trivy and Checkov on one
-infrastructure-as-code resource. Before triage, findings that share a **file, line, and CWE set**
-but come from **different tools** are grouped into a cluster, and only the
-highest-severity member is sent to the LLM. The rest inherit its verdict, so a
-defect costs one triage+judge pair no matter how many tools reported it.
+two or three tools — Opengrep and gosec on one Go line, two secret scanners on one
+credential, two dependency scanners on one advisory. Before triage, findings from
+**different tools** at the same **file and line** that are about the same weakness
+are grouped into a cluster: they share a CWE, or CWEs that are parent and child (one
+tool says CWE-78, another CWE-77). Only the highest-severity member is sent to the
+LLM. The rest inherit its verdict, so a defect costs one triage+judge pair no matter
+how many tools reported it. Two credential findings on one line, and two advisories
+with the same id against the same manifest, are clustered too so the report can say
+the tools agree; neither is ever sent to a model. Findings with no CWE and no such
+identity (most infrastructure-as-code findings) are not clustered.
 
 Correlation **collapses nothing**: every finding keeps its own fingerprint,
 severity, and behaviour under `--baseline`, `--file-issues`, and `--fail-on`. The

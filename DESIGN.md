@@ -209,7 +209,7 @@ Storage: a JSONL file (the default) or PostgreSQL, both behind the `vault.Store`
 
 This is the product's differentiator.
 
-**Step 0 — Correlate** *(`internal/correlate`, `--no-correlate` to disable)*: before any model call, findings that different tools reported for the same defect (same file + line + CWE set) are grouped, and only the cluster's highest-severity member goes through steps 1–3. The others inherit its verdict, recorded to the vault under source `correlation` with `Provenance.CorrelatedFrom` naming the representative's fingerprint. The key is deliberately strict (no CWE or no line number → never clustered; same-tool repeats → never clustered) because a wrong merge yields a wrong verdict while a missed merge only costs one extra LLM call. Nothing is collapsed: identity, severity, and gating are untouched, which is what makes it safe on by default.
+**Step 0 — Correlate** *(`internal/correlate`, `--no-correlate` to disable)*: before any model call, findings that different tools reported for the same defect (same file and line, and a shared CWE or CWEs that are parent and child) are grouped, and only the cluster's highest-severity member goes through steps 1–3. The others inherit its verdict, recorded to the vault under source `correlation` with `Provenance.CorrelatedFrom` naming the representative's fingerprint. The key is deliberately strict (no CWE or no line number → never clustered; same-tool repeats → never clustered) because a wrong merge yields a wrong verdict while a missed merge only costs one extra LLM call. Nothing is collapsed: identity, severity, and gating are untouched, which is what makes it safe on by default.
 
 Then for each finding (or correlated cluster representative):
 

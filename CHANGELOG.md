@@ -223,6 +223,12 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Cross-tool correlation actually finds the overlap.** Two findings clustered only if
+  they had the identical set of CWEs, so tools that describe one defect with different
+  ids (CWE-78 and CWE-77, or one CWE against two) never did, and each got its own model
+  calls. Findings at the same file and line now cluster when they share a CWE or their
+  CWEs are parent and child. Two credential findings on one line, and two advisories with
+  the same id against one manifest, are also shown as agreeing.
 - **Fix verification no longer skips source directories named like build output.** The
   verification copy leaves out `build`, `dist`, `target` and `out`, and a finding inside
   one was reported `skipped`. Those are also ordinary names for source directories

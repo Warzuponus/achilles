@@ -63,6 +63,9 @@ First public release (`v0.1.0`) is pending.
   [Benchmarking Detection](docs/benchmarking.md).
 
 ### Changed
+- Vault records carry a format version (`v`), stamped by both the file and PostgreSQL
+  stores, so a later release can tell what it is reading and migrate it. Records written
+  before this read back as version 0; the PostgreSQL column is added on first open.
 - CI runs `staticcheck` (for Linux, Windows and macOS builds) in a new `lint` job; `make
   lint` was only `go vet`. Its two findings are fixed.
 - Less repeated work on large repositories: a source file is read once per run for code

@@ -36,8 +36,19 @@ const (
 	KindThreatModel Kind = "threat_model" // OTM threat model (--threat-model)
 )
 
+// SchemaVersion is the version of the record format this build writes. It is
+// stamped on every record so that a later build can tell which shape a stored
+// record has, and migrate or reinterpret it, instead of guessing. Records written
+// before versioning existed read back as version 0.
+//
+// Bump it when the meaning or shape of a record's fields or payloads changes in a
+// way a reader has to know about (not for a new optional field).
+const SchemaVersion = 1
+
 // Record is one immutable entry.
 type Record struct {
+	// V is the SchemaVersion the record was written with; stores set it on Append.
+	V             int             `json:"v,omitempty"`
 	ID            string          `json:"id"`
 	RunID         string          `json:"runId"`
 	Phase         string          `json:"phase,omitempty"`

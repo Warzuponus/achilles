@@ -256,3 +256,41 @@ func TestFileStore_AppendAfterATornWriteKeepsTheNewRecord(t *testing.T) {
 		t.Errorf("records=%d skipped=%d, want 2 intact and 1 skipped", n, final.Skipped())
 	}
 }
+
+// Every record says which format it was written in, so a later build can tell what
+// it is reading. Records from before versioning read back as 0.
+func TestFileStore_RecordsCarryTheSchemaVersion(t *testing.T) {
+	warnings := quietWarn(t)
+	fs, path := newTestStore(t)
+	rec, err := fs.Append(Record{RunID: "a", Kind: KindFinding})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.V != SchemaVersion {
+		t.Errorf("Append returned V=%d, want %d", rec.V, SchemaVersion)
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), `"v":1`) {
+		t.Errorf("the version is not on disk: %s", raw)
+	}
+
+	// An old, unversioned line and one from a newer build.
+	f, _ := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	f.WriteString(`{"id":"old","runId":"a","kind":"finding","ts":"2026-01-01T00:00:00Z"}` + "\n")
+	f.WriteString(`{"v":99,"id":"future","runId":"a","kind":"finding","ts":"2026-01-01T00:00:00Z"}` + "\n")
+	f.Close()
+
+	re, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if old, ok := re.Get("old"); !ok || old.V != 0 {
+		t.Errorf("an unversioned record must read back as version 0: %+v (found=%v)", old, ok)
+	}
+	if fut, ok := re.Get("future"); !ok || fut.V != 99 {
+		t.Errorf("a newer record is still read, as far as it can be: %+v (found=%v)", fut, ok)
+	}
+	if len(*warnings) != 1 || !strings.Contains((*warnings)[0], "newer Achilles") {
+		t.Errorf("reading a newer record format must be announced once, got %q", *warnings)
+	}
+}

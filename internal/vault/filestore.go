@@ -40,6 +40,8 @@ type FileStore struct {
 
 	// skipped counts lines that could not be decoded (see refresh).
 	skipped int
+	// warnedNewer: the notice about records from a newer build was given.
+	warnedNewer bool
 
 	health readHealth
 }
@@ -127,6 +129,11 @@ func (fs *FileStore) refresh() error {
 			}
 			continue
 		}
+		if rec.V > SchemaVersion && !fs.warnedNewer {
+			fs.warnedNewer = true
+			Warn(fmt.Sprintf("achilles: vault %s holds records written by a newer Achilles (record format %d; this build understands %d). "+
+				"They are read as far as this build understands them; upgrade to be sure nothing is misread", fs.path, rec.V, SchemaVersion))
+		}
 		fs.records = append(fs.records, rec)
 		fs.byID[rec.ID] = rec
 	}
@@ -173,6 +180,7 @@ func (fs *FileStore) Append(r Record) (Record, error) {
 	if r.Timestamp.IsZero() {
 		r.Timestamp = fs.now()
 	}
+	r.V = SchemaVersion
 	// The sequence is the count AFTER folding in other writers' records, so IDs
 	// stay unique across processes.
 	r.ID = computeID(r, len(fs.records))

@@ -46,6 +46,9 @@ var pgSchema = []string{
 	`CREATE INDEX IF NOT EXISTS vault_records_run_idx  ON ` + pgTable + ` (tenant, run_id, seq)`,
 	`CREATE INDEX IF NOT EXISTS vault_records_fp_idx   ON ` + pgTable + ` (tenant, fingerprint, seq)`,
 	`CREATE INDEX IF NOT EXISTS vault_records_ts_idx   ON ` + pgTable + ` (tenant, ts)`,
+	// The record format version (vault.SchemaVersion). Added after the table
+	// first shipped, so it is an ALTER; rows written before it existed read as 0.
+	`ALTER TABLE ` + pgTable + ` ADD COLUMN IF NOT EXISTS v INTEGER NOT NULL DEFAULT 0`,
 }
 
 // PostgresStore is an Evidence Vault in PostgreSQL. All tenants share one table;
@@ -175,21 +178,22 @@ func (s *PostgresStore) Append(r Record) (Record, error) {
 		return Record{}, fmt.Errorf("record id: %w", err)
 	}
 	r.ID = id
+	r.V = SchemaVersion
 
 	ctx, cancel := context.WithTimeout(context.Background(), pgOpTimeout)
 	defer cancel()
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO `+pgTable+` (tenant, id, run_id, phase, kind, source, prompt_version, fingerprint, prev_id, ts, payload)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		`INSERT INTO `+pgTable+` (tenant, id, run_id, phase, kind, source, prompt_version, fingerprint, prev_id, ts, payload, v)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
 		s.tenant, r.ID, r.RunID, r.Phase, string(r.Kind), r.Source, r.PromptVersion, r.Fingerprint, r.PrevID,
-		r.Timestamp, []byte(r.Payload))
+		r.Timestamp, []byte(r.Payload), r.V)
 	if err != nil {
 		return Record{}, fmt.Errorf("append to postgres vault: %w", err)
 	}
 	return r, nil
 }
 
-const pgColumns = `id, run_id, phase, kind, source, prompt_version, fingerprint, prev_id, ts, payload`
+const pgColumns = `id, run_id, phase, kind, source, prompt_version, fingerprint, prev_id, ts, payload, v`
 
 // Get returns a record by ID.
 func (s *PostgresStore) Get(id string) (Record, bool) {
@@ -251,7 +255,7 @@ func (s *PostgresStore) query(q string, args ...any) (out []Record) {
 			payload []byte
 		)
 		if err := rows.Scan(&r.ID, &r.RunID, &r.Phase, &kind, &r.Source, &r.PromptVersion,
-			&r.Fingerprint, &r.PrevID, &r.Timestamp, &payload); err != nil {
+			&r.Fingerprint, &r.PrevID, &r.Timestamp, &payload, &r.V); err != nil {
 			readErr = fmt.Errorf("postgres vault scan: %w", err)
 			fmt.Fprintf(os.Stderr, "achilles: postgres vault scan failed: %v\n", err)
 			return out

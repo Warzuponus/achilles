@@ -195,6 +195,11 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **One damaged line no longer disables the file vault.** A line that could not be decoded
+  (a write cut short by a crash or a full disk) made every later open fail, and every
+  later write with it, until the file was repaired by hand. Such a line is now skipped
+  with a one-line notice and the intact records are kept. A write that follows a torn
+  one is no longer glued onto the fragment and lost with it.
 - **Vault write failures during the AI phases are reported.** Triage, the repo review, the
   dependency advisor, the threat model and the research agents discarded the error from
   every vault write; only the pipeline's own writes were counted. A disk that filled

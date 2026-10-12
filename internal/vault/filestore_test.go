@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -171,5 +172,87 @@ func TestPurge_KeepsTheVaultPrivate(t *testing.T) {
 	}
 	if perm := st.Mode().Perm(); perm != 0o600 {
 		t.Errorf("vault is %04o after a purge, want 0600", perm)
+	}
+}
+
+func quietWarn(t *testing.T) *[]string {
+	t.Helper()
+	var got []string
+	old := Warn
+	Warn = func(msg string) { got = append(got, msg) }
+	t.Cleanup(func() { Warn = old })
+	return &got
+}
+
+// One undecodable line used to make every open fail, and with it every Append:
+// recording stopped for good until someone repaired the file by hand.
+func TestFileStore_ADamagedLineDoesNotBrickTheVault(t *testing.T) {
+	warnings := quietWarn(t)
+	fs, path := newTestStore(t)
+	if _, err := fs.Append(Record{RunID: "a", Kind: KindFinding}); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("{\"id\":\"torn\",\"run\n") // a damaged line in the middle
+	f.Close()
+	if _, err := fs.Append(Record{RunID: "a", Kind: KindVerdict}); err != nil {
+		t.Fatalf("Append after a damaged line: %v", err)
+	}
+
+	reopened, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("open a vault with one damaged line: %v", err)
+	}
+	if got := len(reopened.ByRun("a")); got != 2 {
+		t.Errorf("want both intact records, got %d", got)
+	}
+	if reopened.Skipped() != 1 {
+		t.Errorf("Skipped() = %d, want 1", reopened.Skipped())
+	}
+	if _, err := reopened.Append(Record{RunID: "a", Kind: KindFeedback}); err != nil {
+		t.Errorf("the reopened vault must accept writes: %v", err)
+	}
+	if len(*warnings) == 0 || !strings.Contains((*warnings)[0], "damaged line") {
+		t.Errorf("skipping a line must be announced, got %q", *warnings)
+	}
+}
+
+// A crash or a full disk mid-write leaves a fragment with no newline at the end.
+// The next record must not be glued onto it and lost with it.
+func TestFileStore_AppendAfterATornWriteKeepsTheNewRecord(t *testing.T) {
+	quietWarn(t)
+	fs, path := newTestStore(t)
+	if _, err := fs.Append(Record{RunID: "a", Kind: KindFinding}); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(`{"id":"torn","runID":"a","ki`) // no newline: the write was cut off
+	f.Close()
+
+	// A different process picks up where the crashed one left off.
+	other, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := other.Append(Record{RunID: "a", Kind: KindVerdict, Source: "after-the-crash"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	final, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := final.Get(rec.ID); !ok || got.Source != "after-the-crash" {
+		t.Errorf("the record written after the torn one was lost (found=%v)", ok)
+	}
+	if n := len(final.ByRun("a")); n != 2 || final.Skipped() != 1 {
+		t.Errorf("records=%d skipped=%d, want 2 intact and 1 skipped", n, final.Skipped())
 	}
 }

@@ -37,6 +37,20 @@ type FileStore struct {
 	// complete lines, so a writer caught mid-append is picked up next time.
 	seen   os.FileInfo
 	offset int64
+
+	// skipped counts lines that could not be decoded (see refresh).
+	skipped int
+}
+
+// Warn receives the one-line notice a FileStore gives when it has to skip a
+// damaged line. It defaults to stderr; tests replace it.
+var Warn = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
+
+// Skipped reports how many damaged lines this store has passed over.
+func (fs *FileStore) Skipped() int {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	return fs.skipped
 }
 
 // NewFileStore opens (or creates on first append) a vault at path, loading any
@@ -93,7 +107,17 @@ func (fs *FileStore) refresh() error {
 		}
 		var rec Record
 		if err := json.Unmarshal(line, &rec); err != nil {
-			return fmt.Errorf("decode vault record: %w", err)
+			// One damaged line (a write torn by a crash or a full disk, a stray
+			// edit) must not take the vault down: failing here made every later
+			// open and every later Append fail too, so a single bad line stopped
+			// all recording until someone repaired the file by hand. Skip it, say
+			// so once, and keep everything that is intact.
+			fs.skipped++
+			if fs.skipped == 1 {
+				Warn(fmt.Sprintf("achilles: vault %s: skipping a damaged line ending at byte %d (%v); the other records are intact",
+					fs.path, fs.offset, err))
+			}
+			continue
 		}
 		fs.records = append(fs.records, rec)
 		fs.byID[rec.ID] = rec
@@ -102,7 +126,7 @@ func (fs *FileStore) refresh() error {
 }
 
 func (fs *FileStore) reset() {
-	fs.records, fs.byID, fs.seen, fs.offset = nil, map[string]Record{}, nil, 0
+	fs.records, fs.byID, fs.seen, fs.offset, fs.skipped = nil, map[string]Record{}, nil, 0, 0
 }
 
 // lock takes the cross-process write lock and brings memory up to date; the
@@ -155,6 +179,12 @@ func (fs *FileStore) Append(r Record) (Record, error) {
 	line, err := json.Marshal(r)
 	if err != nil {
 		return Record{}, fmt.Errorf("marshal record: %w", err)
+	}
+	// If an earlier write was cut short, the file ends in a fragment with no
+	// newline. Appending straight after it would glue this record onto the
+	// fragment and lose both; end the fragment's line first so only it is lost.
+	if fi, err := f.Stat(); err == nil && fi.Size() > fs.offset {
+		line = append([]byte{'\n'}, line...)
 	}
 	if _, err := f.Write(append(line, '\n')); err != nil {
 		return Record{}, fmt.Errorf("write record: %w", err)

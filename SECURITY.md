@@ -113,6 +113,17 @@ What Achilles does about it:
   **incomplete**, which fails a `--strict-tools` run. Its findings still count; its
   silence is not treated as evidence.
 
+The repository's own Achilles settings file, `.achilles.yaml`, is held to the same
+rules and to a tighter one. It can set only the flags that shape the scan of that
+repository (profile, exclusions, baseline, timeout, a gate where the operator set
+none, and a few stricter-only switches). It cannot name an endpoint or a model, turn
+on a feature that sends code to one, select the tool registry or the runner, choose
+where anything is written, or cause anything to be posted; a file that tries is an
+error and the scan does not run. A value given on the command line or in a
+`--settings` file always wins over it. It can still weaken a scan within those
+limits, most obviously with `exclude`, which is why it is announced, reported, flagged
+when a diff changes it, and ignored under `--no-repo-config`.
+
 What it does not do: `--no-repo-config` does not neutralize inline suppression
 comments, and it cannot make a scanner ignore a file it loads by itself. If you gate
 code from authors you do not trust, review changes to those files and comments as

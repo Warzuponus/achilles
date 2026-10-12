@@ -164,6 +164,20 @@ gates on what's new. It's mutually exclusive with `--baseline`/`--write-baseline
 achilles --pr-mini .achilles/pr-baseline.json --fail-on high .
 ```
 
+### Keeping these choices in the repository
+
+Exclusions, the baseline path and the gate can live in `.achilles.yaml` at the
+repository root instead of in every command line and workflow:
+
+```yaml
+exclude: [testdata, "*.pb.go"]
+baseline: .achilles/baseline.json
+fail-on: high
+```
+
+A flag on the command line still wins. The file can only shape the scan, and its use
+is always reported; see [Settings files](cli-reference.md#settings-files).
+
 ## Recommended CI gate
 
 ```bash

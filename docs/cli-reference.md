@@ -19,10 +19,58 @@ These run instead of a scan. (A scan target literally named `version`, `doctor` 
 | `achilles tools install [--force] [name...]` | download, sha256-verify (fail closed) and install pinned scanners into `$ACHILLES_HOME/bin` (default `~/.achilles/bin`). Names: `opengrep gosec osv-scanner trivy gitleaks rules`. No names = all five plus the community rules. Skips tools already at the pinned version unless `--force`. |
 | `achilles tools doctor` | same as `achilles doctor` |
 
+## Settings files
+
+Flags can be written down instead of typed. A settings file is a flat YAML mapping
+from a flag's name, without the dashes, to its value; a list is the same as a
+comma-separated value.
+
+```yaml
+# .achilles.yaml, in the root of the repository
+profile: full
+fail-on: high
+exclude: [tests, "*.gen.go"]
+baseline: .achilles/baseline.json
+timeout: 10m
+```
+
+Two files are read, and they are trusted differently.
+
+**`.achilles.yaml` in the scanned repository** (or `.achilles.yml`) travels with the
+code, so anyone who can open a pull request can change it. It may only shape how that
+code is scanned:
+
+| Setting | Notes |
+|---------|-------|
+| `profile`, `timeout` | which scanners run, and how long they get |
+| `exclude`, `no-default-excludes` | what counts as noise in this repository |
+| `fail-on` | the gate, when the command line sets none |
+| `baseline` | a path inside the repository, relative to its root |
+| `keep-dismissed`, `llm-no-code` | stricter handling of the AI review; neither turns it on |
+| `issues-min-severity`, `issues-max`, `issues-group` | how issues are filed, when `--file-issues` is given |
+
+Any other flag in that file is an error, not a warning. The repository cannot choose
+the model or the endpoint its code is sent to, turn on the AI review, change the tool
+registry or the runner, move the vault, write a report somewhere, or post to GitHub:
+those are decisions for whoever runs the scan. The file must be a regular file (a
+symbolic link is refused). What it sets is printed when the scan starts, the file is
+named in every report next to the scanners' own repository configuration, and with
+`--diff` a change to it is called out. `--no-repo-config` ignores it completely.
+
+**`--settings FILE`** (or `$ACHILLES_SETTINGS`) is a file you choose. It is trusted
+like the command line and may set any flag, which makes it the place for a team's
+standing choices: provider, model, report paths, strictness. Keep credentials out of
+it; they come from the environment.
+
+Precedence: the command line, then `--settings`, then `.achilles.yaml`, then the
+defaults. The [GitHub Action](ci-and-hub.md) passes its inputs as flags, so an input
+you set there wins over the repository's file.
+
 ## Scan setup
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--settings` | `$ACHILLES_SETTINGS` | YAML file of flag values for flags not given on the command line; see [Settings files](#settings-files). The scanned repository's own `.achilles.yaml` is read as well, restricted to scan-shaping settings |
 | `--config` | *(embedded `configs/tools.yaml`)* | tool registry file; empty uses the registry built into the binary |
 | `--profile` | `default` | `default` (baseline tools) or `full` (adds heavy per-language tools) |
 | `--mode` | `oss` | license mode: `oss` or `commercial` (strict — refuses non-`commercialSafe` tools) |
@@ -127,7 +175,7 @@ Full walkthrough: [LLM Triage & Agents](llm-and-agents.md).
 | `--sbom` | — | generate a CycloneDX SBOM (via Syft) to this file |
 | `--diagnostics` | — | write a diagnostics sidecar (tool/parse failures + LLM token usage) |
 | `--strict-tools` | `$ACHILLES_STRICT_TOOLS` | fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan. On in the container image — see [Running in containers](containers.md) |
-| `--no-repo-config` | `$ACHILLES_NO_REPO_CONFIG` | do not let the scanned repository configure the scanners. Its ignore and config files (`.trivyignore`, `.gitleaks.toml`, `.semgrepignore`, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. Without the flag such files are applied, and named in the output and reports. For code you do not trust; see [SECURITY.md](../SECURITY.md) for what it does not cover |
+| `--no-repo-config` | `$ACHILLES_NO_REPO_CONFIG` | do not let the scanned repository configure the scanners. Its ignore and config files (`.trivyignore`, `.gitleaks.toml`, `.semgrepignore`, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. Without the flag such files are applied, and named in the output and reports. For code you do not trust; see [SECURITY.md](../SECURITY.md) for what it does not cover. Also ignores the repository's `.achilles.yaml` |
 
 ## GitHub integrations (outward-facing, opt-in)
 

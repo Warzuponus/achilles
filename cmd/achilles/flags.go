@@ -73,13 +73,18 @@ type options struct {
 	repoFlag          string
 	strictTools       bool
 	noRepoConfig      bool
-	diagnostics       string
-	sbomOut           string
-	reviewOn          bool
-	scaAdvice         bool
-	threatModelOut    string
-	targetLabel       string
-	sourceCommit      string
+	settingsPath      string // --settings: a file of flag values chosen by the operator
+	// What the settings files contributed (see settings.go).
+	settings            *settingsUse
+	repoSettings        *settingsUse
+	repoSettingsIgnored string // the repository's file, present but refused by --no-repo-config
+	diagnostics         string
+	sbomOut             string
+	reviewOn            bool
+	scaAdvice           bool
+	threatModelOut      string
+	targetLabel         string
+	sourceCommit        string
 
 	// One-flag AI scan, provider presets and LLM-phase controls.
 	aiOn           bool          // --ai: triage + remediate + review + SCA advice + all reports
@@ -114,7 +119,8 @@ type options struct {
 	target string // the path to scan (first positional argument; default ".")
 }
 
-func parseFlags(argv []string) (*options, error) {
+// defineFlags builds the flag set and the options its flags write into.
+func defineFlags() (*flag.FlagSet, *options) {
 	fs := flag.NewFlagSet("achilles", flag.ContinueOnError)
 	o := &options{}
 	fs.StringVar(&o.configPath, "config", "", "tool registry file (default: the registry embedded in the binary)")
@@ -174,6 +180,7 @@ func parseFlags(argv []string) (*options, error) {
 	fs.StringVar(&o.repoFlag, "repo", os.Getenv("GITHUB_REPOSITORY"), "owner/name for GitHub integrations (default $GITHUB_REPOSITORY)")
 	fs.BoolVar(&o.strictTools, "strict-tools", os.Getenv("ACHILLES_STRICT_TOOLS") == "true", "fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan; recommended in containers and CI")
 	fs.BoolVar(&o.noRepoConfig, "no-repo-config", os.Getenv("ACHILLES_NO_REPO_CONFIG") == "true", "do not let the scanned repository configure the scanners: its ignore/config files (.trivyignore, .gitleaks.toml, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. For code you do not trust")
+	fs.StringVar(&o.settingsPath, "settings", os.Getenv("ACHILLES_SETTINGS"), "YAML file of flag values (flag name: value) for flags not given on the command line. The scanned repository's own .achilles.yaml is read as well, but may only shape the scan; see docs/cli-reference.md")
 	fs.StringVar(&o.diagnostics, "diagnostics", "", "write a diagnostics sidecar (tool/parse failures + LLM token usage) to this JSON file")
 	fs.StringVar(&o.sbomOut, "sbom", "", "generate a CycloneDX SBOM of the target (via Syft) and write it to this file")
 	fs.BoolVar(&o.reviewOn, "review", false, "run the holistic full-repo security review agent (needs --llm-model)")
@@ -207,6 +214,11 @@ func parseFlags(argv []string) (*options, error) {
 		fmt.Fprintln(os.Stderr, "usage: achilles [flags] <target-path>   (flags may also follow the path)")
 		fs.PrintDefaults()
 	}
+	return fs, o
+}
+
+func parseFlags(argv []string) (*options, error) {
+	fs, o := defineFlags()
 	positional, err := parseInterleaved(fs, argv)
 	if err != nil {
 		return nil, err
@@ -215,6 +227,17 @@ func parseFlags(argv []string) (*options, error) {
 		return nil, fmt.Errorf("expected one target path, got %d (%s); scan one path per run",
 			len(positional), strings.Join(positional, ", "))
 	}
+	o.target = "."
+	if len(positional) == 1 {
+		o.target = positional[0]
+	}
+	// Flags given on the command line win over settings files, which win over
+	// presets and defaults.
+	explicit := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+	if err := o.loadSettings(fs, explicit); err != nil {
+		return nil, err
+	}
 	if o.failOn != "" {
 		sev, ok := model.ParseSeverity(o.failOn)
 		if !ok {
@@ -222,12 +245,6 @@ func parseFlags(argv []string) (*options, error) {
 		}
 		o.failOn = string(sev) // canonical: "High" and " high" mean high
 	}
-	o.target = "."
-	if len(positional) == 1 {
-		o.target = positional[0]
-	}
-	explicit := map[string]bool{}
-	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
 	if err := o.applyPresets(explicit); err != nil {
 		return nil, err
 	}

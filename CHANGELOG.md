@@ -9,6 +9,15 @@ All notable changes to this project are recorded here. The format follows
 First public release (`v0.1.0`) is pending.
 
 ### Added
+- **Settings files.** Flags can be written down as a flat YAML mapping. `.achilles.yaml`
+  in the scanned repository may set the flags that shape its own scan (`profile`,
+  `timeout`, `exclude`, `no-default-excludes`, `fail-on`, `baseline`, `keep-dismissed`,
+  `llm-no-code`, `issues-min-severity`, `issues-max`, `issues-group`) and nothing else:
+  a file that names an endpoint, a model, an output path or any other flag is an error.
+  Its use is printed, recorded in the reports, flagged when a `--diff` changes it, and
+  refused by `--no-repo-config`. `--settings FILE` (`$ACHILLES_SETTINGS`) is the
+  operator's file and may set any flag. Command line wins, then `--settings`, then the
+  repository's file.
 - **Verdict cache.** A finding whose rule, message and surrounding code, prompt version
   and models are unchanged since an earlier run in the same vault keeps that run's
   verdict, and the model is not called. Repeat scans cost a fraction and stop flipping on

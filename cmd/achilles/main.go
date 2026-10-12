@@ -67,6 +67,7 @@ func run(argv []string) error {
 		printVersion(os.Stdout)
 		return nil
 	}
+	o.announceSettings(os.Stderr)
 
 	// One root context for the whole run. Ctrl-C or SIGTERM cancels it, which stops
 	// the scanners (their process groups are killed), the model calls and the
@@ -179,6 +180,9 @@ func run(argv []string) error {
 	}
 	// The repository's own scanner configuration is named, never applied silently.
 	diags = append(diags, applyRepoConfigPolicy(o.noRepoConfig, repoConfigInEffect(cfg, reg, absTarget), &scan, os.Stderr)...)
+	if s := o.repoSettings; s != nil && len(s.Applied) > 0 {
+		scan.RepoConfig = append(scan.RepoConfig, "achilles: "+s.File)
+	}
 	// --timeout bounded the scanners. Every later phase gets its own clock, started
 	// when the phase starts: sharing the scanners' clock meant a long scan starved
 	// the AI review, and re-using it AFTER the AI review meant it had always already

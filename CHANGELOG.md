@@ -88,6 +88,10 @@ First public release (`v0.1.0`) is pending.
   current directory.
 
 ### Security
+- **Endpoints named in `--model-config` get the same checks as `--llm-base-url`.** A
+  per-task `baseURL` receives the API key and the code too, but was never validated, so it
+  could send the key over plain http or to another provider. Each one is now checked
+  before scanning starts, and announced alongside the main endpoint.
 - **The installer no longer accepts a missing signature quietly.** `install.sh` verified the
   cosign signature of `checksums.txt` only if `cosign` was installed and the signature
   bundle could be downloaded; otherwise it printed a note and installed on the checksum

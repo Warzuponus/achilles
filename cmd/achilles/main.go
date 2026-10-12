@@ -116,8 +116,17 @@ func run(argv []string) error {
 			return fmt.Errorf("--ai: create report directory: %w", err)
 		}
 	}
+	// The routing file is read now, not after the scan: a bad one should cost
+	// seconds, and every endpoint it names is checked and announced like the main one.
+	tasks, err := loadTaskRouting(o.modelConfig)
+	if err != nil {
+		return err
+	}
 	if o.llmWanted() && !o.dryRun {
-		announceEgress(os.Stderr, o)
+		if err := checkTaskEndpoints(tasks, o.llmAuth, llm.APIKeyFromEnv()); err != nil {
+			return err
+		}
+		announceEgress(os.Stderr, o, tasks)
 	}
 
 	// --- resolve target + config ---
@@ -189,10 +198,6 @@ func run(argv []string) error {
 	}
 	clusters := correlateFindings(o, ev, runID, &scan)
 
-	tasks, err := loadTaskRouting(o.modelConfig)
-	if err != nil {
-		return err
-	}
 	llmUsage, err := triageScan(llmCtx, o, ev, runID, &scan, clusters, tasks)
 	if err != nil {
 		return err

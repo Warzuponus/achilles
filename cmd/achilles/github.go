@@ -49,7 +49,22 @@ func runPRComment(ctx context.Context, pr int, repo string, scan model.Scan) err
 // stay in the sticky summary. Keeps re-runs from hammering the API on a huge PR.
 const maxInlineComments = 50
 
-var fpMarkerRE = regexp.MustCompile(`achilles:fp:(\S+) -->`)
+// An inline comment starts with this marker, naming the finding it is about.
+var fpMarkerRE = regexp.MustCompile(`^\s*<!-- achilles:fp:(\S+) -->`)
+
+var safeMarkerToken = regexp.MustCompile(`^[A-Za-z0-9:_.=+/-]{1,128}$`)
+
+// markerToken is a finding's fingerprint in a form that is safe inside an HTML
+// comment. A scanner may supply its own fingerprint, which is then repository-
+// influenced text: one containing "-->" would end the marker early and put the
+// rest of it into the comment as Markdown.
+func markerToken(fingerprint string) string {
+	if safeMarkerToken.MatchString(fingerprint) {
+		return fingerprint
+	}
+	sum := sha256.Sum256([]byte(fingerprint))
+	return "h:" + hex.EncodeToString(sum[:16])
+}
 
 // runPRReview posts findings as inline review comments on the PR diff. It dedupes
 // against comments it already left (a per-finding fingerprint marker), skips
@@ -64,9 +79,13 @@ func runPRReview(ctx context.Context, pr int, headSHA, repo string, scan model.S
 		return err
 	}
 
+	// Only comments Achilles itself wrote count as "already posted". Anyone can
+	// comment on a pull request, including its author: honoring a marker in a
+	// stranger's comment would let them suppress the inline comment for a finding
+	// by planting its marker first.
 	seen := map[string]bool{}
 	if existing, err := gc.ListPullComments(ctx, pr); err == nil {
-		for _, c := range existing {
+		for _, c := range gc.Own(ctx, existing) {
 			if m := fpMarkerRE.FindStringSubmatch(c.Body); m != nil {
 				seen[m[1]] = true
 			}
@@ -78,15 +97,17 @@ func runPRReview(ctx context.Context, pr int, headSHA, repo string, scan model.S
 		if posted >= maxInlineComments {
 			break
 		}
-		if f.Shadow || f.Location.File == "" || f.Location.Region.StartLine == 0 || seen[f.Fingerprint] {
+		token := markerToken(f.Fingerprint)
+		if f.Shadow || f.Location.File == "" || f.Location.Region.StartLine == 0 || seen[token] {
 			continue
 		}
-		body := fmt.Sprintf("<!-- achilles:fp:%s -->\n**[%s] %s** — %s", f.Fingerprint, f.Severity, f.RuleID, strings.TrimSpace(f.Message))
+		// The rule id and the message come from scanning code that may be hostile.
+		body := fmt.Sprintf("<!-- achilles:fp:%s -->\n**[%s] %s** — %s", token, f.Severity, report.MarkdownText(f.RuleID), report.FindingMessage(f))
 		if err := gc.CreateReviewComment(ctx, pr, headSHA, f.Location.File, f.Location.Region.StartLine, body); err != nil {
 			skipped++ // most often: the line isn't part of the diff (422)
 			continue
 		}
-		seen[f.Fingerprint] = true
+		seen[token] = true
 		posted++
 	}
 	fmt.Fprintf(os.Stderr, "achilles: pr-review — %d inline comment(s) posted, %d skipped on %s#%d\n", posted, skipped, repo, pr)

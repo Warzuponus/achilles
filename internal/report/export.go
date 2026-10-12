@@ -5,7 +5,9 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/redact"
@@ -225,12 +227,8 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 					verdict += " (**overturned by judge**)"
 				}
 			}
-			msg := f.Message
-			if f.IsSecret() {
-				msg = redact.Secrets(msg)
-			}
 			fmt.Fprintf(w, "| %s | `%s` | %s | %s | %s |\n",
-				f.Severity, f.RuleID, loc, verdict, mdEscape(msg))
+				f.Severity, markdownCode(f.RuleID), MarkdownText(loc), verdict, FindingMessage(f))
 		}
 	}
 	if len(s.Dismissed) > 0 {
@@ -249,16 +247,55 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 					why = f.Verdict.RefuteReason
 				}
 			}
-			fmt.Fprintf(w, "| `%s` | %s | %s |\n", f.RuleID, loc, mdEscape(why))
+			fmt.Fprintf(w, "| `%s` | %s | %s |\n", markdownCode(f.RuleID), MarkdownText(loc), MarkdownText(why))
 		}
 		fmt.Fprint(w, "\n</details>\n")
 	}
 	return nil
 }
 
-func mdEscape(s string) string {
-	s = strings.ReplaceAll(s, "|", "\\|")
-	return strings.ReplaceAll(s, "\n", " ")
+var mentionRE = regexp.MustCompile(`@([A-Za-z0-9])`)
+
+// maxMarkdownText bounds one piece of untrusted text in a comment or table cell.
+const maxMarkdownText = 1000
+
+// MarkdownText prepares untrusted text for a Markdown comment or table cell. A
+// scanner's message, a file name and a model's reasoning all derive from the code
+// being scanned, which may be hostile, and this text is posted where the whole
+// repository reads it. So: credentials are masked, it is put on one line, HTML
+// (including comments, which could forge Achilles' own hidden markers) is shown
+// as text, @mentions notify nobody, a pipe cannot break out of a table cell, and
+// the length is bounded.
+func MarkdownText(s string) string {
+	s = redact.Prompt(strings.Join(strings.Fields(s), " "))
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, "-->", "--&gt;")
+	s = mentionRE.ReplaceAllString(s, "@​$1")
+	s = strings.ReplaceAll(s, "|", `\|`)
+	if len(s) > maxMarkdownText {
+		cut := maxMarkdownText
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = s[:cut] + " ... (truncated)"
+	}
+	return s
+}
+
+// FindingMessage is a finding's message made safe for Markdown. A credential
+// finding's message gets the stronger mask first: the message may quote the secret.
+func FindingMessage(f model.Finding) string {
+	msg := f.Message
+	if f.IsSecret() {
+		msg = redact.Secrets(msg)
+	}
+	return MarkdownText(msg)
+}
+
+// markdownCode prepares a short untrusted value (a rule id) for a code span: a
+// backtick in it would close the span.
+func markdownCode(s string) string {
+	return MarkdownText(strings.ReplaceAll(s, "`", "'"))
 }
 
 // --- GitHub Actions annotations ---

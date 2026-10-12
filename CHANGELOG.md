@@ -88,6 +88,18 @@ First public release (`v0.1.0`) is pending.
   current directory.
 
 ### Security
+- **Pull-request comments treat scan text as untrusted.** The summary comment
+  (`--pr-comment`, also the Markdown report) and inline review comments (`--pr-review`)
+  posted scanner messages, rule ids, file names and model reasoning as they came. They are
+  now masked for credentials, kept to one line, and cannot inject HTML, forge hidden
+  markers, notify people with `@mentions` or break out of a table cell.
+- **Achilles only updates or trusts its own comments.** The sticky summary was found by
+  looking for its marker anywhere in any comment, so a comment from anyone containing the
+  marker was adopted and rewritten on each run, leaving its author able to edit "the
+  Achilles summary". Inline comments had the same weakness in reverse: a planted marker
+  suppressed the comment for that finding. A comment now counts only if it starts with the
+  marker and was written by the account the token acts as (or by a bot account, for tokens
+  that cannot name themselves). The search also covers every page of comments.
 - **Retention no longer loosens the vault's permissions.** The file vault is created
   readable by its owner only, but a purge replaced it with a file created at the default
   mode, readable by every local user. The code and docs also called the vault

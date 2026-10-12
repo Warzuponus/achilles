@@ -3,6 +3,8 @@ package gitops
 import (
 	"context"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -49,7 +51,7 @@ func TestBranchApplyCommitPush_Sequence(t *testing.T) {
 	want := []string{
 		"rev-parse --abbrev-ref HEAD",
 		"worktree add -B achilles/autofix-abc /tmp/wt main",
-		"apply -p1 --whitespace=nowarn <PATCH-BODY",
+		"apply -p1 --recount --whitespace=nowarn <PATCH-BODY",
 		"add -- src/a.go src/b.go",
 		"commit -m fix: auto -- src/a.go src/b.go",
 		"push -u origin achilles/autofix-abc",
@@ -85,5 +87,33 @@ func TestCommit_NeverStagesAWholeTree(t *testing.T) {
 		if strings.Contains(line, "add -A") || strings.Contains(line, "add .") {
 			t.Errorf("staged wholesale: %q", line)
 		}
+	}
+}
+
+// A model writes the changed lines right far more often than it counts them. git
+// refuses a hunk whose header disagrees with its body unless told to recount.
+func TestApply_ToleratesWrongHunkLineCounts(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.py"), []byte("import os\nos.system(cmd)\nprint('x')\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The header claims 9 lines before and after; the hunk has 3.
+	diff := "--- a/app.py\n+++ b/app.py\n@@ -1,9 +1,9 @@\n import os\n-os.system(cmd)\n+subprocess.run([cmd])\n print('x')\n"
+	if err := (&Repo{Dir: dir}).Apply(context.Background(), diff); err != nil {
+		t.Fatalf("a correct change with miscounted hunk lines must apply: %v", err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "app.py"))
+	// A Windows git configured with core.autocrlf may write CRLF line endings.
+	if got := strings.ReplaceAll(string(b), "\r\n", "\n"); got != "import os\nsubprocess.run([cmd])\nprint('x')\n" {
+		t.Errorf("file after apply:\n%q", got)
+	}
+
+	// The context still has to match: recounting does not make a wrong patch apply.
+	wrong := "--- a/app.py\n+++ b/app.py\n@@ -1,3 +1,3 @@\n import sys\n-os.system(cmd)\n+x\n print('x')\n"
+	if err := (&Repo{Dir: dir}).Apply(context.Background(), wrong); err == nil {
+		t.Error("a patch whose context does not match the file must still be refused")
 	}
 }

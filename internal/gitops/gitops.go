@@ -102,7 +102,11 @@ func (r *Repo) Apply(ctx context.Context, diff string) error {
 	// -p1 is explicit: without it git guesses how many leading path components
 	// to strip from a plain (non "diff --git") patch by looking at the files on
 	// disk, so the path a caller validated would not be the path git writes.
-	_, err = r.run(ctx, f.Name(), "apply", "-p1", "--whitespace=nowarn")
+	// --recount: do not trust the line counts in the hunk headers. A model writes
+	// the changed lines correctly far more often than it counts them, and git
+	// rejects a hunk whose header disagrees with its body. The context lines still
+	// have to match the file exactly.
+	_, err = r.run(ctx, f.Name(), "apply", "-p1", "--recount", "--whitespace=nowarn")
 	return err
 }
 

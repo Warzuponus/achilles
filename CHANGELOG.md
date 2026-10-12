@@ -223,6 +223,14 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **A fix that adds a second instance of the same weakness no longer verifies.** "Nothing
+  new appeared" was checked by fingerprint and by rule-and-file, so another instance of a
+  rule that already fired in the file was invisible, as was a patch that only moved the
+  flagged code out of the line window. Instances are now counted per rule and file.
+- **Patches with miscounted hunk headers apply.** Fixes are applied with `git apply
+  --recount`: models get the changed lines right far more often than the line counts in
+  the hunk header, and git rejected such patches outright. The context lines must still
+  match the file.
 - **Research agents check that a cited advisory exists.** "Citation-mandatory" meant the
   citation field was not empty, so an invented `CVE-2023-12345` passed. With `--research`,
   each advisory id the model cites is now looked up (OSV, and the CVE Program's records

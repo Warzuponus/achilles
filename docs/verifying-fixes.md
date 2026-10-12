@@ -38,9 +38,13 @@ nearby will keep a fix from verifying.
 
 A finding in the patched copy counts as **new** if neither its fingerprint nor its
 rule and file appear among the findings the scanner reported before (or among the
-findings the main scan kept or dismissed). So an extra instance of a rule that
-already fires in that file is not reported as new; a rule that did not fire there
-before is.
+findings the main scan kept or dismissed).
+
+Instances are also counted. For each rule and file, the patched copy may hold at most
+as many findings as the original did, and one fewer where the fixed finding was. So
+a patch that removes the flagged line but adds another instance of the same weakness
+elsewhere in the file, or that only moves the flagged code out of the 10-line window,
+is reported as `introduces_new`, not `verified`.
 
 ## What it proves, and what it does not
 

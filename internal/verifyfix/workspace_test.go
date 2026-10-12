@@ -147,3 +147,40 @@ func TestVerify_ReuseAfterAFailedPatchAndNeverWithACustomApplier(t *testing.T) {
 	}
 	leftovers(t, tmp) // nothing kept: a custom applier gets a fresh copy every time
 }
+
+// A patch that removes the flagged line and adds another instance of the same
+// weakness in the same file used to verify: the new finding has a rule and file the
+// scanner had already "seen", so it did not count as new.
+func TestVerify_SecondInstanceOfTheSameRuleInTheSameFileIsNew(t *testing.T) {
+	needGit(t)
+	root := writeTree(t, map[string]string{
+		"app.py": "import os\nos.system(a)  # VULN\nprint('x')\nprint('y')\n",
+	})
+	sc := &fakeScanner{id: "fake", rules: map[string]string{"VULN": "cmd-injection"}}
+	f := orig("fake", "cmd-injection", "app.py", "os.system(a)  # VULN", 2)
+
+	// Fixes line 2, and adds the same weakness at the end of the file, well
+	// outside the line window around the original.
+	var pad strings.Builder
+	for i := 0; i < 30; i++ {
+		pad.WriteString("+# padding\n")
+	}
+	moved := "--- a/app.py\n+++ b/app.py\n@@ -1,4 +1,35 @@\n import os\n-os.system(a)  # VULN\n+subprocess.run([a])\n print('x')\n print('y')\n" +
+		pad.String() + "+os.system(b)  # VULN\n"
+	res := newVerifier(t, root, sc, Options{}).Verify(context.Background(), f, moved)
+	if res.Status != IntroducesNew {
+		t.Fatalf("status = %s (%s), want introduces_new: the patch added an instance of the same rule", res.Status, res.Detail)
+	}
+	if len(res.NewFindings) == 0 || !strings.Contains(res.NewFindings[0], "cmd-injection") {
+		t.Errorf("the new instance must be named: %v", res.NewFindings)
+	}
+
+	// An instance that was already there is not blamed on the patch.
+	root = writeTree(t, map[string]string{
+		"app.py": "import os\nos.system(a)  # VULN\nprint('x')\n" + strings.Repeat("# filler\n", 30) + "os.system(c)  # VULN\n",
+	})
+	fixA := "--- a/app.py\n+++ b/app.py\n@@ -1,3 +1,3 @@\n import os\n-os.system(a)  # VULN\n+subprocess.run([a])\n print('x')\n"
+	if res := newVerifier(t, root, sc, Options{}).Verify(context.Background(), f, fixA); res.Status != Verified {
+		t.Errorf("a pre-existing second instance: %s (%s), want verified", res.Status, res.Detail)
+	}
+}

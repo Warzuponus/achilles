@@ -206,6 +206,37 @@ func (v *Verifier) compare(orig model.Finding, file string, before, after []mode
 		}
 		fresh = append(fresh, fmt.Sprintf("%s %s:%d", a.RuleID, a.Location.File, a.Location.Region.StartLine))
 	}
+
+	// A rule that already fired in a file hides further instances from the check
+	// above: a second SQL injection added by the patch has a rule and file the
+	// scanner had "seen", and often the same fingerprint as the first. So count.
+	// For each rule and file the patched copy may hold at most as many findings as
+	// the original did, and one fewer where the original finding was. That also
+	// catches a patch that moves the flagged code out of the line window instead of
+	// fixing it.
+	beforeN, afterN := map[string]int{}, map[string]int{}
+	for _, b := range before {
+		beforeN[ruleFileKey(b.RuleID, b.Location.File)]++
+	}
+	for _, a := range after {
+		afterN[ruleFileKey(a.RuleID, a.Location.File)]++
+	}
+	origKey := ruleFileKey(orig.RuleID, file)
+	for _, a := range after {
+		k := ruleFileKey(a.RuleID, a.Location.File)
+		was, ok := beforeN[k]
+		if !ok {
+			continue // not something the baseline scan reported: handled above
+		}
+		allowed := was
+		if k == origKey && allowed > 0 {
+			allowed--
+		}
+		if afterN[k] > allowed {
+			fresh = append(fresh, fmt.Sprintf("%s %s: %d finding(s) where at most %d were expected", a.RuleID, a.Location.File, afterN[k], allowed))
+			afterN[k] = 0 // report each rule and file once
+		}
+	}
 	if len(fresh) > 0 {
 		sort.Strings(fresh)
 		n := len(fresh)

@@ -195,6 +195,11 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **Vault write failures during the AI phases are reported.** Triage, the repo review, the
+  dependency advisor, the threat model and the research agents discarded the error from
+  every vault write; only the pipeline's own writes were counted. A disk that filled
+  during the AI review lost every prompt, response and verdict and the run exited 0. Every
+  write now goes through one counted store, and a lost record fails the run as before.
 - **A failed AI review no longer discards the scan.** When the model endpoint rejected the
   key, ran out of credits or failed every call, the run stopped with "no report was
   written", throwing away a scan that may have taken many minutes. The reports are now

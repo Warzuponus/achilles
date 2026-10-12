@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -73,5 +74,47 @@ func TestVaultWriteFailure_CountsMarshalErrors(t *testing.T) {
 	}
 	if reportVaultFailures() == nil {
 		t.Error("expected an error after a lost record")
+	}
+}
+
+// The pipeline's own writes were counted, but the AI review's were not: the triage
+// engine records every prompt, response and verdict with `_, _ = vault.Append(...)`.
+// A disk that filled during the review lost all of it and the run exited 0.
+func TestVaultWriteFailure_DuringTheAIReviewIsCounted(t *testing.T) {
+	reset()
+	defer reset()
+
+	fe := newFakeEndpoint(t, 200, 0, verdictFor)
+	scan, _ := triageFixture(t, "real-1")
+	ev := trackVault(failingStore{err: errors.New("write vault.jsonl: no space left on device")})
+
+	if _, err := runTriage(context.Background(), ev, "run", scan, nil,
+		triageOpts{baseURL: fe.URL, triageModel: "m"}); err != nil {
+		t.Fatalf("a vault that cannot be written does not stop the review: %v", err)
+	}
+	if scan.Findings[0].Verdict == nil {
+		t.Fatal("the review itself should still have produced a verdict")
+	}
+
+	// At least the triage call, the judge call and the verdict were written by the
+	// engine, not by the pipeline.
+	if vaultWrites.failed < 3 || vaultWrites.failed != vaultWrites.attempted {
+		t.Errorf("failed=%d attempted=%d: the engine's lost records were not counted", vaultWrites.failed, vaultWrites.attempted)
+	}
+	err := reportVaultFailures()
+	if err == nil || !strings.Contains(err.Error(), "no space left on device") {
+		t.Errorf("reportVaultFailures() = %v, want the run to fail naming the cause", err)
+	}
+}
+
+func TestTrackVault_CountsEachWriteOnce(t *testing.T) {
+	reset()
+	defer reset()
+
+	ev := trackVault(trackVault(failingStore{err: errors.New("down")})) // wrapping twice is harmless
+	recordJSON(ev, vault.Record{RunID: "r", Kind: vault.KindScanMeta}, map[string]any{"a": 1})
+	_, _ = ev.Append(vault.Record{RunID: "r", Kind: vault.KindVerdict})
+	if vaultWrites.attempted != 2 || vaultWrites.failed != 2 {
+		t.Errorf("attempted=%d failed=%d, want 2 and 2", vaultWrites.attempted, vaultWrites.failed)
 	}
 }

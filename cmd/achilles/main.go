@@ -164,6 +164,7 @@ func run(argv []string) error {
 	if err != nil {
 		return err
 	}
+	ev = trackVault(ev) // every write from here on is counted, whoever makes it
 	recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta},
 		scanMetaPayload(absTarget, o.targetLabel, o.sourceCommit, string(m), o.profile, toolIDs(reg)))
 

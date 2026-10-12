@@ -24,6 +24,9 @@ func runRuleHealth(ctx context.Context, opts vault.Options) error {
 	pol := knowledge.DefaultPolicy
 	cal := knowledge.NewCalibrator(knowledge.NewFeedbackStore(ev), pol, time.Now())
 	rules := cal.Rules()
+	if err := reportVaultReadFailures(ev); err != nil {
+		return err // "no feedback yet" would be a false statement
+	}
 	if len(rules) == 0 {
 		fmt.Println("No analyst feedback recorded yet — rule health builds up as findings are labeled (--feedback).")
 		return nil
@@ -68,6 +71,9 @@ func runMetrics(ctx context.Context, opts vault.Options) error {
 		return err
 	}
 	s := metrics.Compute(ev.All(), 10)
+	if err := reportVaultReadFailures(ev); err != nil {
+		return err // "no scans recorded" would be a false statement
+	}
 	if s.Runs == 0 {
 		fmt.Println("No scans recorded in the vault yet.")
 		return nil

@@ -45,6 +45,29 @@ func (t *trackedStore) Append(r vault.Record) (vault.Record, error) {
 	return rec, err
 }
 
+// LastReadErr and ReadFailures pass through the wrapped store's read health, which
+// embedding the interface alone would hide.
+func (t *trackedStore) LastReadErr() error { return vault.ReadErr(t.Store) }
+func (t *trackedStore) ReadFailures() int  { return vault.ReadFailures(t.Store) }
+
+// reportVaultReadFailures makes a run fail when reads from the vault failed during
+// it. Feedback history, calibration and retrieval all read the vault; a database
+// that was unreachable returned nothing, and the run would otherwise finish as if
+// there were simply no history.
+func reportVaultReadFailures(ev vault.Store) error {
+	n := vault.ReadFailures(ev)
+	if n == 0 {
+		return nil
+	}
+	err := vault.ReadErr(ev)
+	if err == nil {
+		return fmt.Errorf("evidence vault: %d read(s) FAILED during the run, so anything derived from past records "+
+			"(feedback, calibration, similar findings) was incomplete; see the messages above", n)
+	}
+	return fmt.Errorf("evidence vault: %d read(s) FAILED during the run, so anything derived from past records "+
+		"(feedback, calibration, similar findings) was incomplete; last error: %w", n, err)
+}
+
 func countVaultWrite(kind vault.Kind, err error) {
 	vaultWrites.mu.Lock()
 	vaultWrites.attempted++

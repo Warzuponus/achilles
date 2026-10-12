@@ -40,7 +40,15 @@ type FileStore struct {
 
 	// skipped counts lines that could not be decoded (see refresh).
 	skipped int
+
+	health readHealth
 }
+
+// LastReadErr and ReadFailures report reads that could not refresh from disk (the
+// file became unreadable after it was opened). Such a read still serves the
+// records already loaded, so it is stale rather than empty.
+func (fs *FileStore) LastReadErr() error { return fs.health.LastReadErr() }
+func (fs *FileStore) ReadFailures() int  { return fs.health.ReadFailures() }
 
 // Warn receives the one-line notice a FileStore gives when it has to skip a
 // damaged line. It defaults to stderr; tests replace it.
@@ -202,7 +210,7 @@ func (fs *FileStore) Append(r Record) (Record, error) {
 func (fs *FileStore) Get(id string) (Record, bool) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	_ = fs.refresh() // best effort: on a read error serve what we have
+	fs.health.noteRead(fs.refresh()) // on a read error serve what we have, and say so
 	r, ok := fs.byID[id]
 	return r, ok
 }
@@ -293,7 +301,7 @@ func (fs *FileStore) Purge(before time.Time) (int, error) {
 func (fs *FileStore) filter(keep func(Record) bool) []Record {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	_ = fs.refresh() // best effort: on a read error serve what we have
+	fs.health.noteRead(fs.refresh()) // on a read error serve what we have, and say so
 	var out []Record
 	for _, r := range fs.records {
 		if keep(r) {

@@ -195,6 +195,12 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **A vault that cannot be read is an error, not an empty result.** The vault's read methods
+  return no error, so a PostgreSQL outage came back as "nothing there": the War Room showed
+  "No runs yet", `--metrics` said no scans were recorded, and a scan ran as if there were
+  no feedback history. Stores now record failed reads. The War Room answers 503 for a page
+  it could not load, `--metrics` and `--rule-health` fail instead of reporting emptiness,
+  and a scan during which reads failed exits 2 saying so.
 - **One damaged line no longer disables the file vault.** A line that could not be decoded
   (a write cut short by a crash or a full disk) made every later open fail, and every
   later write with it, until the file was repaired by hand. Such a line is now skipped

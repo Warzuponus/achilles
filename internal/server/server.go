@@ -267,6 +267,19 @@ func (s *Server) vaultFor(w http.ResponseWriter, r *http.Request) (vault.Store, 
 	return v, true
 }
 
+// vaultUnreadable answers 503 when the read that was just made from v failed, and
+// reports whether it did. A database that is down returns no rows; without this
+// check the page would say "No runs yet", which is a different and false statement.
+// The cause goes to the log (the store printed it), not into the page.
+func vaultUnreadable(w http.ResponseWriter, v vault.Store) bool {
+	if vault.ReadErr(v) == nil {
+		return false
+	}
+	http.Error(w, "The Evidence Vault could not be read, so this page cannot be shown. "+
+		"This does not mean the project is empty. See the achillesd log for the cause.", http.StatusServiceUnavailable)
+	return true
+}
+
 // --- handlers ---
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -274,8 +287,12 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	runs := ListRuns(v)
+	if vaultUnreadable(w, v) {
+		return
+	}
 	s.render(w, "dashboard.html", map[string]any{
-		"Tenant": tenantOf(r), "Runs": ListRuns(v),
+		"Tenant": tenantOf(r), "Runs": runs,
 		"Tenants": s.tenantOptions(tenantOf(r)),
 	})
 }
@@ -286,9 +303,13 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runID := r.PathValue("id")
+	findings := RunFindings(v, runID)
+	if vaultUnreadable(w, v) {
+		return
+	}
 	s.render(w, "run.html", map[string]any{
 		"Tenant": tenantOf(r), "RunID": runID,
-		"Findings": RunFindings(v, runID),
+		"Findings": findings,
 	})
 }
 
@@ -322,10 +343,14 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	records := AuditRecords(v, r.PathValue("id"))
+	if vaultUnreadable(w, v) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(AuditRecords(v, r.PathValue("id")))
+	_ = enc.Encode(records)
 }
 
 // handleEvents streams run summaries as Server-Sent Events. A full live-scan
@@ -421,6 +446,11 @@ func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		perTenant[t.ID] = v.All()
+		// A rollup that silently leaves a project out, or counts it as empty, is
+		// wrong in a way nobody would notice.
+		if vaultUnreadable(w, v) {
+			return
+		}
 	}
 	s.render(w, "fleet.html", map[string]any{
 		"Fleet": metrics.ComputeFleet(perTenant, 10),

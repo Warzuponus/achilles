@@ -60,6 +60,7 @@ var pgSchema = []string{
 type PostgresStore struct {
 	db     *sql.DB
 	tenant string
+	readHealth
 }
 
 var (
@@ -227,18 +228,22 @@ func (s *PostgresStore) Purge(before time.Time) (int, error) {
 }
 
 // query runs a SELECT of pgColumns. The Store read methods cannot return an
-// error, so a failure is reported on stderr (never swallowed silently — see the
-// "silent Evidence Vault writes" lesson) and yields no rows.
-func (s *PostgresStore) query(q string, args ...any) []Record {
+// error, so a failure is reported on stderr, recorded for ReadErr/ReadFailures
+// (so a caller can tell "the query failed" from "nothing is there"), and yields
+// no rows.
+func (s *PostgresStore) query(q string, args ...any) (out []Record) {
+	var readErr error
+	defer func() { s.noteRead(readErr) }()
+
 	ctx, cancel := context.WithTimeout(context.Background(), pgOpTimeout)
 	defer cancel()
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
+		readErr = fmt.Errorf("postgres vault query: %w", err)
 		fmt.Fprintf(os.Stderr, "achilles: postgres vault query failed: %v\n", err)
 		return nil
 	}
 	defer rows.Close()
-	var out []Record
 	for rows.Next() {
 		var (
 			r       Record
@@ -247,6 +252,7 @@ func (s *PostgresStore) query(q string, args ...any) []Record {
 		)
 		if err := rows.Scan(&r.ID, &r.RunID, &r.Phase, &kind, &r.Source, &r.PromptVersion,
 			&r.Fingerprint, &r.PrevID, &r.Timestamp, &payload); err != nil {
+			readErr = fmt.Errorf("postgres vault scan: %w", err)
 			fmt.Fprintf(os.Stderr, "achilles: postgres vault scan failed: %v\n", err)
 			return out
 		}
@@ -258,12 +264,14 @@ func (s *PostgresStore) query(q string, args ...any) []Record {
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
+		readErr = fmt.Errorf("postgres vault read: %w", err)
 		fmt.Fprintf(os.Stderr, "achilles: postgres vault read failed: %v\n", err)
 	}
 	return out
 }
 
 var (
-	_ Store  = (*PostgresStore)(nil)
-	_ Purger = (*PostgresStore)(nil)
+	_ Store        = (*PostgresStore)(nil)
+	_ Purger       = (*PostgresStore)(nil)
+	_ ReadReporter = (*PostgresStore)(nil)
 )

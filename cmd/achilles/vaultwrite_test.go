@@ -118,3 +118,31 @@ func TestTrackVault_CountsEachWriteOnce(t *testing.T) {
 		t.Errorf("attempted=%d failed=%d, want 2 and 2", vaultWrites.attempted, vaultWrites.failed)
 	}
 }
+
+// unreadableStore answers every read with nothing and says, on the side, that the
+// read failed: what a database outage looks like through the Store interface.
+type unreadableStore struct {
+	failingStore
+	reads int
+}
+
+func (u *unreadableStore) All() []vault.Record { u.reads++; return nil }
+func (u *unreadableStore) LastReadErr() error  { return errors.New("connection refused") }
+func (u *unreadableStore) ReadFailures() int   { return u.reads }
+
+func TestVaultReadFailure_FailsTheRun(t *testing.T) {
+	st := &unreadableStore{}
+	ev := trackVault(st) // the wrapper must not hide the store's read health
+	if err := reportVaultReadFailures(ev); err != nil {
+		t.Fatalf("no read has failed yet: %v", err)
+	}
+	_ = ev.All()
+	err := reportVaultReadFailures(ev)
+	if err == nil || !strings.Contains(err.Error(), "1 read(s) FAILED") || !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("err = %v, want the failed read reported with its cause", err)
+	}
+	// A store that cannot fail on read never trips this.
+	if err := reportVaultReadFailures(trackVault(failingStore{})); err != nil {
+		t.Errorf("a store with no read health reported a failure: %v", err)
+	}
+}

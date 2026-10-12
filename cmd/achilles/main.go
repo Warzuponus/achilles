@@ -289,6 +289,9 @@ func run(argv []string) error {
 	if err := reportVaultFailures(); err != nil {
 		return err
 	}
+	if err := reportVaultReadFailures(ev); err != nil {
+		return err
+	}
 
 	// Fail closed on request: a partial scan is not evidence of safety. Exit 2
 	// (an error) rather than 1 (findings gated) so callers can tell them apart.

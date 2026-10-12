@@ -64,6 +64,9 @@ func WriteHuman(w io.Writer, s model.Scan) {
 		if t.AutoResolved > 0 {
 			fmt.Fprintf(w, "%d of those verdict(s) came from analyst feedback on the rule (--calibrate), not from a model review\n", t.AutoResolved)
 		}
+		if t.Reused > 0 {
+			fmt.Fprintf(w, "%d of those verdict(s) were reused from earlier runs: the same code, reviewed with the same prompt and models\n", t.Reused)
+		}
 	}
 	if n := len(s.Dismissed); n > 0 {
 		fmt.Fprintf(w, "%d more finding(s) ruled out as false positives by the AI review (not counted above; see the HTML/Markdown report, or --keep-dismissed to include them)\n", n)

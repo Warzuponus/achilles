@@ -317,6 +317,34 @@ dropped. `--dry-run` counts `N-1` extra triage calls per finding — an upper bo
 since only borderline verdicts are re-asked and that cannot be known beforehand.
 Confident, judge-approved verdicts cost nothing extra.
 
+### Not asking twice: the verdict cache
+
+Most of a repeat scan is findings that have not changed. When a finding's rule,
+message and surrounding code, the prompt version, the privacy mode and the models
+are all the same as in an earlier run recorded in the same vault, that run's verdict
+is reused and the model is not called. Line numbers are ignored, so code that only
+moved within its file still matches. The report says how many verdicts were reused,
+and each one records which run it came from.
+
+```
+achilles: 41 verdict(s) reused from earlier runs: the same code was reviewed with the same prompt and models
+```
+
+- `--verdict-cache-days N` (default 30) is how long a verdict may be reused; `0`
+  turns the cache off and reviews everything afresh. The limit exists because a
+  provider can change the model behind a name.
+- Reuse makes results steadier as well as cheaper: a model asked the same question
+  twice does not always answer the same way, which is how a finding can flip between
+  runs when nothing changed.
+- Fix suggestions are not cached; they are requested again for confirmed findings.
+- Cache entries are signed with a key kept in the Achilles home directory
+  (`~/.achilles/verdict-cache.key`, or under `$ACHILLES_HOME`), not in the vault. The
+  vault's default location is inside the scanned directory, so a vault file can arrive
+  with a repository; without the signature a pull request could carry a ready-made
+  "false positive" for its own code. An entry that does not verify is ignored. A fresh
+  CI runner has a fresh key, so in CI the cache only helps if you persist both the
+  vault and the Achilles home between runs.
+
 ### Entry-point hints
 
 The code context can begin with a short block naming how the finding's **own file**

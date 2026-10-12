@@ -72,6 +72,9 @@ func fakeScanner(outFile, src string, extra []string) int {
 func fakeScanFixture(t *testing.T) (cfg, target, vaultPath string) {
 	t.Helper()
 	t.Setenv("ACHILLES_FAKE_SCANNER", "1")
+	// Anything a run keeps in the Achilles home (the verdict-cache key) goes to a
+	// throwaway directory, never the developer's own.
+	t.Setenv("ACHILLES_HOME", t.TempDir())
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

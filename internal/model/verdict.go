@@ -322,4 +322,10 @@ type Provenance struct {
 	// verdict was inherited from, when the finding was not triaged directly
 	// (see internal/correlate). Empty for a directly-triaged finding.
 	CorrelatedFrom string `json:"correlatedFrom,omitempty"`
+
+	// ReusedFrom is the run whose review produced this verdict, when it was taken
+	// from the verdict cache instead of asking the model again: the rule, the code
+	// shown, the prompt and the models were all unchanged. Empty for a verdict
+	// produced in this run.
+	ReusedFrom string `json:"reusedFrom,omitempty"`
 }

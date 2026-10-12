@@ -245,6 +245,9 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 		if t.AutoResolved > 0 {
 			fmt.Fprintf(w, "; %d of those came from analyst feedback on the rule (`--calibrate`), not from a model review", t.AutoResolved)
 		}
+		if t.Reused > 0 {
+			fmt.Fprintf(w, "; %d were reused from earlier runs (same code, prompt and models)", t.Reused)
+		}
 		fmt.Fprint(w, ".")
 		if t.Advisories > 0 {
 			fmt.Fprintf(w, " %d dependency advisories are listed as reported: the AI review does not judge known CVEs in dependencies.", t.Advisories)

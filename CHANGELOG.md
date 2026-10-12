@@ -9,6 +9,12 @@ All notable changes to this project are recorded here. The format follows
 First public release (`v0.1.0`) is pending.
 
 ### Added
+- **Verdict cache.** A finding whose rule, message and surrounding code, prompt version
+  and models are unchanged since an earlier run in the same vault keeps that run's
+  verdict, and the model is not called. Repeat scans cost a fraction and stop flipping on
+  unchanged code. `--verdict-cache-days` (default 30; `0` = off) bounds reuse. Entries are
+  signed with a key kept in the Achilles home directory, so a vault file that arrives
+  with a repository cannot supply verdicts. Reports say how many verdicts were reused.
 - **SARIF output that code scanning can use fully.** The report now has a rule table
   with a `security-severity` per rule (so alerts sort as critical/high/medium/low
   instead of by level alone) and CWE tags; `partialFingerprints.primaryLocationLineHash`

@@ -77,6 +77,7 @@ Needs `--llm-model` and an API key in `ACHILLES_LLM_API_KEY` (or `OPENAI_API_KEY
 | `--llm-concurrency` | `4` | findings triaged in parallel, most severe first |
 | `--llm-no-code` | `false` | privacy mode: send the model only rule, message and location, never source. The AI then never dismisses findings |
 | `--keep-dismissed` | `false` | keep findings the AI confidently dismissed in the gate, issues and counts (default: list them separately) |
+| `--verdict-cache-days` | `30` | reuse a verdict from an earlier run in this vault for up to this many days when the finding's code, the prompt and the models are unchanged, instead of asking the model again; `0` reviews everything afresh |
 | `--llm-samples` | `1` | ask the model this many times on borderline verdicts and keep the majority; a verdict the samples disagree on is never dismissed. The cost estimate becomes an upper bound |
 | `--deep-verify` | `0` | let the model read and search the repository (bounded, read-only, secrets-blocked) to settle the N highest-priority findings; see [Deep verification](deep-verify.md) |
 | `--deep-max-steps` | `6` | with `--deep-verify`: most tool calls per finding |

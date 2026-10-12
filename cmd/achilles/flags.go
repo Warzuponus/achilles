@@ -98,6 +98,9 @@ type options struct {
 	deepVerify   int  // --deep-verify N: let the model read/grep the repo to settle the N most important findings
 	deepMaxSteps int  // --deep-max-steps: tool-call budget per deep-verified finding
 	llmSamples   int  // --llm-samples K: ask K times on borderline verdicts and keep the majority
+	// --verdict-cache-days: reuse a verdict from an earlier run for this many days
+	// when the code, prompt and models are unchanged; 0 turns the cache off.
+	verdictCacheDays int
 
 	// Issue filing (see internal/issues).
 	issuesMinSeverity string // --issues-min-severity
@@ -192,6 +195,7 @@ func parseFlags(argv []string) (*options, error) {
 	fs.IntVar(&o.deepVerify, "deep-verify", 0, "let the model read and search the repository (bounded, read-only) to settle the N highest-priority findings the single-file review could not (0 = off)")
 	fs.IntVar(&o.deepMaxSteps, "deep-max-steps", 6, "with --deep-verify: most tool calls per finding")
 	fs.IntVar(&o.llmSamples, "llm-samples", 1, "ask the model this many times on borderline verdicts and keep the majority (1 = single answer)")
+	fs.IntVar(&o.verdictCacheDays, "verdict-cache-days", 30, "reuse a verdict from an earlier run in this vault for up to this many days when the finding's code, the prompt and the models are all unchanged, instead of asking the model again (0 = always review afresh)")
 	fs.StringVar(&o.issuesMinSeverity, "issues-min-severity", "medium", "with --file-issues: lowest severity to file (critical|high|medium|low)")
 	fs.IntVar(&o.issuesMax, "issues-max", 25, "with --file-issues: most NEW issues to open in one run (highest severity first)")
 	fs.StringVar(&o.issuesGroup, "issues-group", "finding", "with --file-issues: one issue per finding | rule | one rollup issue")

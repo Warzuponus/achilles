@@ -170,6 +170,9 @@ type TriageStats struct {
 	// (--calibrate), not from a model reading the finding. They are included in
 	// Triaged; reports name them so "a verdict" is never mistaken for "a review".
 	AutoResolved int `json:"autoResolved,omitempty"`
+	// Reused counts verdicts taken from the verdict cache: an earlier run reviewed
+	// the same code with the same prompt and models. They are included in Triaged.
+	Reused int `json:"reused,omitempty"`
 	// Advisories counts dependency advisories (known CVEs in dependencies). They
 	// are kept exactly as the scanner reported them and are never sent to the
 	// model: there is no code context to judge, and a verdict could only mislead.

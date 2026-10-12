@@ -94,6 +94,15 @@ func triageScan(ctx context.Context, o *options, ev vault.Store, runID string, s
 			dryRun: o.dryRun, maxCost: o.maxCost, prices: priceTable, excluded: excluded,
 			noCode: o.llmNoCode, keepDismissed: o.keepDismissed, calibrate: o.calibrate, concurrency: o.llmConcurrency, samples: o.llmSamples,
 		}
+		if o.verdictCacheDays > 0 && !o.dryRun {
+			// The key that makes cached verdicts trustworthy lives in the Achilles
+			// home directory. Without it the cache is simply off for this run.
+			if secret, err := verdictCacheSecret(); err != nil {
+				fmt.Fprintf(os.Stderr, "achilles: verdict cache off for this run: %v\n", err)
+			} else {
+				opts.cacheMaxAge, opts.cacheSecret = time.Duration(o.verdictCacheDays)*24*time.Hour, secret
+			}
+		}
 		if o.deepVerify > 0 {
 			opts.afterTriage = func(c context.Context) error { return deepVerifyFindings(c, o, ev, runID, scan) }
 		}
@@ -119,6 +128,11 @@ type triageOpts struct {
 	maxCost  float64
 	prices   cost.Table
 	excluded []string // LLM work the estimate deliberately omits, for the report
+
+	// Verdict cache (--verdict-cache-days): reuse a verdict for at most this long.
+	// Zero, or no signing secret, leaves it off.
+	cacheMaxAge time.Duration
+	cacheSecret []byte
 
 	noCode        bool // --llm-no-code: prompts carry no source; verdicts are then never trusted to dismiss
 	keepDismissed bool // --keep-dismissed: leave AI-dismissed findings in scan.Findings
@@ -165,6 +179,20 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	en := enrich.New(3)
 	en.IncludeBlame = true // best-effort git attribution in the prompt context
 	eng := triage.NewEngine(router, ev, en, scan.Target).SetNoCode(o.noCode).SetSamples(o.samples)
+
+	// Verdict cache: a finding whose code, prompt and models are unchanged since an
+	// earlier run keeps that run's verdict instead of being reviewed again.
+	if o.cacheMaxAge > 0 && len(o.cacheSecret) > 0 {
+		scopeOf := func(task, fallback string) string {
+			if tm, ok := tasks[task]; ok && tm.Model != "" {
+				return tm.Model + "@" + tm.BaseURL
+			}
+			return fallback
+		}
+		eng.SetVerdictCache(
+			triage.CacheScope(o.baseURL, scopeOf("triage", o.triageModel), scopeOf("judge", o.triageModel)),
+			o.cacheMaxAge, o.cacheSecret, nil)
+	}
 
 	// Learning layer (DESIGN.md §8): calibration from accumulated feedback. Opt-in:
 	// it takes findings out of the gate on past labels alone, with no model looking
@@ -406,6 +434,14 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		if f.Verdict != nil {
 			stats.Triaged++
 		}
+	}
+	for _, f := range scan.Findings {
+		if f.Verdict != nil && f.Provenance != nil && f.Provenance.ReusedFrom != "" {
+			stats.Reused++
+		}
+	}
+	if stats.Reused > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: %d verdict(s) reused from earlier runs: the same code was reviewed with the same prompt and models (--verdict-cache-days 0 to review everything afresh)\n", stats.Reused)
 	}
 	// Name what calibration decided: these verdicts are feedback history, not a review.
 	calibratedRules := map[string]int{}

@@ -270,6 +270,9 @@ func coverageLine(t *model.TriageStats) (string, bool) {
 	if t.AutoResolved > 0 {
 		line += fmt.Sprintf(" (%d of them from analyst feedback on the rule, not from a model review)", t.AutoResolved)
 	}
+	if t.Reused > 0 {
+		line += fmt.Sprintf(" (%d reused from earlier runs: same code, prompt and models)", t.Reused)
+	}
 	if t.Advisories > 0 {
 		line += fmt.Sprintf("; %d dependency advisories are listed as reported (the AI review does not judge known CVEs in dependencies)", t.Advisories)
 	}

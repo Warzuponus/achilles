@@ -46,6 +46,8 @@ type Engine struct {
 
 	samples int // triage answers wanted for a borderline verdict; <=1 means one
 
+	cache *verdictCache // nil: every finding is reviewed afresh (see cache.go)
+
 	mu    sync.Mutex // guards usage; findings are triaged concurrently
 	usage llm.Usage  // accumulated token usage across all LLM calls this run
 }
@@ -195,6 +197,15 @@ func (e *Engine) Triage(ctx context.Context, runID string, f *model.Finding) err
 		}
 	}
 
+	// The same question, already answered: reuse the answer.
+	cacheKey := ""
+	if e.cache != nil {
+		cacheKey = e.cacheKey(pf, codeContext, examples)
+		if e.fromCache(runID, f, cacheKey) {
+			return nil
+		}
+	}
+
 	// --- triage pass ---
 	tResp, err := e.completeValidated(ctx, "triage", triageMessages(pf, codeContext, examples), "verdict", verdictSchema, &verdictCheck{})
 	if err != nil {
@@ -258,6 +269,9 @@ func (e *Engine) Triage(ctx context.Context, runID string, f *model.Finding) err
 	f.Verdict = &v
 	f.Provenance = &model.Provenance{TriageModel: tResp.Model, JudgeModel: jResp.Model, PromptVersion: PromptVersion}
 	e.record(runID, vault.KindVerdict, "triage", f.Fingerprint, v)
+	if e.cache != nil {
+		e.remember(runID, *f, cacheKey)
+	}
 	return nil
 }
 

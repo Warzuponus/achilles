@@ -67,8 +67,8 @@ type Store interface {
 
 // Purger is implemented by stores that support retention: time-based expiry of
 // records older than a cutoff. It is deliberately NOT part of Store — the base
-// contract is append-only and tamper-evident. Retention is a coarse, admin-gated
-// policy operation (SaaS cost/compliance), distinct from record mutation.
+// contract is append-only. Retention is a coarse policy operation, distinct from
+// record mutation.
 type Purger interface {
 	// Purge deletes records with Timestamp before the cutoff and returns the count.
 	Purge(before time.Time) (int, error)

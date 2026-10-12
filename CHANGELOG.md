@@ -88,6 +88,10 @@ First public release (`v0.1.0`) is pending.
   current directory.
 
 ### Security
+- **Retention no longer loosens the vault's permissions.** The file vault is created
+  readable by its owner only, but a purge replaced it with a file created at the default
+  mode, readable by every local user. The code and docs also called the vault
+  "tamper-evident"; it has no hash chain or signature and no longer claims to.
 - **The code shown to the model can only come from the scanned tree.** The step that adds
   the lines around a finding read whatever path the scanner reported: a `..` path, an
   absolute path elsewhere, or a symlink in the repository pointing at a file in your home

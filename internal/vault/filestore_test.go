@@ -146,3 +146,30 @@ func appendRaw(path, s string) error {
 	_, err = f.WriteString(s)
 	return err
 }
+
+// The vault holds findings, code and prompts and is created 0600. Retention rewrote
+// it through os.Create, which made the replacement world-readable.
+func TestPurge_KeepsTheVaultPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not meaningful on Windows")
+	}
+	fs, path := newTestStore(t)
+	fs.Append(Record{RunID: "a", Kind: KindFinding, Timestamp: time.Now().Add(-48 * time.Hour)})
+	fs.Append(Record{RunID: "a", Kind: KindFinding, Timestamp: time.Now()})
+
+	// A leftover temp file from an interrupted purge, with loose permissions, must
+	// not lend them to the new vault.
+	if err := os.WriteFile(path+".tmp", []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := fs.Purge(time.Now().Add(-24 * time.Hour)); err != nil || n != 1 {
+		t.Fatalf("Purge = %d, %v", n, err)
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := st.Mode().Perm(); perm != 0o600 {
+		t.Errorf("vault is %04o after a purge, want 0600", perm)
+	}
+}

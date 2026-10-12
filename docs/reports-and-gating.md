@@ -139,6 +139,11 @@ so you can see churn. When a finding is legitimately a false-positive-in-context
 regenerate the baseline to accept it (this is exactly how Achilles scans itself —
 see `.achilles/baseline.json`).
 
+A committed baseline can be edited by a pull request, which could add a finding and
+its fingerprint together. With `--diff`, Achilles warns on stderr and at the top of
+every report when the commits under review change the baseline file, so treat that
+warning as part of the review.
+
 ### 3. Diff-aware: only changed files
 
 On a PR, scan only files changed vs the base branch:

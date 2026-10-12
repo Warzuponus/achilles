@@ -128,6 +128,16 @@ First public release (`v0.1.0`) is pending.
   current directory.
 
 ### Security
+- **A change that edits its own baseline is flagged.** With `--diff`, commits that modify
+  the baseline file, the generated-rule repository, or a committed Evidence Vault whose
+  feedback is in use are warned about on stderr and at the top of every report, as a
+  changed scanner ignore file already was. A pull request could previously add a
+  finding and its baseline fingerprint together and pass a `--diff --baseline` gate
+  silently.
+- **Feedback from a vault committed with the code is named, and refusable.** When
+  `--calibrate` or `--rag` reads a vault that git tracks in the scanned repository, the
+  output and reports say so; `--no-repo-config` turns both off for the run, since that
+  history could have been written by the change under review.
 - **Deep verification checks cited evidence line by line** (`deep/v2`). A citation counted
   if the file had been touched by any tool, so a model could grep one token in `auth.go`
   and cite `auth.go:999` as the sanitizer that justifies a dismissal. Every line of a cited

@@ -124,6 +124,23 @@ error and the scan does not run. A value given on the command line or in a
 limits, most obviously with `exclude`, which is why it is announced, reported, flagged
 when a diff changes it, and ignored under `--no-repo-config`.
 
+Three more things Achilles reads can live in the repository and decide what a scan
+reports: the baseline (every fingerprint in it is a finding that is not reported), the
+generated-rule repository, and the Evidence Vault if you commit it. A pull request can
+change them with the code.
+
+- With `--diff`, a change to any of them in the commits under review is flagged on
+  stderr and at the top of every report, the same as a change to a scanner's ignore
+  file. Only committed changes count, so a baseline restored from a CI cache or a
+  vault this run appended to is not a false alarm.
+- A committed vault's feedback history is what `--calibrate` dismisses findings on
+  and what `--rag` shows the model as examples. When either is in use with such a
+  vault it is named in the output and the reports, and `--no-repo-config` turns both
+  off for the run. Keeping the vault outside the repository (`--vault`, or the
+  PostgreSQL backend) avoids the question.
+- Cached verdicts are not affected: each is signed with a key kept in the Achilles
+  home directory, so an entry that arrives with a repository is ignored.
+
 What it does not do: `--no-repo-config` does not neutralize inline suppression
 comments, and it cannot make a scanner ignore a file it loads by itself. If you gate
 code from authors you do not trust, review changes to those files and comments as

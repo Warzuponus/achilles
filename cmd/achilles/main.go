@@ -195,6 +195,9 @@ func run(argv []string) error {
 	if err := filterFindings(o, ev, runID, absTarget, &scan); err != nil {
 		return err
 	}
+	// The baseline, a committed vault and the generated rules are repository-controlled
+	// too: named, flagged when the change under review edits them, refusable.
+	applyRepoStatePolicy(o, absTarget, &scan, os.Stderr)
 	seedMode, err := applyPRMini(o)
 	if err != nil {
 		return err

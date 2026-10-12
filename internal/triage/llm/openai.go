@@ -226,7 +226,7 @@ func jitter(d time.Duration) time.Duration {
 		return d
 	}
 	half := d / 2
-	return half + time.Duration(rand.Int64N(int64(half)+1))
+	return half + time.Duration(rand.Int64N(int64(half)+1)) // #nosec G404 -- spreading retries in time; nothing secret or security-relevant is derived from it
 }
 
 // retryAfter reads a Retry-After header: a number of seconds, or an HTTP date.

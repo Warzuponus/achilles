@@ -36,8 +36,9 @@ func systemPrompt(maxSteps int) string {
 		"Standard of proof. Call it true_positive only if you can trace how untrusted input reaches the flagged " +
 		"code, or why the flagged condition is reachable and unguarded. Call it false_positive only if you can point " +
 		"at the specific code (file:line) that neutralizes it: the sanitizer, the validation, the authentication check, " +
-		"the constant. If you cannot, answer uncertain. \"evidence\" must list file:line references to code a tool " +
-		"actually showed you; references to files you did not read are discarded. Keep reasoning concrete and short." +
+		"the constant. If you cannot, answer uncertain. \"evidence\" must list file:line references to lines a tool " +
+		"actually showed you, using the line numbers it printed; a reference to a line you were not shown is " +
+		"discarded, even in a file you read part of. Keep reasoning concrete and short." +
 		untrustedTools
 }
 

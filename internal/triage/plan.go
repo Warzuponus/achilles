@@ -8,7 +8,8 @@ import (
 
 // Output sizes cannot be known before a call. These are the schema-bounded
 // defaults the estimator assumes per task — a verdict is a few sentences of
-// reasoning, a judge reply is shorter, and a remediation carries a diff so it is
+// reasoning, a judge reply is shorter (a verdict, a confidence and a quoted line
+// of evidence), and a remediation carries a diff so it is
 // the largest. Compare them against real `--diagnostics` token usage and adjust
 // if they drift; they are the least certain part of the estimate.
 //
@@ -16,7 +17,7 @@ import (
 // line of evidence) on top of the reasoning: ~150 tokens more than before gates.
 const (
 	estTriageOutputTokens      = 400
-	estJudgeOutputTokens       = 120
+	estJudgeOutputTokens       = 180
 	estRemediationOutputTokens = 600
 )
 
@@ -53,6 +54,9 @@ func (e *Engine) Plan(findings []model.Finding, o PlanOpts) []cost.Call {
 	var out []cost.Call
 	for i := range findings {
 		f := findings[i]
+		if f.IsSecret() || f.IsDependencyAdvisory() {
+			continue // never sent to the model, so they cost nothing
+		}
 		if e.calibrator != nil {
 			if _, resolved := e.calibrator.AutoResolve(f); resolved {
 				continue

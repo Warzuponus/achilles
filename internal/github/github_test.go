@@ -45,6 +45,8 @@ func TestUpsertComment_Create(t *testing.T) {
 		switch {
 		case r.Method == "GET" && r.URL.Path == "/repos/acme/app/issues/7/comments":
 			io.WriteString(w, `[{"id":1,"body":"unrelated"}]`) // no achilles marker
+		case r.Method == "GET" && r.URL.Path == "/user":
+			t.Error("no comment carries the marker, so there is no reason to ask who we are")
 		case r.Method == "POST" && r.URL.Path == "/repos/acme/app/issues/7/comments":
 			b, _ := io.ReadAll(r.Body)
 			var m map[string]string
@@ -76,9 +78,13 @@ func TestUpsertComment_UpdateExisting(t *testing.T) {
 	var patchedPath, patchedBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == "GET" && r.URL.Path == "/user":
+			// What an Actions token gets: it cannot name itself.
+			w.WriteHeader(http.StatusForbidden)
+			io.WriteString(w, `{"message":"Resource not accessible by integration"}`)
 		case r.Method == "GET":
 			// An existing Achilles comment (id 42) carries the marker.
-			io.WriteString(w, `[{"id":41,"body":"someone else"},{"id":42,"body":"<!-- achilles:pr-summary -->\nold"}]`)
+			io.WriteString(w, `[{"id":41,"body":"someone else"},{"id":42,"body":"<!-- achilles:pr-summary -->\nold","user":{"login":"github-actions[bot]","type":"Bot"}}]`)
 		case r.Method == "PATCH":
 			patchedPath = r.URL.Path
 			b, _ := io.ReadAll(r.Body)
@@ -508,5 +514,95 @@ func TestCreatePause_SkipsFirstCall(t *testing.T) {
 	c.AddComment(ctx, 1, "x")
 	if len(slept) != 2 || slept[0] != time.Second {
 		t.Errorf("slept=%v", slept)
+	}
+}
+
+// stickyServer serves one PR's comments and records what UpsertComment does.
+// whoami is the login GET /user reports; "" answers 403 the way an Actions token is.
+func stickyServer(t *testing.T, whoami, comments string) (srv *httptest.Server, patched *string, posted *bool) {
+	t.Helper()
+	patched, posted = new(string), new(bool)
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/user":
+			if whoami == "" {
+				w.WriteHeader(http.StatusForbidden)
+				io.WriteString(w, `{"message":"Resource not accessible by integration"}`)
+				return
+			}
+			io.WriteString(w, `{"login":"`+whoami+`"}`)
+		case r.Method == "GET":
+			io.WriteString(w, comments)
+		case r.Method == "PATCH":
+			*patched = r.URL.Path
+			io.WriteString(w, `{}`)
+		case r.Method == "POST":
+			*posted = true
+			io.WriteString(w, `{"id":99}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, patched, posted
+}
+
+// Anyone who can comment can write the marker, and a write token can edit anyone's
+// comment. Achilles must only ever update a comment it wrote itself.
+func TestUpsertComment_NeverAdoptsSomeoneElsesComment(t *testing.T) {
+	const marker = `<!-- achilles:pr-summary -->`
+	stranger := `{"id":7,"body":"` + marker + `\nAll clear!","user":{"login":"mallory","type":"User"}}`
+	quoting := `{"id":8,"body":"> ` + marker + `\nquoting the bot","user":{"login":"github-actions[bot]","type":"Bot"}}`
+	ours := `{"id":42,"body":"` + marker + `\nold","user":{"login":"github-actions[bot]","type":"Bot"}}`
+	mine := `{"id":43,"body":"` + marker + `\nold","user":{"login":"Dave","type":"User"}}`
+
+	cases := []struct {
+		name, whoami, comments string
+		wantPatch              string // "" means a new comment must be posted instead
+	}{
+		{"a stranger planted the marker (Actions token)", "", "[" + stranger + "]", ""},
+		{"a stranger planted the marker (personal token)", "dave", "[" + stranger + "]", ""},
+		{"the marker is quoted mid-comment, not at the start", "", "[" + quoting + "]", ""},
+		{"stranger first, ours second: ours is updated", "", "[" + stranger + "," + ours + "]", "/repos/acme/app/issues/comments/42"},
+		{"a personal token matches its own login, case-insensitively", "dave", "[" + stranger + "," + mine + "]", "/repos/acme/app/issues/comments/43"},
+		{"a personal token does not adopt a bot's comment", "dave", "[" + ours + "]", ""},
+	}
+	for _, c := range cases {
+		srv, patched, posted := stickyServer(t, c.whoami, c.comments)
+		created, err := newTestClient(t, srv).UpsertComment(context.Background(), 7, "pr-summary", "new")
+		if err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		if *patched != c.wantPatch {
+			t.Errorf("%s: patched %q, want %q", c.name, *patched, c.wantPatch)
+		}
+		if wantCreate := c.wantPatch == ""; created != wantCreate || *posted != wantCreate {
+			t.Errorf("%s: created=%v posted=%v, want %v", c.name, created, *posted, wantCreate)
+		}
+	}
+}
+
+// The sticky comment was looked for on the first page only, so on a busy pull
+// request every run posted a new one.
+func TestUpsertComment_FindsItsCommentPastTheFirstPage(t *testing.T) {
+	var patched string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/user":
+			w.WriteHeader(http.StatusForbidden)
+		case r.Method == "GET" && r.URL.Query().Get("page") == "1":
+			io.WriteString(w, "["+strings.TrimSuffix(strings.Repeat(`{"id":1,"body":"chatter"},`, 100), ",")+"]")
+		case r.Method == "GET" && r.URL.Query().Get("page") == "2":
+			io.WriteString(w, `[{"id":42,"body":"<!-- achilles:pr-summary -->\nold","user":{"type":"Bot"}}]`)
+		case r.Method == "PATCH":
+			patched = r.URL.Path
+			io.WriteString(w, `{}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL)
+		}
+	}))
+	defer srv.Close()
+	created, err := newTestClient(t, srv).UpsertComment(context.Background(), 7, "pr-summary", "new")
+	if err != nil || created || patched != "/repos/acme/app/issues/comments/42" {
+		t.Errorf("created=%v patched=%q err=%v, want the comment on page 2 updated", created, patched, err)
 	}
 }

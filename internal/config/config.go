@@ -46,7 +46,20 @@ type ToolConfig struct {
 	// with no dependency manifests). Seeing one means "no results", not "the tool
 	// failed", so the scan is not marked incomplete.
 	NothingToScan []string `yaml:"nothingToScan"`
-	Rules         string   `yaml:"rules"`
+	// IncompleteWhen lists phrases a tool prints when it ran and wrote a report but
+	// could not analyze part of the target (gosec when a package will not
+	// type-check: it exits 0, writes a valid report, and silently skips every
+	// analysis that needs type information). The findings it did produce are kept,
+	// and the tool is reported as incomplete so the scan is never presented as a
+	// full one.
+	IncompleteWhen []string `yaml:"incompleteWhen"`
+	// SuccessExitCodes are the exit codes that mean the tool finished its work
+	// (for many scanners that includes "1: findings were reported"). When set, any
+	// other exit code marks the run incomplete even though a report file exists: a
+	// tool that crashes halfway can leave a well-formed report of the half it did.
+	// Empty means the exit code is not checked, only that a report was written.
+	SuccessExitCodes []int  `yaml:"successExitCodes"`
+	Rules            string `yaml:"rules"`
 	// Network is the docker network policy ("none" default for containment,
 	// "default" to allow egress for tools that need it — SCA DBs, NuGet restore).
 	Network string `yaml:"network"`
@@ -54,6 +67,11 @@ type ToolConfig struct {
 	// if the target contains File, Arg is appended to the tool's argv (so the
 	// tool applies the repo's existing suppressions instead of re-reporting them).
 	LocalConfig []LocalConfigRule `yaml:"localConfig"`
+	// RepoConfig names the files this tool reads from the scanned repository ON
+	// ITS OWN, with no flag from Achilles (gitleaks loads <target>/.gitleaks.toml
+	// by itself). Achilles cannot withhold these, so it names them when present,
+	// and under --no-repo-config reports the tool as incomplete.
+	RepoConfig []string `yaml:"repoConfig"`
 }
 
 // LocalConfigRule maps a target-local config file to the argv flag that points a

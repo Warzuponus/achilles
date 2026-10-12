@@ -117,13 +117,15 @@ wrongly dismissing a real bug costs far more than a false alarm:
 |-----------------|--------|
 | aborted, uncertain, or a weak false positive | Verdict unchanged; outcome recorded. |
 | true positive | Confirms, freely. Lifts an earlier dismissal, refutation or "not reachable"; never lowers an earlier true-positive confidence; severity is never touched. |
-| false positive, strong | May support dismissal only if confidence is at least `0.7`, at least one cited `file:line` points at a file a tool actually showed the model, and at least one tool call was made. |
+| false positive, strong | May support dismissal only if confidence is at least `0.7`, at least one cited `file:line` points at a line a tool actually showed the model, and at least one tool call was made. |
 | ...and the earlier verdict was a confident true positive | **Not** dismissed. The verdict becomes `uncertain`, the finding stays surfaced, and the disagreement is written into the reasoning. |
 | ...and the judge had overturned an earlier false positive | Stays surfaced. |
 | ...on a credential finding | Never dismissed. |
 
-Evidence the model cites for files it never read is discarded and counted
-(`evidenceDropped`).
+Evidence the model cites for a line it was never shown is discarded and counted
+(`evidenceDropped`). Reading part of a file does not make the rest of it citable:
+every line of a cited range has to have appeared in a tool result or in the
+finding's own context.
 
 **Ordering.** Run it after the first triage pass and before
 `Scan.PartitionDismissed`, so a deep confirmation can rescue a finding triage

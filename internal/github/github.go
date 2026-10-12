@@ -1,5 +1,5 @@
 // Package github is a minimal GitHub REST client for Achilles's outward-facing
-// PR/issue integrations (Tier C). It is deliberately small and interface-free at
+// PR/issue integrations. It is deliberately small and interface-free at
 // this layer: the caller supplies a token + repo (as GitHub Actions provides via
 // GITHUB_TOKEN / GITHUB_REPOSITORY), and every method performs one documented
 // REST call. Nothing here posts unless a command explicitly invokes it.
@@ -79,6 +79,10 @@ func markerFor(key string) string { return fmt.Sprintf("<!-- achilles:%s -->", k
 type Comment struct {
 	ID   int64  `json:"id"`
 	Body string `json:"body"`
+	User struct {
+		Login string `json:"login"`
+		Type  string `json:"type"` // "User", "Bot", ...
+	} `json:"user"`
 }
 
 // UpsertComment posts (or updates) a single "sticky" comment on an issue/PR: it
@@ -101,20 +105,74 @@ func (c *Client) UpsertComment(ctx context.Context, issue int, key, body string)
 		fmt.Sprintf("/repos/%s/%s/issues/%d/comments", c.Owner, c.Repo, issue), payload, nil)
 }
 
-// findComment returns the id of the first comment containing marker, or 0.
+// findComment returns the id of Achilles' own earlier comment for marker, or 0.
+//
+// Anyone who can comment on a pull request can write the marker, and a token with
+// write access can edit anyone's comment. Matching the marker anywhere in any
+// comment therefore let a stranger have their comment "adopted": Achilles kept
+// writing its summary into a comment the stranger owns and can rewrite between
+// runs. So a comment counts only if it starts with the marker AND was written by
+// the identity this token acts as (or, when the token cannot name itself, as an
+// Actions token cannot, by a bot account).
 func (c *Client) findComment(ctx context.Context, issue int, marker string) (int64, error) {
-	var comments []Comment
-	err := c.do(ctx, http.MethodGet,
-		fmt.Sprintf("/repos/%s/%s/issues/%d/comments?per_page=100", c.Owner, c.Repo, issue), nil, &comments)
-	if err != nil {
-		return 0, err
-	}
-	for _, cm := range comments {
-		if strings.Contains(cm.Body, marker) {
-			return cm.ID, nil
+	var candidates []Comment
+	for page := 1; ; page++ {
+		if page > maxPages {
+			return 0, fmt.Errorf("github: more than %d pages of comments on #%d; refusing to guess which one is ours", maxPages, issue)
+		}
+		var comments []Comment
+		err := c.do(ctx, http.MethodGet,
+			fmt.Sprintf("/repos/%s/%s/issues/%d/comments?per_page=100&page=%d", c.Owner, c.Repo, issue, page), nil, &comments)
+		if err != nil {
+			return 0, err
+		}
+		for _, cm := range comments {
+			if strings.HasPrefix(strings.TrimLeft(cm.Body, " \t\r\n"), marker) {
+				candidates = append(candidates, cm)
+			}
+		}
+		if len(comments) < 100 {
+			break
 		}
 	}
+	if len(candidates) == 0 {
+		return 0, nil
+	}
+	if own := c.Own(ctx, candidates); len(own) > 0 {
+		return own[0].ID, nil
+	}
 	return 0, nil
+}
+
+// Own returns the comments written by the identity this token acts as. When the
+// token cannot name itself (an Actions or GitHub App installation token), comments
+// by bot accounts are taken to be ours: an ordinary user cannot post as a bot.
+// It makes no API call when comments is empty.
+func (c *Client) Own(ctx context.Context, comments []Comment) []Comment {
+	if len(comments) == 0 {
+		return nil
+	}
+	login := c.identity(ctx)
+	var own []Comment
+	for _, cm := range comments {
+		if (login != "" && strings.EqualFold(cm.User.Login, login)) || (login == "" && cm.User.Type == "Bot") {
+			own = append(own, cm)
+		}
+	}
+	return own
+}
+
+// identity returns the login this token acts as, or "" when the API will not say:
+// GET /user is refused for the installation tokens GitHub Actions and GitHub Apps
+// use. Callers must treat "" as "unknown", never as a match.
+func (c *Client) identity(ctx context.Context) string {
+	var u struct {
+		Login string `json:"login"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/user", nil, &u); err != nil {
+		return ""
+	}
+	return u.Login
 }
 
 // ListPullComments returns a PR's existing review (inline) comments — used to

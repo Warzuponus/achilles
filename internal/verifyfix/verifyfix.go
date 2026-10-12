@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -73,6 +72,12 @@ type Options struct {
 	Apply Applier
 	// TempDir is where the copy is made. Default: the system temp directory.
 	TempDir string
+	// ReuseCopies keeps a copy of the target after a verification and hands it to
+	// the next one, restoring the single file the patch changed, instead of
+	// copying the whole target for every fix. The caller must call Close. It is
+	// ignored when Apply is overridden, since only the default applier is known to
+	// honor the scope rule that makes restoring one file sufficient.
+	ReuseCopies bool
 }
 
 func (o Options) withDefaults() Options {
@@ -93,6 +98,8 @@ func (o Options) withDefaults() Options {
 	}
 	if o.Apply == nil {
 		o.Apply = gitApply
+	} else {
+		o.ReuseCopies = false
 	}
 	return o
 }
@@ -110,6 +117,8 @@ type Verifier struct {
 
 	mu        sync.Mutex
 	baselines map[string]*baseline
+	pool      []*workspace // copies waiting to be reused (Options.ReuseCopies)
+	closed    bool
 }
 
 type baseline struct {
@@ -130,27 +139,36 @@ func (v *Verifier) Verify(ctx context.Context, f model.Finding, diff string) Res
 	if err := checkDiff(diff, v.opts.MaxDiffBytes, v.opts.MaxDiffFiles); err != nil {
 		return Result{Status: PatchFailed, Detail: "diff rejected: " + err.Error()}
 	}
+	file := relTo(v.target, f.Location.File)
+	// Scope comes before anything is copied or run: a diff that reaches outside the
+	// finding's own file is never applied, not even to the throwaway copy.
+	if err := checkScope(diff, file); err != nil {
+		return Result{Status: PatchFailed, Detail: "diff rejected: " + err.Error()}
+	}
 	sc, ok := v.scanners.Get(f.Tool)
 	if !ok {
 		return Result{Status: Skipped, Detail: fmt.Sprintf("scanner %q is not available to re-run (shadow or unregistered tool)", f.Tool)}
 	}
-	file := relTo(v.target, f.Location.File)
-	if file != "" && inSkippedDir(file) {
-		return Result{Status: Skipped, Detail: fmt.Sprintf("%s is in a directory excluded from the verification copy", file)}
+	if file != "" && inDir(file, neverCopied) {
+		return Result{Status: Skipped, Detail: fmt.Sprintf("%s is in a directory that is never copied for verification", file)}
 	}
 
-	tmp, err := os.MkdirTemp(v.opts.TempDir, "achilles-verifyfix-*")
+	ws, err := v.workspace(file)
 	if err != nil {
-		return Result{Status: Error, Detail: "create temp dir: " + err.Error()}
-	}
-	defer os.RemoveAll(tmp)
-
-	if err := copyTree(v.target, tmp, v.opts.MaxCopyBytes, v.opts.MaxCopyFiles); err != nil {
 		if isTooLarge(err) {
 			return Result{Status: Skipped, Detail: "skipped: target too large to copy (" + err.Error() + ")"}
 		}
-		return Result{Status: Error, Detail: "copy target: " + err.Error()}
+		return Result{Status: Error, Detail: err.Error()}
 	}
+	defer v.release(ws)
+	if ws.pooled {
+		// If the file cannot be saved the copy cannot be restored: use it once.
+		if err := ws.remember(file); err != nil {
+			ws.pooled = false
+		}
+	}
+	tmp := ws.dir
+
 	if err := v.opts.Apply(ctx, tmp, diff); err != nil {
 		return Result{Status: PatchFailed, Detail: "patch does not apply cleanly: " + firstLine(err.Error())}
 	}
@@ -187,6 +205,37 @@ func (v *Verifier) compare(orig model.Finding, file string, before, after []mode
 			continue
 		}
 		fresh = append(fresh, fmt.Sprintf("%s %s:%d", a.RuleID, a.Location.File, a.Location.Region.StartLine))
+	}
+
+	// A rule that already fired in a file hides further instances from the check
+	// above: a second SQL injection added by the patch has a rule and file the
+	// scanner had "seen", and often the same fingerprint as the first. So count.
+	// For each rule and file the patched copy may hold at most as many findings as
+	// the original did, and one fewer where the original finding was. That also
+	// catches a patch that moves the flagged code out of the line window instead of
+	// fixing it.
+	beforeN, afterN := map[string]int{}, map[string]int{}
+	for _, b := range before {
+		beforeN[ruleFileKey(b.RuleID, b.Location.File)]++
+	}
+	for _, a := range after {
+		afterN[ruleFileKey(a.RuleID, a.Location.File)]++
+	}
+	origKey := ruleFileKey(orig.RuleID, file)
+	for _, a := range after {
+		k := ruleFileKey(a.RuleID, a.Location.File)
+		was, ok := beforeN[k]
+		if !ok {
+			continue // not something the baseline scan reported: handled above
+		}
+		allowed := was
+		if k == origKey && allowed > 0 {
+			allowed--
+		}
+		if afterN[k] > allowed {
+			fresh = append(fresh, fmt.Sprintf("%s %s: %d finding(s) where at most %d were expected", a.RuleID, a.Location.File, afterN[k], allowed))
+			afterN[k] = 0 // report each rule and file once
+		}
 	}
 	if len(fresh) > 0 {
 		sort.Strings(fresh)
@@ -253,16 +302,6 @@ func firstLine(s string) string {
 }
 
 func isTooLarge(err error) bool { return errors.Is(err, errTooLarge) }
-
-func inSkippedDir(rel string) bool {
-	segs := strings.Split(rel, "/")
-	for _, s := range segs[:len(segs)-1] {
-		if skipDirs[s] {
-			return true
-		}
-	}
-	return false
-}
 
 // relTo returns file relative to root with forward slashes. A path already relative
 // is cleaned; an absolute path outside root is returned cleaned but absolute (it

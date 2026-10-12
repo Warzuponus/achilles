@@ -18,9 +18,81 @@ Optional, for the pieces that need infrastructure (they skip themselves when abs
   `internal/vault/postgres_test.go`). CI runs them against a service container.
 - **The container quickstart:** `deploy/compose/smoke.sh` (needs Docker).
 
+**What CI runs, and when.** A pull request gets the Linux build and tests (with the
+race detector), the linter, `govulncheck`, the license check, the self-scan and the
+composite action. Three heavier jobs are kept off pull requests because every minute
+is billed while the repository is private:
+
+- the **Windows** tests run on every push to `main`, and on demand: Actions -> CI ->
+  Run workflow, on your branch. Do that for a change that touches file paths, file
+  locking or process handling;
+- the **container quickstart** runs on a pull request only when the image, the
+  compose files or the sample change, and on `main` for any code change;
+- **Tier-2 verify** runs on `main` when a tool image or the registry changes, and on
+  demand.
+
+A newer push to a pull request cancels the run of the older one.
+
 Achilles is local-first and links no cloud SDKs. `make check-deps` asserts that
 `go.mod` contains no cloud SDK modules — run it if you touch vault or LLM wiring or
 add a dependency.
+
+## Where things are
+
+```
+cmd/achilles          the CLI: flags, the scan pipeline, reports, GitHub integrations
+cmd/achillesd         the War Room HTTP server
+cmd/achilles-fleet    scans many projects and targets into per-project vaults
+cmd/achilles-eval     the eval CLI (context, verdict, corpus and detect modes)
+
+configs/              tools.yaml (the tool registry) and the baseline Opengrep rules,
+                      both embedded in the binary
+internal/config       loads the tool registry
+internal/policy       the license-mode gate (oss, commercial, attestation)
+internal/toolchain    `achilles tools install`: pinned, checksum-verified scanners
+internal/exec         runs a tool as a local binary or in a container
+internal/scanner      the scanner interface and registry
+  generic             config-driven adapter for any tool that emits SARIF
+  opengrep            the one hand-written adapter
+internal/normalize    tool output (SARIF and a few native formats) → findings
+internal/model        the finding, verdict and SARIF types
+internal/noise        drops vendored, generated and minified files
+internal/baseline     known findings, so a gate fails only on new ones
+internal/vcs          changed files for --diff
+internal/correlate    groups one defect reported by several tools
+
+internal/enrich       adds the code around a finding for the model
+internal/redact       masks credentials before text leaves the machine
+internal/triage       the model review, the adversarial judge, fix suggestions
+  llm                 the OpenAI-compatible client and per-task routing
+  llm/llmtest         a fake client for hermetic tests
+internal/deep         --deep-verify: bounded, read-only repository lookups
+internal/verifyfix    re-scans a proposed fix; the scope rule for what a fix may touch
+internal/cost         the pre-flight cost estimate (--dry-run, --max-cost)
+internal/knowledge    feedback, calibration and retrieval of past verdicts
+internal/review       the repo-level security review
+internal/advisor      the dependency-upgrade plan
+internal/threatmodel  the threat-model agent
+internal/inventory    languages and dependencies of a codebase
+internal/research     research agents and rule synthesis (experimental)
+
+internal/report       human, HTML, Markdown, SARIF and JUnit output
+internal/issues       files and maintains GitHub issues
+internal/github       the small GitHub REST client
+internal/gitops       the git steps behind --fix-pr
+internal/vault        the Evidence Vault (file and PostgreSQL)
+internal/metrics      rollups over the vault
+internal/tenant       the project registry for the War Room
+internal/server       the War Room: handlers, templates, redaction
+internal/fleet        fleet config, planning and dispatch
+internal/eval         the eval harness
+
+evals/                the labeled triage corpus and the detection benchmark
+deployments/          Dockerfiles: the all-in-one image and the --profile full tools
+deploy/compose/       the compose stack and its smoke test
+examples/             example workflows and a small vulnerable sample
+third_party/licenses  license texts shipped with the binaries (generated: make licenses)
+```
 
 ## Making a change
 
@@ -73,6 +145,29 @@ baseline and feedback label at once.
   an empty or "clean" result.
 - **Secrets never go in argv, URLs, logs or the vault.** Pass them through the
   environment and scrub them from error text.
+
+## Releasing (maintainers)
+
+A release is a pushed tag. `release.yml` builds and signs the archives and creates the
+GitHub Release; `release-images.yml` publishes the images.
+
+1. `main` is green, including the self-scan, and `CHANGELOG.md` has a dated section
+   for the version (move the entries out of `[Unreleased]`).
+2. If a dependency changed: `make licenses`, commit, and re-check `THIRD-PARTY.md`.
+   If a bundled scanner version changed, update it in `configs/tools.yaml`,
+   `internal/toolchain/manifest.go`, the Dockerfile and (for Opengrep)
+   `deployments/achilles/licenses/opengrep/SOURCE.md` together.
+3. If `docs/` changed since the last release, regenerate the HTML guide and commit it:
+   `make docs-html` (needs Python and `pip install markdown`).
+4. Dry run: Actions → Release → Run workflow builds every archive without publishing.
+5. Tag and push: `git tag -s vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`. A tag with a
+   suffix (`vX.Y.Z-rc1`) is a pre-release and does not move `latest`.
+6. Check what users will run: `VERSION=vX.Y.Z sh scripts/install.sh` on a clean machine,
+   `docker run --rm ghcr.io/warzuponus/achilles achilles --version`, and the example
+   workflow pinned at the new tag.
+
+Never move a tag that has been published. If a release is wrong, cut the next patch
+version.
 
 ## Reporting bugs and security issues
 

@@ -30,11 +30,12 @@ tools:
     enabled: true
     bespoke: true                 # hand-written adapter (internal/scanner/opengrep)
     languages: [python, javascript, typescript, go, java, ruby, generic]
-    # No public container image: Opengrep ships as a binary (install.sh) and runs
-    # via the local binary (see action.yml). `--runner docker` is unsupported for it.
+    # No public container image: Opengrep ships as a binary. Under `--runner docker`
+    # it therefore runs as the local binary (and Achilles says so on stderr).
     bin: opengrep
     format: sarif
     rules: configs/rules
+    repoConfig: [.semgrepignore]   # read by opengrep from the scan root on its own
 
   - id: gosec
     license: Apache-2.0
@@ -45,22 +46,42 @@ tools:
     bin: gosec
     requires: [go]                 # gosec type-checks via the Go toolchain; without it: silent empty report
     format: sarif
-    argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "{src}/..."]
+    # testdata/ is skipped as the go tool itself skips it: it is never compiled
+    # into the program, and it is where repositories keep Go that is broken on
+    # purpose, which would otherwise make every such scan "incomplete" (below).
+    argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "-exclude-dir=testdata", "{src}/..."]
     outputFile: "{out}/results.sarif"
+    successExitCodes: [0]          # with -no-fail, findings do not change the exit code
+    # When a package will not type-check, gosec still exits 0 and writes a valid
+    # report, but skips every analysis that needs types (the taint and SSA rules)
+    # for that package. Its report gives no sign of it; this log line is the only
+    # one. Known cause as of 2026-10: Go 1.27.2 changed the compiler export-data
+    # format, and no gosec release (up to v2.29.0) can read it yet, so gosec cannot
+    # type-check ANY package when the `go` it finds is 1.27.2 or newer.
+    incompleteWhen: ["skipping SSA analysis"]
 
   - id: trivy
     license: Apache-2.0
     commercialSafe: true
     enabled: true
     languages: [generic]           # SCA/IaC/secrets/misconfig — language-agnostic
+    # Trivy downloads its vulnerability DB and its misconfiguration checks on first
+    # use, so under --runner docker it needs egress (the runner default is none).
+    network: default
     image: aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
     bin: trivy
     format: sarif
-    argv: ["fs", "--quiet", "--format", "sarif", "--output", "{out}/results.sarif", "{src}"]
+    # --scanners is explicit on purpose: `trivy fs` on its own runs only vuln and
+    # secret, so without it no IaC / misconfiguration check ever ran.
+    argv: ["fs", "--quiet", "--scanners", "vuln,misconfig,secret", "--format", "sarif", "--output", "{out}/results.sarif", "{src}"]
     outputFile: "{out}/results.sarif"
+    successExitCodes: [0]          # trivy exits 0 whatever it finds unless --exit-code is set
     localConfig:                   # honor the repo's own Trivy ignore list
       - file: .trivyignore
         arg: "--ignorefile={src}/.trivyignore"
+    # Trivy also picks these up by itself when the scan is started from inside the
+    # repository (the usual case in CI), whatever Achilles passes.
+    repoConfig: [.trivyignore, .trivyignore.yaml, trivy.yaml]
 
   - id: gitleaks
     license: MIT
@@ -70,11 +91,16 @@ tools:
     image: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
     bin: gitleaks                  # local runner; docker uses the image entrypoint
     format: sarif
-    argv: ["dir", "--report-format", "sarif", "--report-path", "{out}/results.sarif", "{src}"]
+    # --exit-code 0: by default gitleaks exits 1 both when it finds a leak and
+    # when it fails, so the two cannot be told apart. With this, 1 means an error.
+    argv: ["dir", "--exit-code", "0", "--report-format", "sarif", "--report-path", "{out}/results.sarif", "{src}"]
     outputFile: "{out}/results.sarif"
+    successExitCodes: [0]
     localConfig:                   # honor the repo's own gitleaks config/allowlist
       - file: .gitleaks.toml
         arg: "--config={src}/.gitleaks.toml"
+    # gitleaks loads <target>/.gitleaks.toml and .gitleaksignore by itself.
+    repoConfig: [.gitleaks.toml, .gitleaksignore]
 
   - id: osv-scanner
     license: Apache-2.0
@@ -87,9 +113,11 @@ tools:
     format: sarif
     argv: ["scan", "--recursive", "--format", "sarif", "--output-file", "{out}/results.sarif", "{src}"]
     outputFile: "{out}/results.sarif"
+    successExitCodes: [0, 1]       # 1: vulnerabilities were found; 127: error; 128: no packages
     # With no dependency manifest in the tree osv-scanner exits 128 and writes no
     # report. That is "nothing to check", not a failed scan.
     nothingToScan: ["No package sources found"]
+    repoConfig: [osv-scanner.toml]  # per-directory ignore list, read by osv-scanner on its own
 
   # --- `full` profile: heavy per-language tools (opt-in via --profile full) ---
 
@@ -247,7 +275,7 @@ tools:
     outputFile: "{out}/results.json"
 
   # Railroader — Ruby on Rails SAST (MIT, commercial-safe, separate process).
-  # The MIT fork of Brakeman (which is CC-BY-NC-SA → blocked, see below). No
+  # The MIT fork of Brakeman (whose own license forbids commercial use; see below). No
   # public container and no SARIF, so we build our own image (deployments/
   # railroader/) and normalize its JSON (internal/normalize/railroader.go,
   # format: railroader). Scans Rails apps; static (no bundle install), no egress
@@ -263,11 +291,13 @@ tools:
     argv: ["-f", "json", "-o", "{out}/results.json", "-q", "{src}"]
     outputFile: "{out}/results.json"
 
-  # Brakeman — the original Ruby SAST, but CC-BY-NC-SA (non-commercial): blocked
-  # in commercial mode. Use Railroader (its MIT fork, above) instead.
+  # Brakeman — the original Ruby SAST. Its Brakeman Public Use License is free for
+  # scanning your own code but needs a paid license for commercial use, so it is
+  # blocked in commercial mode. Not wired (no argv or image): this entry exists so
+  # the gate has a real non-commercial-safe tool to refuse. Use Railroader (above).
   - id: brakeman
-    license: CC-BY-NC-SA
-    commercialSafe: false          # non-commercial license — blocked in commercial-mode
+    license: Brakeman-Public-Use
+    commercialSafe: false          # commercial use needs a paid license — blocked in commercial-mode
     enabled: false
     languages: [ruby]
 

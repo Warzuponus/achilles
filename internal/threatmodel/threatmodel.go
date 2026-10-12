@@ -1,4 +1,4 @@
-// Package threatmodel is the threat-model agent (DESIGN §7, Tier D). It infers a
+// Package threatmodel is the threat-model agent (DESIGN §7). It infers a
 // starting-point threat model from the codebase profile + scan findings and
 // emits it as an OTM (Open Threat Model, https://github.com/iriusrisk/OpenThreatModel)
 // document: trust zones, components, and STRIDE threats with mitigations.

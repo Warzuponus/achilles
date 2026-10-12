@@ -20,8 +20,8 @@ Be explicit about the evidence behind each path:
 |------|----------|
 | CLI + file vault | Unit and integration tests in CI (`make test`); the repo scans itself on every PR ([self-scan.yml](.github/workflows/self-scan.yml)). |
 | Docker image + compose stack | [quickstart.yml](.github/workflows/quickstart.yml) runs the full compose quickstart (build, start, scan the bundled sample with `--strict-tools`, check the findings in the War Room, check the Host and cross-origin protections) on every relevant change. |
-| GitHub Action + per-PR gate | [ci.yml](.github/workflows/ci.yml) runs the action from the checkout (`version: source`) against the bundled sample with `--strict-tools` on every PR; the example workflows are the reference consumers. The release-binary download path is exercised only once a release exists. |
-| Scan hub | The workflow is in the repo, but CI does not exercise it: it needs a GitHub App you create (below). Treat the setup steps as a checklist to verify in your own organisation. |
+| GitHub Action + per-PR gate | [ci.yml](.github/workflows/ci.yml) runs the action from the checkout (`version: source`) against the bundled sample with `--strict-tools` on every PR; the example workflows are the reference consumers. The release-binary download path, which is what users get by default, is **not exercised by CI**: check it by hand after each release ([CONTRIBUTING.md](CONTRIBUTING.md#releasing-maintainers)). |
+| Scan hub | An example workflow, not exercised by CI: it needs a GitHub App you create (below). Treat the setup steps as a checklist to verify in your own organisation. |
 | Fleet on cron / Kubernetes | The fleet binary is tested ([fleet.md](docs/fleet.md)); the `CronJob` and cron snippets are **patterns, not tested manifests**. |
 | Multi-user / network exposure | **Not a supported configuration.** There is no authentication. See [Security model](docs/containers.md#security-model-no-authentication). |
 
@@ -147,10 +147,11 @@ OpenAI-compatible service. Details: [CI & the Scan Hub](docs/ci-and-hub.md).
 
 ### The scan hub (scan other repos from one place)
 
-[`scan-hub.yml`](.github/workflows/scan-hub.yml) scans **other** repositories from
-the Achilles repo, so the LLM key and routing live in one place and targets need no
-secrets and no workflow. Results are **workflow artifacts** (HTML report, SARIF,
-Markdown summary, threat model) of the hub run — there is no cloud vault. Nothing is
+[`examples/workflows/scan-hub.yml`](examples/workflows/scan-hub.yml) scans **other**
+repositories from one hub repository, so the LLM key lives in one place and targets
+need no secrets and no workflow. It is an example: copy it into `.github/workflows/`
+of a private repository of your own. Results are **workflow artifacts** (HTML report,
+SARIF, Markdown summary) of the hub run — there is no cloud vault. Nothing is
 written back to the target unless you tick `file_issues` (the App then also needs
 **Issues: Write**).
 
@@ -161,10 +162,11 @@ personal token). One-time setup by an org or repo admin:
    no webhook. Note the App ID; generate a private key (`.pem`).
 2. Install the App on the repositories you want scannable — only those get read
    access.
-3. In the Achilles repo → Settings → Secrets → Actions, add:
-   - `SCANNER_APP_ID` — the App ID
-   - `SCANNER_APP_PRIVATE_KEY` — the full `.pem` contents
-   - `ACHILLES_LLM_API_KEY` — the LLM key
+3. In the hub repository → Settings → Secrets and variables → Actions, add:
+   - secret `SCANNER_APP_ID` — the App ID
+   - secret `SCANNER_APP_PRIVATE_KEY` — the full `.pem` contents
+   - secret `LLM_API_KEY` — the LLM key
+   - variable `LLM_MODEL` — a model your provider serves
 4. Run it: Actions → *Achilles scan hub* → *Run workflow* with
    - `target_repo` — the repository name (the owner is this repository's owner)
    - `ref` — optional branch, tag or SHA (blank = default branch)

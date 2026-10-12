@@ -1,21 +1,25 @@
 // Command achilles orchestrates open-source SAST tools, normalizes their SARIF
 // to Findings, records provenance to the Evidence Vault, and prints a report.
 //
-// Phase 1: config-driven tool registry (configs/tools.yaml) + license-mode
-// policy gate + Evidence Vault. A --from-sarif mode ingests existing SARIF,
+// Tools come from a config-driven registry (configs/tools.yaml) behind a
+// license-mode policy gate. A --from-sarif mode ingests existing SARIF,
 // exercising the normalize→report spine without running any scanner.
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Warzuponus/achilles/internal/config"
+	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/policy"
 	"github.com/Warzuponus/achilles/internal/report"
 	"github.com/Warzuponus/achilles/internal/scanner"
@@ -25,12 +29,33 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
+		// The gate failing is exit 1 and says nothing more: the report already did.
+		// Everything else is an error, exit 2.
+		var gated *gateError
+		if errors.As(err, &gated) {
+			os.Exit(1)
+		}
 		fmt.Fprintln(os.Stderr, "achilles: "+err.Error())
 		os.Exit(2)
 	}
 }
 
+// gateError is returned when --fail-on found a finding at or above the threshold.
+// It is an error value rather than an os.Exit inside the pipeline so that deferred
+// cleanup (temporary rule directories, the signal handler) still runs, and so the
+// exit-code contract can be tested: 0 clean, 1 gated, 2 error.
+type gateError struct{ worst, threshold model.Severity }
+
+func (e *gateError) Error() string {
+	return fmt.Sprintf("a %s finding meets the --fail-on %s threshold", e.worst, e.threshold)
+}
+
+// errInterrupted is returned when the run was stopped by Ctrl-C or SIGTERM.
+var errInterrupted = errors.New("interrupted; stopped before the scan finished (nothing was reported or filed)")
+
 func run(argv []string) error {
+	resetInventory()
+	runMeter = nil
 	if handled, err := runSubcommand(argv, os.Stdout, os.Stderr); handled {
 		return err
 	}
@@ -42,8 +67,23 @@ func run(argv []string) error {
 		printVersion(os.Stdout)
 		return nil
 	}
+	o.startedAt = time.Now()
+	o.announceSettings(os.Stderr)
 
-	ctx, cancel := context.WithTimeout(context.Background(), o.timeout)
+	// One root context for the whole run. Ctrl-C or SIGTERM cancels it, which stops
+	// the scanners (their process groups are killed), the model calls and the
+	// GitHub calls, and lets the deferred cleanup run. Scanners are started in
+	// their own process groups, so they no longer see the terminal's Ctrl-C
+	// themselves: this handler is what stops them.
+	root, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	go func() {
+		<-root.Done()
+		stopSignals() // a second Ctrl-C then ends the process the ordinary way
+	}()
+
+	// --timeout bounds the scanners (and the small vault-only commands below).
+	ctx, cancel := context.WithTimeout(root, o.timeout)
 	defer cancel()
 
 	runID := newRunID()
@@ -80,8 +120,17 @@ func run(argv []string) error {
 			return fmt.Errorf("--ai: create report directory: %w", err)
 		}
 	}
+	// The routing file is read now, not after the scan: a bad one should cost
+	// seconds, and every endpoint it names is checked and announced like the main one.
+	tasks, err := loadTaskRouting(o.modelConfig)
+	if err != nil {
+		return err
+	}
 	if o.llmWanted() && !o.dryRun {
-		announceEgress(os.Stderr, o)
+		if err := checkTaskEndpoints(tasks, o.llmAuth, llm.APIKeyFromEnv()); err != nil {
+			return err
+		}
+		announceEgress(os.Stderr, o, tasks)
 	}
 
 	// --- resolve target + config ---
@@ -119,6 +168,7 @@ func run(argv []string) error {
 	if err != nil {
 		return err
 	}
+	ev = trackVault(ev) // every write from here on is counted, whoever makes it
 	recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta},
 		scanMetaPayload(absTarget, o.targetLabel, o.sourceCommit, string(m), o.profile, toolIDs(reg)))
 
@@ -126,17 +176,29 @@ func run(argv []string) error {
 	if err != nil {
 		return err
 	}
-	// --timeout bounded the scanners. The LLM phases get their own budget (they are
-	// slow, and sharing one clock meant a long scan starved the AI review), and
-	// writing outputs gets a fresh one so a spent budget cannot lose the report.
-	llmCtx, cancelLLM := context.WithTimeout(context.Background(), o.llmBudget)
+	if root.Err() != nil {
+		return errInterrupted
+	}
+	// The repository's own scanner configuration is named, never applied silently.
+	diags = append(diags, applyRepoConfigPolicy(o.noRepoConfig, repoConfigInEffect(cfg, reg, absTarget), &scan, os.Stderr)...)
+	if s := o.repoSettings; s != nil && len(s.Applied) > 0 {
+		scan.RepoConfig = append(scan.RepoConfig, "achilles: "+s.File)
+	}
+	// --timeout bounded the scanners. Every later phase gets its own clock, started
+	// when the phase starts: sharing the scanners' clock meant a long scan starved
+	// the AI review, and re-using it AFTER the AI review meant it had always already
+	// expired. All of them hang off root, so an interrupt still stops everything.
+	llmCtx, cancelLLM := context.WithTimeout(root, o.llmBudget)
 	defer cancelLLM()
-	outCtx, cancelOut := context.WithTimeout(context.Background(), 10*time.Minute)
+	outCtx, cancelOut := context.WithTimeout(root, 10*time.Minute)
 	defer cancelOut()
 
 	if err := filterFindings(o, ev, runID, absTarget, &scan); err != nil {
 		return err
 	}
+	// The baseline, a committed vault and the generated rules are repository-controlled
+	// too: named, flagged when the change under review edits them, refusable.
+	applyRepoStatePolicy(o, absTarget, &scan, os.Stderr)
 	seedMode, err := applyPRMini(o)
 	if err != nil {
 		return err
@@ -147,19 +209,42 @@ func run(argv []string) error {
 	}
 	clusters := correlateFindings(o, ev, runID, &scan)
 
-	tasks, err := loadTaskRouting(o.modelConfig)
-	if err != nil {
+	llmUsage, err := triageScan(llmCtx, o, ev, runID, &scan, clusters, tasks)
+	// The AI review giving up is not a reason to discard a finished scan. The
+	// reports are still written from what the scanners found, marked as unreviewed;
+	// nothing is published to GitHub on the strength of it; no further model calls
+	// are made; and the run still ends as an error.
+	var aiAborted *triageAbortedError
+	if errors.As(err, &aiAborted) {
+		fmt.Fprintf(os.Stderr, "achilles: %v\nachilles: writing the reports from the scanners' results, WITHOUT AI verdicts\n", aiAborted)
+		offline := *o
+		offline.reviewOn, offline.scaAdvice, offline.threatModelOut = false, false, ""
+		offline.researchOn, offline.mineRules = false, false
+		offline.prComment, offline.prReview, offline.fileIssues, offline.fixPR = 0, 0, false, false
+		if o.prComment > 0 || o.prReview > 0 || o.fileIssues || o.fixPR {
+			fmt.Fprintln(os.Stderr, "achilles: not posting to GitHub (comments, issues, fix PR): the findings were not reviewed")
+		}
+		o = &offline
+	} else if err != nil {
 		return err
 	}
-	llmUsage, err := triageScan(llmCtx, o, ev, runID, &scan, clusters, tasks)
-	if err != nil {
-		return err
+	if root.Err() != nil {
+		return errInterrupted
 	}
 
 	// Re-scan each proposed patch before anything (reports, --fix-pr, issues) presents
 	// it as a fix; a no-op unless --remediate produced diffs and --verify-fixes is on.
-	if err := verifyRemediations(ctx, o, absTarget, reg, &scan, ev, runID); err != nil {
+	// It runs scanners again, after the AI review, so it needs a clock of its own:
+	// on the scanners' --timeout every verification failed with "deadline exceeded"
+	// as soon as scan plus review took longer than that timeout.
+	verifyCtx, cancelVerify := context.WithTimeout(root, o.verifyTimeout)
+	err = verifyRemediations(verifyCtx, o, absTarget, reg, &scan, ev, runID)
+	cancelVerify()
+	if err != nil {
 		return err
+	}
+	if root.Err() != nil {
+		return errInterrupted
 	}
 
 	for _, d := range diags {
@@ -190,7 +275,10 @@ func run(argv []string) error {
 
 	// --- SBOM (supply-chain artifact, independent of findings) ---
 	if o.sbomOut != "" {
-		if err := runSBOM(ctx, runner, cfg, gate, absTarget, o.sbomOut, ev, runID); err != nil {
+		sbomCtx, cancelSBOM := context.WithTimeout(root, o.timeout) // a scanner run: a fresh --timeout
+		err := runSBOM(sbomCtx, runner, cfg, gate, absTarget, o.sbomOut, ev, runID)
+		cancelSBOM()
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "achilles: sbom: %v\n", err)
 		}
 	}
@@ -198,11 +286,23 @@ func run(argv []string) error {
 	if err := runAgents(llmCtx, o, ev, runID, absTarget, scan, tasks); err != nil {
 		return err
 	}
+	if runMeter != nil {
+		fmt.Fprintln(os.Stderr, runMeter.summary())
+	}
+
+	// Everything that can be written has been. The AI review failing is an error
+	// (exit 2), whatever the gate would have said about unreviewed findings.
+	if aiAborted != nil {
+		return aiAborted
+	}
 
 	// A scan whose evidence didn't persist must not look like a clean success —
 	// checked before the severity gate so a vault outage is never masked by a
 	// passing gate.
 	if err := reportVaultFailures(); err != nil {
+		return err
+	}
+	if err := reportVaultReadFailures(ev); err != nil {
 		return err
 	}
 
@@ -228,7 +328,11 @@ var llmAuthMode = "key"
 // newLLMFactory builds the client constructor for this run from --llm-auth and
 // the ACHILLES_LLM_* environment (see llm.NewFactory for the modes).
 func newLLMFactory() (func(string, string) llm.Client, error) {
-	return llm.NewFactory(llmAuthMode)
+	factory, err := llm.NewFactory(llmAuthMode)
+	if err != nil {
+		return nil, err
+	}
+	return metered(factory, runMeter), nil // counted against --max-cost when it is set
 }
 
 func envOr(key, fallback string) string {

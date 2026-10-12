@@ -131,9 +131,10 @@ func TestVerdictSchema_DeclaresGatesAndStaysValidJSON(t *testing.T) {
 	}
 }
 
-func TestPrompts_V4StatesTheGatesAndTheEvidencePrinciple(t *testing.T) {
-	if PromptVersion != "triage/v4" {
-		t.Errorf("PromptVersion = %q, want triage/v4", PromptVersion)
+func TestPrompts_StateTheGatesAndTheEvidencePrinciple(t *testing.T) {
+	// The gates arrived in v4; v5 changed only the judge. Anything older predates both.
+	if PromptVersion != "triage/v6" {
+		t.Errorf("PromptVersion = %q, want triage/v6", PromptVersion)
 	}
 	f := newFinding()
 	sys := triageMessages(*f, "code", nil)[0].Content

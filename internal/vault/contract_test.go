@@ -28,6 +28,10 @@ func storeContract(t *testing.T, open func(t *testing.T, key string) Store) {
 		if !ok {
 			t.Fatal("Get missed an appended record")
 		}
+		// The format version is stamped by the store and survives the round trip.
+		if got.V != SchemaVersion || back.V != SchemaVersion {
+			t.Errorf("schema version: appended V=%d, read back V=%d, want %d", got.V, back.V, SchemaVersion)
+		}
 		if back.RunID != "r" || back.Phase != "triage" || back.Kind != KindVerdict || back.Source != "m" ||
 			back.PromptVersion != "v2" || back.Fingerprint != "fp" || back.PrevID != "prev" {
 			t.Errorf("fields lost: %+v", back)

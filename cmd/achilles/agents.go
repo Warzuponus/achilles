@@ -12,7 +12,6 @@ import (
 	"github.com/Warzuponus/achilles/internal/advisor"
 	"github.com/Warzuponus/achilles/internal/config"
 	xexec "github.com/Warzuponus/achilles/internal/exec"
-	"github.com/Warzuponus/achilles/internal/inventory"
 	"github.com/Warzuponus/achilles/internal/knowledge"
 	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/policy"
@@ -72,7 +71,7 @@ func runReview(ctx context.Context, ev vault.Store, runID, target string, scan m
 	}
 	router := llm.BuildRouter(factory(baseURL, llmModel), tasks, baseURL, factory)
 
-	inv, err := inventory.Scan(target)
+	inv, err := inventoryOf(target)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +102,7 @@ func runAdvisor(ctx context.Context, ev vault.Store, runID, target string, scan 
 	}
 	router := llm.BuildRouter(factory(baseURL, llmModel), tasks, baseURL, factory)
 
-	inv, err := inventory.Scan(target)
+	inv, err := inventoryOf(target)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +141,7 @@ func runThreatModel(ctx context.Context, ev vault.Store, runID, target string, s
 	}
 	router := llm.BuildRouter(factory(baseURL, llmModel), tasks, baseURL, factory)
 
-	inv, err := inventory.Scan(target)
+	inv, err := inventoryOf(target)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +177,7 @@ func runResearch(ctx context.Context, ev vault.Store, runID, target, repoDir str
 	if model == "" {
 		return fmt.Errorf("--research requires --llm-model (or ACHILLES_LLM_MODEL)")
 	}
-	inv, err := inventory.Scan(target)
+	inv, err := inventoryOf(target)
 	if err != nil {
 		return err
 	}
@@ -198,8 +197,13 @@ func runResearch(ctx context.Context, ev vault.Store, runID, target, repoDir str
 	client := llm.BuildRouter(factory(baseURL, model), tasks, baseURL, factory).For("research")
 	now := func() string { return time.Now().UTC().Format("2006-01-02") }
 
+	// An advisory the model cites is looked up before anything is built on it.
+	// Only the id is sent, to public advisory databases.
+	grounder := research.NewHTTPGrounder()
+	fmt.Fprintf(os.Stderr, "achilles: research — advisory ids cited by the model are checked against %s (only the id is sent); an issue whose advisory cannot be found is discarded\n",
+		strings.Join(grounder.Hosts(), " and "))
 	eng := research.NewEngine(
-		research.NewLLMAgent(client),
+		research.NewLLMAgent(client).WithGrounder(grounder),
 		research.NewLLMSynthesizer(client, now),
 		research.NewOpengrepValidator(runner),
 		research.NewRuleRepo(repoDir, ev),
@@ -284,9 +288,22 @@ func confirmedIssues(ev vault.Store) []research.Issue {
 			Citation:    "internal: analyst-confirmed finding " + f.Fingerprint,
 			CWE:         cwe,
 			Language:    lang,
+			Origin:      seedOrigin(finding),
 		})
 	}
 	return issues
+}
+
+// seedOrigin says whether a mining seed came from a rule Achilles did not write.
+// Opengrep findings carry the rule's own id: Achilles' baseline rules are all
+// named achilles.*, so any other Opengrep rule id is from another pack, which in
+// practice is the community pack (Commons Clause). A rule mined from such a
+// finding is kept out of --mode commercial scans, like the pack itself.
+func seedOrigin(f model.Finding) string {
+	if f.Tool == "opengrep" && !strings.HasPrefix(f.RuleID, "achilles.") && !strings.HasPrefix(f.RuleID, "gen.") {
+		return research.OriginExternalRule
+	}
+	return ""
 }
 
 func findingByFingerprint(ev vault.Store, fp string) (model.Finding, bool) {

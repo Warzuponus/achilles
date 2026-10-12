@@ -56,10 +56,33 @@ func (r *Repo) CurrentBranch(ctx context.Context) (string, error) {
 	return strings.TrimSpace(out), err
 }
 
-// CreateBranch creates (or resets) branch at base and checks it out.
-func (r *Repo) CreateBranch(ctx context.Context, name, base string) error {
-	_, err := r.run(ctx, "", "checkout", "-B", name, base)
+// AddWorktree creates a new working tree at path with branch created (or reset)
+// at base and checked out there. The repository's own working tree — the user's
+// checkout, with whatever is uncommitted or untracked in it — is not touched.
+// Git refuses if branch is already checked out somewhere, which is the right
+// answer: we must not move a branch someone is standing on.
+func (r *Repo) AddWorktree(ctx context.Context, path, branch, base string) error {
+	_, err := r.run(ctx, "", "worktree", "add", "-B", branch, path, base)
 	return err
+}
+
+// RemoveWorktree removes a working tree made by AddWorktree. The branch stays.
+func (r *Repo) RemoveWorktree(ctx context.Context, path string) error {
+	_, err := r.run(ctx, "", "worktree", "remove", "--force", path)
+	return err
+}
+
+// Dirty reports whether the working tree has uncommitted or untracked changes.
+func (r *Repo) Dirty(ctx context.Context) (bool, error) {
+	out, err := r.run(ctx, "", "status", "--porcelain")
+	return strings.TrimSpace(out) != "", err
+}
+
+// Prefix returns r.Dir's path relative to the top of its working tree, with
+// forward slashes and no trailing slash ("" at the top).
+func (r *Repo) Prefix(ctx context.Context) (string, error) {
+	out, err := r.run(ctx, "", "rev-parse", "--show-prefix")
+	return strings.TrimSuffix(strings.TrimSpace(out), "/"), err
 }
 
 // Apply applies a unified diff via `git apply`. It writes the diff to a temp file
@@ -76,16 +99,38 @@ func (r *Repo) Apply(ctx context.Context, diff string) error {
 		return err
 	}
 	f.Close()
-	_, err = r.run(ctx, f.Name(), "apply", "--whitespace=nowarn")
+	// -p1 is explicit: without it git guesses how many leading path components
+	// to strip from a plain (non "diff --git") patch by looking at the files on
+	// disk, so the path a caller validated would not be the path git writes.
+	// --recount: do not trust the line counts in the hunk headers. A model writes
+	// the changed lines correctly far more often than it counts them, and git
+	// rejects a hunk whose header disagrees with its body. The context lines still
+	// have to match the file exactly.
+	_, err = r.run(ctx, f.Name(), "apply", "-p1", "--recount", "--whitespace=nowarn")
 	return err
 }
 
-// Commit stages everything and commits with msg (identity via env if unset).
-func (r *Repo) Commit(ctx context.Context, msg string) error {
-	if _, err := r.run(ctx, "", "add", "-A"); err != nil {
+// Commit commits exactly the named paths (relative to r.Dir) with msg, and nothing
+// else (identity via env if unset).
+//
+// There is deliberately no way to commit "everything": this package pushes what
+// it commits, and a working tree holds things that were never meant to leave the
+// machine (an untracked .env, a scan's own vault and reports). The pathspec is
+// passed to `git commit` as well as `git add`, so anything else that happens to be
+// staged stays out of the commit.
+func (r *Repo) Commit(ctx context.Context, msg string, paths ...string) error {
+	if len(paths) == 0 {
+		return fmt.Errorf("gitops: Commit needs the paths to commit; it never stages a whole tree")
+	}
+	for _, p := range paths {
+		if strings.TrimSpace(p) == "" || strings.HasPrefix(p, "-") || strings.HasPrefix(p, ":") {
+			return fmt.Errorf("gitops: refusing to commit path %q", p)
+		}
+	}
+	if _, err := r.run(ctx, "", append([]string{"add", "--"}, paths...)...); err != nil {
 		return err
 	}
-	_, err := r.run(ctx, "", "commit", "-m", msg)
+	_, err := r.run(ctx, "", append([]string{"commit", "-m", msg, "--"}, paths...)...)
 	return err
 }
 

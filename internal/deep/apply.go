@@ -55,6 +55,7 @@ func Apply(f *model.Finding, d model.DeepVerification) {
 func supportsDismissal(f *model.Finding, d model.DeepVerification) bool {
 	return d.Conclusion == model.ClassFalsePositive &&
 		!f.IsSecret() &&
+		!f.IsDependencyAdvisory() &&
 		d.Aborted == "" &&
 		d.Confidence >= model.DismissFloor &&
 		len(d.Evidence) > 0 &&
@@ -73,7 +74,7 @@ func confirm(f *model.Finding, d model.DeepVerification) {
 		v.Confidence = d.Confidence
 	}
 	v.Classification = model.ClassTruePositive
-	v.Refuted = false // the deep pass read the code the judge only reasoned about
+	v.Refuted, v.RefuteSupported = false, false // the deep pass read the code the judge only reasoned about
 	if v.Exploitability == model.ExploitNotReachable {
 		v.Exploitability = model.ExploitUnknown
 	}
@@ -110,7 +111,7 @@ func dismiss(f *model.Finding, d model.DeepVerification) {
 		} else {
 			v.Confidence = d.Confidence
 		}
-		v.Refuted = false
+		v.Refuted, v.RefuteSupported = false, false
 		v.Exploitability = model.ExploitNotReachable
 		v.Reasoning = deepNote("finds a false positive", d) + priorNote(prior)
 	}
@@ -153,6 +154,9 @@ func needsAttention(v *model.Verdict) bool {
 //  3. any other finding with no verdict.
 //
 // Never selected: credential findings (their content must not reach a model),
+// dependency advisories (a known CVE is not settled by reading the project's code
+// for a sink, and they would otherwise take every slot: they are often the most
+// severe findings in a scan),
 // shadow-rule findings (they do not gate), findings already deep-verified, and
 // settled medium/low findings. The order is stable: ties keep scan order.
 func Select(findings []model.Finding, n int) []int {
@@ -163,7 +167,7 @@ func Select(findings []model.Finding, n int) []int {
 	var cs []cand
 	for i := range findings {
 		f := &findings[i]
-		if f.IsSecret() || f.Shadow || f.Deep != nil {
+		if f.IsSecret() || f.IsDependencyAdvisory() || f.Shadow || f.Deep != nil {
 			continue
 		}
 		c := cand{idx: i, sev: f.Severity.Rank()}

@@ -2,7 +2,6 @@ package research
 
 import (
 	"context"
-	"fmt"
 )
 
 // Engine orchestrates the research loop: dedup targets, research each, synthesize
@@ -49,13 +48,7 @@ func (e *Engine) Run(ctx context.Context, runID string, targets []Target) (Summa
 			}
 			sum.RulesGenerated++
 
-			res, err := e.validator.Validate(ctx, rule)
-			if err != nil {
-				_ = e.repo.Quarantine(runID, rule, res, fmt.Sprintf("validation error: %v", err))
-				sum.Quarantined++
-				continue
-			}
-			if ok, reason := Admit(res); ok {
+			if res, ok, reason := Judge(ctx, e.validator, rule); ok {
 				_ = e.repo.Admit(runID, rule, res)
 				sum.Admitted++
 			} else {

@@ -8,13 +8,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
 
 // FileStore is a JSONL-backed, append-only Evidence Vault. Records are written
-// one JSON object per append and never rewritten, so the file itself is the
-// tamper-evident audit log.
+// one JSON object per append and never rewritten through this API, so the file
+// itself is the audit log. It is not tamper-evident: there is no hash chain or
+// signature, so anyone who can write the file can change it. Protect it with file
+// permissions (it is created 0600) like any other record you rely on.
 //
 // Several processes may share one file on a local filesystem — typically a scan
 // writing while achillesd serves the War Room. Writers serialize on a sidecar
@@ -34,6 +37,30 @@ type FileStore struct {
 	// complete lines, so a writer caught mid-append is picked up next time.
 	seen   os.FileInfo
 	offset int64
+
+	// skipped counts lines that could not be decoded (see refresh).
+	skipped int
+	// warnedNewer: the notice about records from a newer build was given.
+	warnedNewer bool
+
+	health readHealth
+}
+
+// LastReadErr and ReadFailures report reads that could not refresh from disk (the
+// file became unreadable after it was opened). Such a read still serves the
+// records already loaded, so it is stale rather than empty.
+func (fs *FileStore) LastReadErr() error { return fs.health.LastReadErr() }
+func (fs *FileStore) ReadFailures() int  { return fs.health.ReadFailures() }
+
+// Warn receives the one-line notice a FileStore gives when it has to skip a
+// damaged line. It defaults to stderr; tests replace it.
+var Warn = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
+
+// Skipped reports how many damaged lines this store has passed over.
+func (fs *FileStore) Skipped() int {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	return fs.skipped
 }
 
 // NewFileStore opens (or creates on first append) a vault at path, loading any
@@ -90,7 +117,22 @@ func (fs *FileStore) refresh() error {
 		}
 		var rec Record
 		if err := json.Unmarshal(line, &rec); err != nil {
-			return fmt.Errorf("decode vault record: %w", err)
+			// One damaged line (a write torn by a crash or a full disk, a stray
+			// edit) must not take the vault down: failing here made every later
+			// open and every later Append fail too, so a single bad line stopped
+			// all recording until someone repaired the file by hand. Skip it, say
+			// so once, and keep everything that is intact.
+			fs.skipped++
+			if fs.skipped == 1 {
+				Warn(fmt.Sprintf("achilles: vault %s: skipping a damaged line ending at byte %d (%v); the other records are intact",
+					fs.path, fs.offset, err))
+			}
+			continue
+		}
+		if rec.V > SchemaVersion && !fs.warnedNewer {
+			fs.warnedNewer = true
+			Warn(fmt.Sprintf("achilles: vault %s holds records written by a newer Achilles (record format %d; this build understands %d). "+
+				"They are read as far as this build understands them; upgrade to be sure nothing is misread", fs.path, rec.V, SchemaVersion))
 		}
 		fs.records = append(fs.records, rec)
 		fs.byID[rec.ID] = rec
@@ -99,7 +141,7 @@ func (fs *FileStore) refresh() error {
 }
 
 func (fs *FileStore) reset() {
-	fs.records, fs.byID, fs.seen, fs.offset = nil, map[string]Record{}, nil, 0
+	fs.records, fs.byID, fs.seen, fs.offset, fs.skipped = nil, map[string]Record{}, nil, 0, 0
 }
 
 // lock takes the cross-process write lock and brings memory up to date; the
@@ -138,6 +180,7 @@ func (fs *FileStore) Append(r Record) (Record, error) {
 	if r.Timestamp.IsZero() {
 		r.Timestamp = fs.now()
 	}
+	r.V = SchemaVersion
 	// The sequence is the count AFTER folding in other writers' records, so IDs
 	// stay unique across processes.
 	r.ID = computeID(r, len(fs.records))
@@ -152,6 +195,12 @@ func (fs *FileStore) Append(r Record) (Record, error) {
 	line, err := json.Marshal(r)
 	if err != nil {
 		return Record{}, fmt.Errorf("marshal record: %w", err)
+	}
+	// If an earlier write was cut short, the file ends in a fragment with no
+	// newline. Appending straight after it would glue this record onto the
+	// fragment and lose both; end the fragment's line first so only it is lost.
+	if fi, err := f.Stat(); err == nil && fi.Size() > fs.offset {
+		line = append([]byte{'\n'}, line...)
 	}
 	if _, err := f.Write(append(line, '\n')); err != nil {
 		return Record{}, fmt.Errorf("write record: %w", err)
@@ -169,7 +218,7 @@ func (fs *FileStore) Append(r Record) (Record, error) {
 func (fs *FileStore) Get(id string) (Record, bool) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	_ = fs.refresh() // best effort: on a read error serve what we have
+	fs.health.noteRead(fs.refresh()) // on a read error serve what we have, and say so
 	r, ok := fs.byID[id]
 	return r, ok
 }
@@ -191,7 +240,7 @@ func (fs *FileStore) All() []Record {
 
 // Purge deletes records older than the cutoff and rewrites the log (retention).
 // Distinct from the append-only guarantee: this is coarse time-based expiry, not
-// record mutation — records within the window remain tamper-evident.
+// record mutation — records within the window are copied unchanged.
 func (fs *FileStore) Purge(before time.Time) (int, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -215,10 +264,17 @@ func (fs *FileStore) Purge(before time.Time) (int, error) {
 		return 0, nil
 	}
 
+	// 0600 like the vault itself: os.Create would make the replacement 0644
+	// (before umask), turning a private file of findings and prompts into one any
+	// local user can read the first time retention runs.
 	tmp := fs.path + ".tmp"
-	f, err := os.Create(tmp)
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return 0, fmt.Errorf("purge open: %w", err)
+	}
+	if err := f.Chmod(0o600); err != nil && runtime.GOOS != "windows" { // a leftover .tmp keeps its old mode
+		f.Close()
+		return 0, fmt.Errorf("purge chmod: %w", err)
 	}
 	for _, r := range kept {
 		line, err := json.Marshal(r)
@@ -230,6 +286,10 @@ func (fs *FileStore) Purge(before time.Time) (int, error) {
 			f.Close()
 			return 0, err
 		}
+	}
+	if err := f.Sync(); err != nil { // the old file is about to be replaced: have the new one on disk first
+		f.Close()
+		return 0, err
 	}
 	if err := f.Close(); err != nil {
 		return 0, err
@@ -249,7 +309,7 @@ func (fs *FileStore) Purge(before time.Time) (int, error) {
 func (fs *FileStore) filter(keep func(Record) bool) []Record {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	_ = fs.refresh() // best effort: on a read error serve what we have
+	fs.health.noteRead(fs.refresh()) // on a read error serve what we have, and say so
 	var out []Record
 	for _, r := range fs.records {
 		if keep(r) {

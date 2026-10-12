@@ -225,6 +225,9 @@ func (r *renderer) writeDetail(b *strings.Builder, f model.Finding, withDiff boo
 		if v.Overturned {
 			b.WriteString("- **Note:** the first AI pass called this a false positive, but the adversarial pass found concrete evidence otherwise, so it is kept for a human to confirm.\n")
 		}
+		if v.Disputed() {
+			b.WriteString("- **Note:** the adversarial pass disagreed with this verdict, but not strongly enough to rule the finding out, so it is kept for a human to confirm.\n")
+		}
 		if reason := r.prose(v.Reasoning, maxReason); reason != "" {
 			fmt.Fprintf(b, "\n%s\n", reason)
 		}
@@ -439,7 +442,7 @@ func (r *renderer) prose(s string, limit int) string {
 	}
 	s = redact.Secrets(r.strip(s))
 	s = strings.ReplaceAll(s, "<!--", "&lt;!--")
-	s = mentionRE.ReplaceAllString(s, "@​$1")
+	s = mentionRE.ReplaceAllString(s, "@\u200b$1")
 	if len(s) > limit {
 		s = cutUTF8(s, limit) + " ... (truncated)"
 	}

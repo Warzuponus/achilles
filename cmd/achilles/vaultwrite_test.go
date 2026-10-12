@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -73,5 +74,75 @@ func TestVaultWriteFailure_CountsMarshalErrors(t *testing.T) {
 	}
 	if reportVaultFailures() == nil {
 		t.Error("expected an error after a lost record")
+	}
+}
+
+// The pipeline's own writes were counted, but the AI review's were not: the triage
+// engine records every prompt, response and verdict with `_, _ = vault.Append(...)`.
+// A disk that filled during the review lost all of it and the run exited 0.
+func TestVaultWriteFailure_DuringTheAIReviewIsCounted(t *testing.T) {
+	reset()
+	defer reset()
+
+	fe := newFakeEndpoint(t, 200, 0, verdictFor)
+	scan, _ := triageFixture(t, "real-1")
+	ev := trackVault(failingStore{err: errors.New("write vault.jsonl: no space left on device")})
+
+	if _, err := runTriage(context.Background(), ev, "run", scan, nil,
+		triageOpts{baseURL: fe.URL, triageModel: "m"}); err != nil {
+		t.Fatalf("a vault that cannot be written does not stop the review: %v", err)
+	}
+	if scan.Findings[0].Verdict == nil {
+		t.Fatal("the review itself should still have produced a verdict")
+	}
+
+	// At least the triage call, the judge call and the verdict were written by the
+	// engine, not by the pipeline.
+	if vaultWrites.failed < 3 || vaultWrites.failed != vaultWrites.attempted {
+		t.Errorf("failed=%d attempted=%d: the engine's lost records were not counted", vaultWrites.failed, vaultWrites.attempted)
+	}
+	err := reportVaultFailures()
+	if err == nil || !strings.Contains(err.Error(), "no space left on device") {
+		t.Errorf("reportVaultFailures() = %v, want the run to fail naming the cause", err)
+	}
+}
+
+func TestTrackVault_CountsEachWriteOnce(t *testing.T) {
+	reset()
+	defer reset()
+
+	ev := trackVault(trackVault(failingStore{err: errors.New("down")})) // wrapping twice is harmless
+	recordJSON(ev, vault.Record{RunID: "r", Kind: vault.KindScanMeta}, map[string]any{"a": 1})
+	_, _ = ev.Append(vault.Record{RunID: "r", Kind: vault.KindVerdict})
+	if vaultWrites.attempted != 2 || vaultWrites.failed != 2 {
+		t.Errorf("attempted=%d failed=%d, want 2 and 2", vaultWrites.attempted, vaultWrites.failed)
+	}
+}
+
+// unreadableStore answers every read with nothing and says, on the side, that the
+// read failed: what a database outage looks like through the Store interface.
+type unreadableStore struct {
+	failingStore
+	reads int
+}
+
+func (u *unreadableStore) All() []vault.Record { u.reads++; return nil }
+func (u *unreadableStore) LastReadErr() error  { return errors.New("connection refused") }
+func (u *unreadableStore) ReadFailures() int   { return u.reads }
+
+func TestVaultReadFailure_FailsTheRun(t *testing.T) {
+	st := &unreadableStore{}
+	ev := trackVault(st) // the wrapper must not hide the store's read health
+	if err := reportVaultReadFailures(ev); err != nil {
+		t.Fatalf("no read has failed yet: %v", err)
+	}
+	_ = ev.All()
+	err := reportVaultReadFailures(ev)
+	if err == nil || !strings.Contains(err.Error(), "1 read(s) FAILED") || !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("err = %v, want the failed read reported with its cause", err)
+	}
+	// A store that cannot fail on read never trips this.
+	if err := reportVaultReadFailures(trackVault(failingStore{})); err != nil {
+		t.Errorf("a store with no read health reported a failure: %v", err)
 	}
 }

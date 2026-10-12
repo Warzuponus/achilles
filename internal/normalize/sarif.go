@@ -6,7 +6,11 @@ package normalize
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"path"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Warzuponus/achilles/internal/model"
@@ -37,7 +41,8 @@ func FromSARIF(fallbackTool string, data []byte) ([]model.Finding, error) {
 		rules := indexRules(run.Tool.Driver.Rules)
 
 		for _, res := range run.Results {
-			loc := firstLocation(res.Locations)
+			res.RuleID = ruleIDFor(res, run.Tool.Driver.Rules)
+			loc := firstLocation(res.Locations, run.OriginalURIBaseIDs)
 			snippet := ""
 			if len(res.Locations) > 0 {
 				snippet = res.Locations[0].PhysicalLocation.Region.Snippet.Text
@@ -49,9 +54,10 @@ func FromSARIF(fallbackTool string, data []byte) ([]model.Finding, error) {
 				Message:     strings.TrimSpace(res.Message.Text),
 				Location:    loc,
 				CodeContext: snippet,
-				Severity:    severityFor(res, rules[res.RuleID]),
 				CWE:         cweFor(res, rules[res.RuleID]),
+				Category:    categoryFor(tool, res, rules[res.RuleID]),
 			}
+			f.Severity = severityFor(res, rules[res.RuleID], f.IsSecret())
 			f.ID = model.ComputeID(tool, res.RuleID, loc)
 			f.Fingerprint = fingerprintFor(res, tool, loc.File, snippet)
 			if raw, err := json.Marshal(res); err == nil {
@@ -71,13 +77,97 @@ func indexRules(rules []model.SarifRule) map[string]model.SarifRule {
 	return out
 }
 
-func firstLocation(locs []model.SarifLocation) model.Location {
+// ruleIDFor returns the id of the rule a result is about. Most tools set ruleId;
+// the specification also allows naming the rule only by its index in the driver's
+// rule list, or through a rule reference. Such a result used to get an empty rule
+// id, and with it no severity from the rule, no CWE and no category.
+func ruleIDFor(res model.SarifResult, rules []model.SarifRule) string {
+	if res.RuleID != "" {
+		return res.RuleID
+	}
+	if res.Rule != nil && res.Rule.ID != "" {
+		return res.Rule.ID
+	}
+	index := res.RuleIndex
+	if index == nil && res.Rule != nil {
+		index = res.Rule.Index
+	}
+	if index != nil && *index >= 0 && *index < len(rules) {
+		return rules[*index].ID
+	}
+	return ""
+}
+
+// artifactPath turns a SARIF artifact location into a file path.
+//
+// The uri field is a URI reference, not a path: it may be percent-encoded
+// ("src/my%20file.py"), an absolute file URI ("file:///repo/src/a.py"), and
+// relative to a named base that is itself relative ("SRC" -> "src/", relative to
+// "ROOT"). Taken literally, such a value names a file that does not exist: the
+// code around the finding cannot be read, diff and baseline matching miss it,
+// and a fix cannot be applied.
+//
+// A base whose own URI is absolute is deliberately NOT applied: scanners point it
+// at wherever the tree was mounted for them (file:///mnt/src/), and the path
+// relative to that is the path relative to the scanned tree, which is what the
+// rest of Achilles works with.
+func artifactPath(a model.SarifArtifactLocation, bases map[string]model.SarifArtifactLocation) string {
+	p := decodeURIPath(a.URI)
+	if p == "" || path.IsAbs(p) || isWindowsAbs(p) {
+		return p
+	}
+	seen := map[string]bool{}
+	for id := a.URIBaseID; id != "" && !seen[id]; {
+		seen[id] = true
+		base, ok := bases[id]
+		if !ok {
+			break
+		}
+		b := decodeURIPath(base.URI)
+		if b == "" || path.IsAbs(b) || isWindowsAbs(b) || strings.Contains(base.URI, "://") {
+			break // an absolute base: the mount point, not part of the path
+		}
+		p = path.Join(b, p)
+		id = base.URIBaseID
+	}
+	return p
+}
+
+// decodeURIPath returns the path a URI reference names: the scheme and host of a
+// file: URI removed, percent-escapes decoded. Anything it cannot parse is
+// returned unchanged rather than guessed at.
+func decodeURIPath(uri string) string {
+	if strings.HasPrefix(strings.ToLower(uri), "file:") {
+		if u, err := url.Parse(uri); err == nil && u.Path != "" {
+			p := u.Path
+			// file:///C:/repo/a.go parses to "/C:/repo/a.go".
+			if len(p) >= 3 && p[0] == '/' && isWindowsAbs(p[1:]) {
+				p = p[1:]
+			}
+			return p
+		}
+		return uri
+	}
+	if strings.Contains(uri, "%") {
+		if p, err := url.PathUnescape(uri); err == nil {
+			return p
+		}
+	}
+	return uri
+}
+
+func isWindowsAbs(p string) bool {
+	return len(p) >= 3 && p[1] == ':' && (p[2] == '/' || p[2] == '\\') &&
+		((p[0] >= 'a' && p[0] <= 'z') || (p[0] >= 'A' && p[0] <= 'Z'))
+}
+
+func firstLocation(locs []model.SarifLocation, bases map[string]model.SarifArtifactLocation) model.Location {
 	if len(locs) == 0 {
 		return model.Location{}
 	}
 	p := locs[0].PhysicalLocation
 	return model.Location{
-		File: p.ArtifactLocation.URI,
+		File: artifactPath(p.ArtifactLocation, bases),
 		Region: model.Region{
 			StartLine: p.Region.StartLine,
 			StartCol:  p.Region.StartColumn,
@@ -87,10 +177,36 @@ func firstLocation(locs []model.SarifLocation) model.Location {
 	}
 }
 
-// severityFor maps SARIF level to our normalized severity. SARIF levels are
-// error/warning/note/none. A result with no explicit level inherits the rule's
-// defaultConfiguration.level (this is how Opengrep encodes severity).
-func severityFor(res model.SarifResult, rule model.SarifRule) model.Severity {
+// severityFor derives our normalized severity from the two things a SARIF result
+// can say about it, and takes the MORE severe of the two:
+//
+//   - the level (error/warning/note/none), on the result or inherited from the
+//     rule's defaultConfiguration (this is how Opengrep encodes severity). SARIF
+//     has only three real levels, so on its own it can never say "critical";
+//   - the security-severity score (CVSS-style, 0..10) on the result or the rule,
+//     which is how Trivy, osv-scanner and others carry critical vs. high.
+//
+// Taking the maximum means a score can raise a finding (an "error" with a 9.8
+// becomes critical) but never quietly lower what the tool's own level said.
+//
+// A result with neither gets the SARIF default level, "warning" (§3.27.10), unless
+// it is a credential finding: a secret scanner that states no severity (Gitleaks)
+// is reporting a leaked credential, and that must be able to fail a gate.
+func severityFor(res model.SarifResult, rule model.SarifRule, secret bool) model.Severity {
+	sev := levelSeverity(res, rule)
+	if s := scoreSeverity(res, rule); s.Rank() > sev.Rank() {
+		sev = s
+	}
+	if sev != model.SeverityUnknown {
+		return sev
+	}
+	if secret {
+		return model.SeverityHigh
+	}
+	return model.SeverityMedium
+}
+
+func levelSeverity(res model.SarifResult, rule model.SarifRule) model.Severity {
 	level := res.Level
 	if level == "" {
 		level = rule.DefaultConfiguration.Level
@@ -105,10 +221,12 @@ func severityFor(res model.SarifResult, rule model.SarifRule) model.Severity {
 	case "none":
 		return model.SeverityInfo
 	}
-	// Last resort: infer from the rule's tags if it carries a severity-ish one.
+	// No level: infer from the rule's tags if it carries a severity-ish one.
 	for _, t := range rule.Properties.Tags {
 		switch strings.ToLower(t) {
-		case "error", "high", "critical":
+		case "critical":
+			return model.SeverityCritical
+		case "error", "high":
 			return model.SeverityHigh
 		case "warning", "medium":
 			return model.SeverityMedium
@@ -117,6 +235,62 @@ func severityFor(res model.SarifResult, rule model.SarifRule) model.Severity {
 		}
 	}
 	return model.SeverityUnknown
+}
+
+// scoreSeverity reads a security-severity from the result's own properties (more
+// specific) or else the rule's.
+func scoreSeverity(res model.SarifResult, rule model.SarifRule) model.Severity {
+	if raw, ok := res.Properties["security-severity"]; ok {
+		var s model.SarifScore
+		switch v := raw.(type) {
+		case string:
+			s = model.SarifScore(v)
+		case float64:
+			s = model.SarifScore(strconv.FormatFloat(v, 'f', -1, 64))
+		}
+		if score, ok := s.Value(); ok {
+			return model.SeverityFromScore(score)
+		}
+	}
+	if score, ok := rule.Properties.SecuritySeverity.Value(); ok {
+		return model.SeverityFromScore(score)
+	}
+	return model.SeverityUnknown
+}
+
+// categoryFor reads the scanner's own statement of what kind of finding this is.
+//
+// Trivy is the case that needs it: one tool, three kinds of result, and rule ids
+// such as "github-pat" or "slack-web-hook" that no keyword list reliably marks as
+// credentials. Trivy tags every rule with its class ("secret", "vulnerability",
+// "misconfiguration") and labels a secret result in its message. Missing this
+// sends the line holding the credential to the model and lets a verdict dismiss it.
+func categoryFor(tool string, res model.SarifResult, rule model.SarifRule) string {
+	tags := append([]string(nil), rule.Properties.Tags...)
+	if raw, ok := res.Properties["tags"].([]any); ok {
+		for _, t := range raw {
+			if s, ok := t.(string); ok {
+				tags = append(tags, s)
+			}
+		}
+	}
+	trivy := strings.EqualFold(tool, "trivy")
+	for _, t := range tags {
+		switch strings.ToLower(strings.TrimSpace(t)) {
+		case "secret", "secrets":
+			return model.CategorySecret
+		case "vulnerability":
+			// Only Trivy's use of the word is known to mean "vulnerable package";
+			// another tool may tag a code finding this way.
+			if trivy {
+				return model.CategoryDependency
+			}
+		}
+	}
+	if trivy && (strings.HasPrefix(res.Message.Text, "Secret ") || strings.Contains(res.Message.Text, "\nSecret ")) {
+		return model.CategorySecret
+	}
+	return ""
 }
 
 // cweFor collects CWE identifiers from the result and its rule metadata. Tools
@@ -168,9 +342,17 @@ func fingerprintFor(res model.SarifResult, tool, file, snippet string) string {
 			return v
 		}
 	}
-	// Any fingerprint the tool provided is better than recomputing.
-	for _, v := range res.Fingerprints {
-		if v != "" {
+	// Any fingerprint the tool provided is better than recomputing. Keys are taken
+	// in sorted order: a tool that emits two fingerprints must yield the same one
+	// on every run, or baselines, issue de-duplication and feedback all break at
+	// random (Go randomizes map iteration).
+	keys := make([]string, 0, len(res.Fingerprints))
+	for k := range res.Fingerprints {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if v := res.Fingerprints[k]; v != "" {
 			return v
 		}
 	}

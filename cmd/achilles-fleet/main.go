@@ -1,6 +1,6 @@
-// Command achilles-fleet is the MSSP fleet-scan control plane: it reads a fleet
+// Command achilles-fleet is the fleet-scan control plane: it reads a fleet
 // definition (tenants -> targets) and dispatches a achilles scan for each target
-// into that tenant's isolated Evidence Vault (DESIGN.md §10/§11, Tier E).
+// into that tenant's isolated Evidence Vault (DESIGN.md §10/§11).
 //
 // It is a SEPARATE binary from `achilles` on purpose — the multi-tenant control
 // plane is the natural OSS/commercial boundary. It shells out to the `achilles`

@@ -2,6 +2,7 @@ package eval
 
 import (
 	"bytes"
+	"go/version"
 	"os/exec"
 	"strings"
 	"testing"
@@ -155,6 +156,10 @@ func TestScanSource_VulnerableGoScanReportsTheRule(t *testing.T) {
 	src := "package p\n\nimport \"crypto/md5\"\n\nfunc h(b []byte) []byte {\n\ts := md5.Sum(b)\n\treturn s[:]\n}\n"
 	out := scanSource(cs, []byte(src))
 
+	if !out.trusted && gosecCannotReadThisGo() {
+		t.Skip("no gosec release can type-check with Go 1.27.2 or newer yet (compiler export-data format); " +
+			"an untrusted scan is the correct result here. Run with Go 1.27.1 and GOTOOLCHAIN=local to exercise this test.")
+	}
 	if !out.trusted {
 		t.Fatal("scan should be trusted")
 	}
@@ -292,4 +297,15 @@ func TestCorpusCheckReport_NoRuleHintWhenTheRuleWasRight(t *testing.T) {
 	if !strings.Contains(b2.String(), "set ruleId to one of G701") {
 		t.Errorf("a genuinely wrong rule id should still get the hint:\n%s", b2.String())
 	}
+}
+
+// gosecCannotReadThisGo reports whether the `go` that gosec will find is new
+// enough that gosec cannot type-check with it (see incompleteWhen in
+// configs/tools.yaml). Remove once a gosec release reads the new format.
+func gosecCannotReadThisGo() bool {
+	out, err := exec.Command("go", "env", "GOVERSION").Output()
+	if err != nil {
+		return false
+	}
+	return version.Compare(strings.TrimSpace(string(out)), "go1.27.2") >= 0
 }

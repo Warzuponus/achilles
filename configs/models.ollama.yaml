@@ -1,87 +1,35 @@
-# Ollama Cloud per-task model routing for Achilles.
+# Per-task model routing for open models on Ollama Cloud (an example; any
+# OpenAI-compatible endpoint works the same way).
 #
 #   achilles --llm-base-url https://ollama.com/v1 --llm-model glm-5.2 \
 #            --model-config configs/models.ollama.yaml ...
 #
-# API key comes from ACHILLES_LLM_API_KEY (never checked in). --llm-model is the
-# default/fallback for any task not routed below (and misc steps like rule mining).
+# The API key comes from ACHILLES_LLM_API_KEY (never checked in). --llm-model is the
+# fallback for any task not routed below.
 #
-# MEASURED, then FIXED. evals/triage, 18 cases x 3 repeats, PromptVersion triage/v2.
+# Triage and judge are the measured pair: 94.4% balanced accuracy on the labeled
+# corpus in evals/triage (18 cases, 3 repeats each), with 4 cases still flipping
+# between repeats. The measurements, how the judge was chosen, and the candidates
+# that were rejected are in evals/README.md ("Known limits"). They were
+# taken on an earlier prompt version; re-run `make eval-verdict` before relying on
+# the numbers, and after changing either model.
 #
-# The judge seat was the whole problem. A four-way screen with `triage` held FIXED
-# at minimax-m2.7 (the model that was already right):
-#
-# The three NON-routed rows were measured on the pre-2026-08-05 corpus, in which 4 of
-# the 9 FP cases described findings gosec does not actually emit. The ranking is sound
-# — it turned on judge behaviour, not on those four cases — but their absolute numbers
-# are not restated. The ROUTED pairing was re-run on the corrected corpus and is exact.
-#
-#   judge              bal.acc  recall  suppr   refutes-correct-TPs  unstable   tok
-#   kimi-k2.6           66.7%   33.3%  100.0%          74%              6      257k
-#   minimax-m2.7        88.9%   88.9%   88.9%          15%              6       79k
-#   minimax-m3          94.4%   88.9%  100.0%          11%              4       83k  <- routed
-#   deepseek-v4-pro     77.8%   77.8%   77.8%          26%              7       87k
-#
-#   (For reference, the best hosted model measured on the same corrected corpus
-#   scored 100% / 100% / 100% with 0 unstable cases at ~10k tokens.)
-#
-# RE-MEASURED 2026-08-10 on the corrected corpus (all 9 FP cases are now findings
-# gosec genuinely emits). Every headline came back IDENTICAL — 94.4% / 88.9% / 100%,
-# 4 unstable, calibration gap 0.04 — so the routing decision stands unchanged, and the
-# 100% suppression now covers 9 real FP cases rather than the 5 that were real before.
-# refutes-correct-TPs improved 15% -> 11%. Same single miss: go-rand-session-token,
-# where triage says true_positive and the judge refutes it, so it is never surfaced.
-# Unstable stayed at 4 but the SET shifted, and only one rewritten case is in it, so
-# the harder FP fixtures did not concentrate the instability.
-#
-# Prompt tokens read 41.9k before and 15.6k now for an IDENTICAL 108 calls and
-# slightly LONGER prompts. That is a provider-side accounting change, not an
-# efficiency gain — do not cite it as one.
-#
-# kimi-k2.6 was NOT weak — it was BIASED. It refuted 74% of *correct* true_positive
-# verdicts and only 7% of false_positive ones: it answered "not a real problem"
-# almost regardless of evidence, deleting 6 of 9 true positives while its 100% FP
-# suppression made it look healthy. Triage (minimax-m2.7) had classified 27/27
-# true-positive runs correctly at 0.85-1.00 confidence the whole time.
-#
-# The refute-correct-TP rate PREDICTED recall across all four candidates
-# (74%->33% recall, 26%->78%, 15%->89%), so it is the cheap screening metric when
-# adding a judge candidate.
-#
-# kimi-k3 COULD NOT BE MEASURED: extra-usage-only on this plan, every call HTTP 402.
-# Listing in /v1/models is not entitlement — probe with a real request first, the
-# same warning applies to any provider whose model catalog lists more than it grants.
-#
-# HONEST STANDING: even at 94.4% this routing trails the best hosted model we
-# measured on accuracy AND on stability (4 of 18 cases still flip across repeats, vs 0)
-# and burns ~7x the completion tokens. Choose it for data residency or cost, not because it is
-# better.
-#
-# Historical (2026-07-13, PromptVersion triage/v1, 12-case corpus, scored per-MODEL
-# and never per-SEAT): minimax-m2.7 92% + best-calibrated + ~38s/call; kimi-k2.6 92%
-# + deepest reasoner but ~80s/call; glm-5.2 83%, fastest, overconfident. Retained for
-# provenance — those numbers answered a different question and were never evidence
-# for any pairing.
+# The judge matters more than the triage model. One candidate refuted three quarters
+# of the correct true-positive verdicts it was shown, which deleted real findings
+# while its false-positive score looked perfect. Screen any replacement on that
+# measure first (evals/README.md).
 tasks:
   triage:
-    model: minimax-m2.7      # high-volume: fast + calibrated + strong FP suppression
+    model: minimax-m2.7
   judge:
-    # Screened winner (table above): 94.4% balanced accuracy, 100% FP suppression,
-    # fewest unstable cases. Do NOT put kimi-k2.6 back here — measured at 66.7%
-    # because it refutes 74% of correct true_positive verdicts.
     model: minimax-m3
+  # The seats below are not measured by the eval corpus, which exercises triage and
+  # judge only. Treat them as starting points.
   remediation:
-    # UNMEASURED SEAT. kimi-k2.6 is measured biased as a JUDGE (dismissal), but that
-    # is a judgement pathology; remediation is a code-WRITING task and the 2026-07-13
-    # bake-off did find it had the best unified-diff apply rate. Kept on that basis —
-    # not validated by the current corpus, which only exercises triage+judge.
     model: kimi-k2.6
   threat-model:
-    # UNMEASURED SEAT. The known open-model failure here is SCHEMA DRIFT on the deep
-    # nested OTM document, not judgement — a different failure mode from the judge
-    # bias measured above, and one the eval corpus does not test. Kept, unvalidated.
     model: kimi-k2.6
   review:
-    model: minimax-m2.7      # holistic review: strong + fast enough per scan
+    model: minimax-m2.7
   sca:
-    model: minimax-m2.7      # dependency upgrade prioritization
+    model: minimax-m2.7

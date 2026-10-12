@@ -10,9 +10,18 @@
 // different defects) is much higher than the cost of a missed merge (one extra
 // LLM call):
 //
-//   - the key is exact file + start line + the CWE set, all of which must match;
-//   - a finding with no CWE, or no line number, is never clustered (too little
-//     evidence to prove two reports are the same defect);
+//   - two findings must be at the same file and line, and be about the same kind
+//     of weakness: they share a CWE, or CWEs that are parent and child (one tool
+//     says CWE-78, another CWE-77). Requiring the identical SET of CWEs, as this
+//     used to, meant overlapping tools almost never clustered;
+//   - two credential findings on one line are the same credential, and two
+//     dependency advisories with the same id against the same manifest are the
+//     same advisory. Neither is ever sent to a model, so these clusters save no
+//     calls; they let a report say that two tools agree;
+//   - any other finding with no CWE, or no line number, is never clustered (too
+//     little evidence to prove two reports are the same defect). That still
+//     excludes most infrastructure-as-code findings, whose rule ids differ per
+//     tool and carry no CWE;
 //   - members must come from DIFFERENT tools — one tool reporting twice at one
 //     line is reporting two instances, not the cross-tool overlap we target;
 //   - shadow findings (§9.4 rule flywheel) never cluster, so the shadow window's
@@ -47,53 +56,104 @@ type Cluster struct {
 // in order of their representative's index, and ties on severity resolve to the
 // earlier index.
 func Clusters(findings []model.Finding) []Cluster {
-	byKey := map[string][]int{}
-	var order []string
+	// Findings are first grouped by place (the same file and line; for a
+	// dependency advisory, the same manifest). Within a place, two findings are
+	// the same defect when they share a label: a CWE family, an advisory id, or
+	// "a credential". Sharing is transitive within the place.
+	type member struct {
+		idx    int
+		labels []string
+	}
+	byPlace := map[string][]member{}
+	var places []string
 	for i, f := range findings {
-		k, ok := key(f)
+		place, labels, ok := describe(f)
 		if !ok {
 			continue
 		}
-		if _, seen := byKey[k]; !seen {
-			order = append(order, k)
+		if _, seen := byPlace[place]; !seen {
+			places = append(places, place)
 		}
-		byKey[k] = append(byKey[k], i)
+		byPlace[place] = append(byPlace[place], member{i, labels})
 	}
 
 	var out []Cluster
-	for _, k := range order {
-		idx := byKey[k]
-		if len(idx) < 2 {
+	for _, place := range places {
+		ms := byPlace[place]
+		if len(ms) < 2 {
 			continue
 		}
-		// Same-tool reports are separate instances, not cross-tool overlap. Keep
-		// the first index per tool and leave any repeats to be triaged normally.
-		seenTool := map[string]bool{}
-		distinct := make([]int, 0, len(idx))
-		for _, i := range idx {
-			if seenTool[findings[i].Tool] {
-				continue
+		// Union-find over the members of this place, joined through shared labels.
+		parent := make([]int, len(ms))
+		for i := range parent {
+			parent[i] = i
+		}
+		find := func(i int) int {
+			for parent[i] != i {
+				parent[i] = parent[parent[i]]
+				i = parent[i]
 			}
-			seenTool[findings[i].Tool] = true
-			distinct = append(distinct, i)
+			return i
 		}
-		if len(distinct) < 2 {
-			continue
+		firstWith := map[string]int{}
+		for i, m := range ms {
+			for _, l := range m.labels {
+				if j, ok := firstWith[l]; ok {
+					if a, b := find(i), find(j); a != b {
+						if a < b {
+							a, b = b, a
+						}
+						parent[a] = b // the earlier member stays the root: stable order
+					}
+				} else {
+					firstWith[l] = i
+				}
+			}
+		}
+		groups := map[int][]int{}
+		var roots []int
+		for i, m := range ms {
+			r := find(i)
+			if _, seen := groups[r]; !seen {
+				roots = append(roots, r)
+			}
+			groups[r] = append(groups[r], m.idx)
 		}
 
-		rep := distinct[0]
-		for _, i := range distinct[1:] {
-			if findings[i].Severity.Rank() > findings[rep].Severity.Rank() {
-				rep = i
+		for _, r := range roots {
+			idx := groups[r]
+			if len(idx) < 2 {
+				continue
 			}
-		}
-		members := make([]int, 0, len(distinct)-1)
-		for _, i := range distinct {
-			if i != rep {
-				members = append(members, i)
+			// Same-tool reports are separate instances, not cross-tool overlap. Keep
+			// the first index per tool and leave any repeats to be triaged normally.
+			seenTool := map[string]bool{}
+			distinct := make([]int, 0, len(idx))
+			for _, i := range idx {
+				if seenTool[findings[i].Tool] {
+					continue
+				}
+				seenTool[findings[i].Tool] = true
+				distinct = append(distinct, i)
 			}
+			if len(distinct) < 2 {
+				continue
+			}
+
+			rep := distinct[0]
+			for _, i := range distinct[1:] {
+				if findings[i].Severity.Rank() > findings[rep].Severity.Rank() {
+					rep = i
+				}
+			}
+			members := make([]int, 0, len(distinct)-1)
+			for _, i := range distinct {
+				if i != rep {
+					members = append(members, i)
+				}
+			}
+			out = append(out, Cluster{Rep: rep, Members: members})
 		}
-		out = append(out, Cluster{Rep: rep, Members: members})
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].Rep < out[j].Rep })
@@ -122,34 +182,95 @@ func Annotate(findings []model.Finding, clusters []Cluster) {
 
 // Saved reports how many LLM triage passes the clusters avoid: every member
 // beyond its cluster's representative inherits a verdict instead of being
-// triaged.
-func Saved(clusters []Cluster) int {
+// triaged. Dependency advisories and credential findings are never sent to a
+// model, so a cluster of those saves nothing and is not counted.
+func Saved(findings []model.Finding, clusters []Cluster) int {
 	n := 0
 	for _, c := range clusters {
-		n += len(c.Members)
+		for _, i := range c.Members {
+			if i < len(findings) && !findings[i].IsSecret() && !findings[i].IsDependencyAdvisory() {
+				n++
+			}
+		}
 	}
 	return n
 }
 
-// key returns the cluster key for a finding, and whether it is eligible to
-// cluster at all. See the package comment for why each guard exists.
-func key(f model.Finding) (string, bool) {
-	if f.Shadow || len(f.CWE) == 0 || f.Location.Region.StartLine <= 0 {
-		return "", false
+// Size is the number of findings that belong to some cluster.
+func Size(clusters []Cluster) int {
+	n := 0
+	for _, c := range clusters {
+		n += 1 + len(c.Members)
 	}
-	cwes := make([]string, 0, len(f.CWE))
-	for _, c := range f.CWE {
-		if c = strings.TrimSpace(c); c != "" {
-			cwes = append(cwes, strings.ToUpper(c))
+	return n
+}
+
+// describe returns where a finding is and what it is about, and whether it is
+// eligible to cluster at all. See the package comment for why each guard exists.
+func describe(f model.Finding) (place string, labels []string, ok bool) {
+	if f.Shadow || f.Location.File == "" {
+		return "", nil, false
+	}
+	switch {
+	case f.IsDependencyAdvisory():
+		// Two SCA tools reporting one advisory against one manifest. Advisories
+		// often carry no useful line, so the manifest is the place.
+		id := strings.ToUpper(strings.TrimSpace(f.RuleID))
+		if id == "" {
+			return "", nil, false
 		}
+		return "advisory|" + f.Location.File, []string{id}, true
+	case f.Location.Region.StartLine <= 0:
+		return "", nil, false
+	case f.IsSecret():
+		// Two secret scanners on one line found the same credential, whatever
+		// each calls its rule.
+		labels = []string{"credential"}
+	default:
+		seen := map[string]bool{}
+		for _, c := range f.CWE {
+			if fam := family(c); fam != "" && !seen[fam] {
+				seen[fam] = true
+				labels = append(labels, fam)
+			}
+		}
+		if len(labels) == 0 {
+			return "", nil, false
+		}
+		sort.Strings(labels)
 	}
-	if len(cwes) == 0 {
-		return "", false
+	return f.Location.File + "|" + strconv.Itoa(f.Location.Region.StartLine), labels, true
+}
+
+// cweFamilies maps a CWE to the broader weakness it is a kind of, for the small
+// set of parent and child ids that scanners use interchangeably for one defect:
+// one tool reports command injection as CWE-78 and another as CWE-77. Requiring
+// the same id, let alone the same set of ids, meant overlapping tools almost
+// never clustered. Ids not listed are their own family.
+//
+// Only relations where the child is a specific form of the parent are listed.
+// Different weaknesses that often sit on one line (injection and missing
+// authentication, say) stay apart.
+var cweFamilies = map[string]string{
+	"CWE-78": "CWE-77", "CWE-88": "CWE-77", // OS command and argument injection: command injection
+	"CWE-564": "CWE-89",                     // Hibernate injection: SQL injection
+	"CWE-80":  "CWE-79",                     // basic XSS: XSS
+	"CWE-23":  "CWE-22", "CWE-36": "CWE-22", // relative and absolute traversal: path traversal
+	"CWE-95":  "CWE-94",                        // eval injection: code injection
+	"CWE-259": "CWE-798", "CWE-321": "CWE-798", // hard-coded password or key: hard-coded credentials
+	"CWE-328": "CWE-327", "CWE-916": "CWE-327", "CWE-326": "CWE-327", // weak hash, weak password hash, weak strength: weak cryptography
+	"CWE-338": "CWE-330",                       // weak PRNG: insufficient randomness
+	"CWE-296": "CWE-295", "CWE-297": "CWE-295", // chain and host validation: certificate validation
+}
+
+// family returns the label a CWE clusters under.
+func family(cwe string) string {
+	c := strings.ToUpper(strings.TrimSpace(cwe))
+	if c == "" {
+		return ""
 	}
-	sort.Strings(cwes)
-	return strings.Join([]string{
-		f.Location.File,
-		strconv.Itoa(f.Location.Region.StartLine),
-		strings.Join(cwes, ","),
-	}, "|"), true
+	if parent, ok := cweFamilies[c]; ok {
+		return parent
+	}
+	return c
 }

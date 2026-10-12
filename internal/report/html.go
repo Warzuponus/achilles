@@ -44,9 +44,13 @@ type htmlView struct {
 	HasAdvice  bool
 	HasThreats bool
 	Incomplete string // non-empty: the scan is partial; names the tools that failed
-	Coverage   string // one line on how much of the scan the AI review covered
-	CoverageOK bool   // false when the AI review was absent or partial
-	Summary    string // plain-language headline
+	// Scanner configuration found in the scanned repository: in effect, and the
+	// part of it that the change under review modifies.
+	RepoConfig        string
+	RepoConfigChanged string
+	Coverage          string // one line on how much of the scan the AI review covered
+	CoverageOK        bool   // false when the AI review was absent or partial
+	Summary           string // plain-language headline
 }
 
 // findingView is a finding prepared for display: secrets masked, code bounded.
@@ -245,6 +249,8 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 	if len(r.Scan.FailedTools) > 0 {
 		v.Incomplete = strings.Join(r.Scan.FailedTools, ", ")
 	}
+	v.RepoConfig = strings.Join(r.Scan.RepoConfig, "; ")
+	v.RepoConfigChanged = strings.Join(r.Scan.RepoConfigChanged, "; ")
 	v.Coverage, v.CoverageOK = coverageLine(r.Scan.Triage)
 	v.Summary = summaryLine(v)
 	return htmlTmpl.Execute(w, v)
@@ -256,7 +262,20 @@ func coverageLine(t *model.TriageStats) (string, bool) {
 	if t == nil {
 		return "AI verification was not run: findings below are raw scanner output.", false
 	}
+	if t.Aborted != "" {
+		return fmt.Sprintf("The AI review did not complete (%s). It gave a verdict on %d of %d findings; treat everything below as scanner output that was not reviewed.",
+			t.Aborted, t.Triaged, t.Total), false
+	}
 	line := fmt.Sprintf("AI review (%s) gave a verdict on %d of %d findings", t.Model, t.Triaged, t.Total)
+	if t.AutoResolved > 0 {
+		line += fmt.Sprintf(" (%d of them from analyst feedback on the rule, not from a model review)", t.AutoResolved)
+	}
+	if t.Reused > 0 {
+		line += fmt.Sprintf(" (%d reused from earlier runs: same code, prompt and models)", t.Reused)
+	}
+	if t.Advisories > 0 {
+		line += fmt.Sprintf("; %d dependency advisories are listed as reported (the AI review does not judge known CVEs in dependencies)", t.Advisories)
+	}
 	if t.Failed > 0 || t.Skipped > 0 {
 		line += fmt.Sprintf("; %d failed and %d were not reached (see the run log)", t.Failed, t.Skipped)
 		return line + ".", false
@@ -363,6 +382,8 @@ const htmlDoc = `<!doctype html>
 </header>
 
 {{if .Incomplete}}<div class="alert warn"><strong>Incomplete scan.</strong> These tools failed to run or could not be read: {{.Incomplete}}. Missing results are not evidence of safety. Run <code>achilles doctor</code> to see what is missing.</div>{{end}}
+{{if .RepoConfigChanged}}<div class="alert warn"><strong>This change modifies scanner configuration.</strong> {{.RepoConfigChanged}}. It can hide findings in the same change; review it as part of this scan.</div>{{end}}
+{{if .RepoConfig}}<div class="alert">Scanner configuration from the scanned repository was in effect: {{.RepoConfig}}. It can remove findings before Achilles sees them.</div>{{end}}
 <div class="alert {{if .CoverageOK}}ok{{else}}warn{{end}}">{{.Coverage}}</div>
 
 <p class="lead" style="margin-top:20px">{{.Summary}}</p>
@@ -435,7 +456,7 @@ const htmlDoc = `<!doctype html>
       {{if .Secret}}<div class="kv">This looks like a credential, so the matched text is withheld. Rotate it, then remove it from history.</div>{{end}}
       {{if .Snippet}}<pre>{{.Snippet}}</pre>{{end}}
       {{with .Verdict}}
-      <div class="kv" style="margin-top:8px"><span class="verdict">{{.Classification}} · {{printf "%.0f%%" (pct .Confidence)}}{{if .Exploitability}} · {{.Exploitability}}{{end}}{{if .Refuted}} · refuted{{else if .Overturned}} · overturned by judge{{end}}</span></div>
+      <div class="kv" style="margin-top:8px"><span class="verdict">{{.Classification}} · {{printf "%.0f%%" (pct .Confidence)}}{{if .Exploitability}} · {{.Exploitability}}{{end}}{{if .Disputed}} · disputed by judge{{else if .Refuted}} · refuted{{else if .Overturned}} · overturned by judge{{end}}</span></div>
       {{if .Reasoning}}<div class="kv">{{.Reasoning}}</div>{{end}}
       {{end}}
       {{with .GateRows}}<table class="gates">{{range .}}<tr><td>{{.Question}}</td><td><strong>{{.Answer}}</strong></td><td>{{.Evidence}}</td></tr>{{end}}</table>{{end}}

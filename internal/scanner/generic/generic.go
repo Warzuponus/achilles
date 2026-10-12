@@ -137,12 +137,79 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 		format = "sarif" // default/common path
 	}
 	return scanner.RawResult{
-		Tool:     s.cfg.ID,
-		Format:   format,
-		Data:     data,
-		ExitCode: res.ExitCode,
-		Stderr:   string(res.Stderr),
+		Tool:       s.cfg.ID,
+		Format:     format,
+		Data:       data,
+		ExitCode:   res.ExitCode,
+		Stderr:     string(res.Stderr),
+		Incomplete: firstNonEmpty(incompleteReason(s.cfg.IncompleteWhen, res), unexpectedExit(s.cfg.SuccessExitCodes, res)),
 	}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// unexpectedExit returns why a run that wrote a report is still not a complete
+// one: the tool exited with a code that is not among those the registry lists as
+// "finished" (see config.ToolConfig.SuccessExitCodes). It is "" when the code is
+// expected or the registry lists none. The last line the tool printed is quoted,
+// since that is usually the error.
+func unexpectedExit(ok []int, res xexec.Result) string {
+	if len(ok) == 0 {
+		return ""
+	}
+	for _, code := range ok {
+		if res.ExitCode == code {
+			return ""
+		}
+	}
+	reason := fmt.Sprintf("exited with code %d after writing a report, which is not how it ends a completed scan", res.ExitCode)
+	lines := strings.Split(strings.TrimSpace(string(res.Stderr)), "\n")
+	if last := strings.TrimSpace(lines[len(lines)-1]); last != "" {
+		if r := []rune(last); len(r) > 300 {
+			last = string(r[:300]) + "..."
+		}
+		reason += ": " + last
+	}
+	return reason
+}
+
+// incompleteReason returns what the tool said about not analyzing part of the
+// target (see config.ToolConfig.IncompleteWhen), or "" if it said nothing of the
+// kind. It quotes the first matching line and counts the rest, so the user sees
+// the tool's own words: usually the name of the package that failed and why.
+func incompleteReason(phrases []string, res xexec.Result) string {
+	if len(phrases) == 0 {
+		return ""
+	}
+	first, n := "", 0
+	for _, line := range strings.Split(string(res.Stderr)+"\n"+string(res.Stdout), "\n") {
+		for _, p := range phrases {
+			if p != "" && strings.Contains(line, p) {
+				if n == 0 {
+					first = strings.TrimSpace(line)
+				}
+				n++
+				break
+			}
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	if r := []rune(first); len(r) > 300 {
+		first = string(r[:300]) + "..."
+	}
+	if n > 1 {
+		return fmt.Sprintf("%s (and %d more like it)", first, n-1)
+	}
+	return first
 }
 
 // nothingToScan reports whether the tool said, in its output, that the target has

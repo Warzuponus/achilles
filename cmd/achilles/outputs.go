@@ -27,6 +27,29 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 			return err
 		}
 	}
+	if o.jsonReport != "" {
+		if err := writeToFile(o.jsonReport, func(w io.Writer) error { return report.WriteJSON(w, scan) }); err != nil {
+			return err
+		}
+	}
+	if o.gitlabSAST != "" || o.gitlabSecrets != "" {
+		meta := report.GitLabMeta{Version: currentVersion().Version, Start: o.startedAt, End: time.Now(), Commit: scannedCommit(o)}
+		if o.gitlabSAST != "" {
+			if err := writeToFile(o.gitlabSAST, func(w io.Writer) error { return report.WriteGitLabSAST(w, scan, meta) }); err != nil {
+				return err
+			}
+		}
+		if o.gitlabSecrets != "" {
+			if err := writeToFile(o.gitlabSecrets, func(w io.Writer) error { return report.WriteGitLabSecretDetection(w, scan, meta) }); err != nil {
+				return err
+			}
+		}
+	}
+	if o.gitlabCodeQuality != "" {
+		if err := writeToFile(o.gitlabCodeQuality, func(w io.Writer) error { return report.WriteGitLabCodeQuality(w, scan) }); err != nil {
+			return err
+		}
+	}
 	if o.junitOut != "" {
 		if err := writeToFile(o.junitOut, func(w io.Writer) error { return report.WriteJUnit(w, scan) }); err != nil {
 			return err
@@ -73,11 +96,20 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 	return issuesErr
 }
 
+// scannedCommit is the commit under scan, when the run was told or the CI system
+// says: --source-commit, then GitLab's CI_COMMIT_SHA. Empty when unknown.
+func scannedCommit(o *options) string {
+	if o.sourceCommit != "" {
+		return o.sourceCommit
+	}
+	return os.Getenv("CI_COMMIT_SHA")
+}
+
 // writeDiagnostics is the observability sidecar: coverage gaps (tools that failed
 // to run or normalize) + LLM token usage, to the vault and to --diagnostics.
 func writeDiagnostics(o *options, ev vault.Store, runID string, diags []toolDiag, llmUsage llm.Usage) error {
 	if len(diags) > 0 {
-		fmt.Fprintf(os.Stderr, "achilles: %d tool(s) produced no findings due to run/normalize errors (see diagnostics)\n", len(diags))
+		fmt.Fprintf(os.Stderr, "achilles: %d tool(s) failed, or ran but could not analyze everything; the scan is incomplete (see the lines above, or --diagnostics)\n", len(diags))
 		recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta, Source: "diagnostics"},
 			map[string]any{"parseFailures": diags})
 	}
@@ -93,7 +125,7 @@ func writeDiagnostics(o *options, ev vault.Store, runID string, diags []toolDiag
 	return nil
 }
 
-// runAgents runs the opt-in whole-repo agents (Tier D: security review, SCA
+// runAgents runs the opt-in whole-repo agents (security review, SCA
 // upgrade advisor, threat model) and writes the unified HTML report. An agent
 // failure only warns; its section is then missing from the report.
 func runAgents(ctx context.Context, o *options, ev vault.Store, runID, absTarget string, scan model.Scan, tasks map[string]llm.TaskModel) error {
@@ -102,7 +134,7 @@ func runAgents(ctx context.Context, o *options, ev vault.Store, runID, absTarget
 	var adviceRes *advisor.Advice
 	var threatRes *threatmodel.ThreatModel
 
-	// --- holistic full-repo security review (Tier D) ---
+	// --- holistic full-repo security review ---
 	if o.reviewOn && !o.dryRun {
 		r, err := runReview(ctx, ev, runID, absTarget, scan, o.llmBaseURL, o.llmModel, tasks)
 		if err != nil {
@@ -111,7 +143,7 @@ func runAgents(ctx context.Context, o *options, ev vault.Store, runID, absTarget
 		reviewRes = r
 	}
 
-	// --- SCA dependency-upgrade advisor (Tier D) ---
+	// --- SCA dependency-upgrade advisor ---
 	if o.scaAdvice && !o.dryRun {
 		a, err := runAdvisor(ctx, ev, runID, absTarget, scan, o.llmBaseURL, o.llmModel, tasks)
 		if err != nil {
@@ -120,7 +152,7 @@ func runAgents(ctx context.Context, o *options, ev vault.Store, runID, absTarget
 		adviceRes = a
 	}
 
-	// --- threat-model agent → OTM artifact (Tier D) ---
+	// --- threat-model agent → OTM artifact ---
 	if o.threatModelOut != "" && !o.dryRun {
 		tm, err := runThreatModel(ctx, ev, runID, absTarget, scan, o.threatModelOut, o.llmBaseURL, o.llmModel, tasks)
 		if err != nil {

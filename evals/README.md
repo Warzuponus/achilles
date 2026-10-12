@@ -11,7 +11,7 @@ where that number comes from.
 make eval-context                                 # hermetic: no model, no API key, no cost
 make eval-gate                                    # the same, failing if coverage regressed
 make eval-corpus                                  # no model, but needs gosec/bandit on PATH
-make eval-verdict-ollama EVAL_ARGS="--repeat 3"   # Ollama open-model routing (needs a key)
+make eval-verdict EVAL_MODEL=<model> EVAL_ARGS="--model-config <routing.yaml> --repeat 3"   # needs a key; spends money
 ```
 
 **Every model-calling mode records raw LLM responses** to `--vault`
@@ -34,9 +34,24 @@ needed?"*, runs in CI, and gates on regressions.
 
 **Verdict mode** runs the real triage→judge path against a live model and scores
 the verdicts against the labels. It answers *"did the model get the right
-answer?"* Scoring uses `Verdict.HighConfidence()` — an unrefuted `true_positive`
-at ≥ 0.7 — because that is what decides whether a human ever sees the finding, so
-the metric covers the whole shipped chain rather than just the first prompt.
+answer?"* It reports two things, and they are different questions:
+
+- **Did the review confirm the right findings?** Balanced accuracy, TP recall and FP
+  suppression are scored on `Verdict.Surfaced()`: an unrefuted `true_positive` at
+  ≥ 0.7, or a false positive the judge overturned. "FP suppression" here means *not
+  confirmed*.
+- **What did the product do with each finding?** A finding that is not confirmed is
+  not necessarily removed: one the review left uncertain, or the judge disputed
+  without backing, stays in the report and in the `--fail-on` gate. The report
+  therefore also prints a three-way table per ground-truth class (confirmed / kept,
+  unverified / dismissed) with the two numbers a user feels: the share of genuine
+  issues **dismissed** (the costly error) and the share of safe findings
+  **dismissed** (the noise actually removed).
+
+The first set alone flatters a cautious model: one that answers "uncertain" to
+everything scores 100% FP suppression while removing nothing from anyone's report.
+Read both. The measurements recorded below predate the second table and the
+current prompt version, so they are confirmation scores only.
 
 Keep the two straight: context mode can improve while verdict mode does not.
 That gap is information, not a contradiction.
@@ -168,8 +183,8 @@ harness — not an afterthought.
   recall across all four candidates (74%→33%, 26%→78%, 15%→89%). Use it when adding
   a candidate rather than running a full comparison first.
 - **A model listed in the API is not a model you can call.** `kimi-k3` appears in
-  `/v1/models` but is extra-usage-only on this plan: every call returned HTTP 402, so
-  it is **unmeasured**, not bad. Probe entitlement with one real request before
+  `/v1/models` but the account used for these runs was not entitled to call it (every
+  request was refused), so it is **unmeasured**, not bad. Probe entitlement with one real request before
   committing a 70-minute run — this applies to any provider whose model listing is
   broader than your entitlement.
 - **Ollama trailed that hosted routing even at 94.4%** — on accuracy, on stability (4
@@ -207,6 +222,10 @@ harness — not an afterthought.
   suppression was computed with 4 of 9 cases contributing findings that never occur.
 - **18 cases is small.** It catches gross regressions and obvious wins; it cannot
   resolve a two-point difference between models.
+- **There is no held-out set.** The routing and the prompt revisions below were
+  chosen on the same 18 cases their scores are reported on, so those scores are
+  optimistic by an unknown amount. Treat them as "this configuration is not broken",
+  not as an estimate of accuracy on your code.
 - **Verdict mode costs money and is nondeterministic.** Use `--repeat 3` or more
   before believing a small delta; the report flags cases whose repeats disagreed
   rather than averaging the instability away.

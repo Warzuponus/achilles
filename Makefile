@@ -1,7 +1,7 @@
 BINARY := achilles
 BINDIR := bin
 
-.PHONY: all build install release test test-integration verify-tier2 license-check lint fmt vet run clean tidy eval-context eval-gate eval-baseline eval-verdict eval-verdict-ollama eval-detect eval-detect-gate
+.PHONY: all build install release test test-integration verify-tier2 license-check licenses lint fmt vet run clean tidy eval-context eval-gate eval-baseline eval-verdict eval-detect eval-detect-gate
 
 all: build
 
@@ -50,20 +50,13 @@ eval-corpus:
 eval-baseline:
 	go run ./cmd/achilles-eval --mode context --out evals/triage/baseline-context.json
 
-# Eval the models we ACTUALLY run. Evaluating some unrelated model tells you
-# nothing about production, so both targets below drive a committed routing config
-# rather than a single hand-picked model name — triage and judge deliberately use
-# different models, and the score belongs to the pair.
-
-# Ollama Cloud open models (configs/models.ollama.yaml). Needs ACHILLES_LLM_API_KEY.
-#   make eval-verdict-ollama EVAL_ARGS="--repeat 3"
-eval-verdict-ollama:
-	go run ./cmd/achilles-eval --mode verdict \
-		--llm-base-url https://ollama.com/v1 --llm-model glm-5.2 \
-		--model-config configs/models.ollama.yaml $(EVAL_ARGS)
-
-# Escape hatch for any other static-key endpoint:
+# Eval the models you ACTUALLY run. Evaluating some unrelated model tells you
+# nothing about production. Triage and judge usually use different models, and the
+# score belongs to the pair, so pass the routing file you scan with. Needs
+# ACHILLES_LLM_API_KEY and spends real money.
 #   make eval-verdict EVAL_MODEL=<model> EVAL_ARGS="--repeat 3"
+#   make eval-verdict EVAL_MODEL=glm-5.2 \
+#     EVAL_ARGS="--llm-base-url https://ollama.com/v1 --model-config configs/models.ollama.yaml --repeat 3"
 eval-verdict:
 	go run ./cmd/achilles-eval --mode verdict --llm-model "$(EVAL_MODEL)" $(EVAL_ARGS)
 
@@ -93,11 +86,21 @@ verify-tier2:
 # Needs: go install github.com/google/go-licenses@v1.6.0
 license-check:
 	go-licenses check ./... --disallowed_types=forbidden,restricted
+	scripts/collect-licenses.sh --check third_party/licenses ./cmd/...
+
+# Refresh the license texts shipped in the release archives and the image. Run after
+# any dependency change; CI fails if the committed copy is stale.
+licenses:
+	scripts/collect-licenses.sh third_party/licenses ./cmd/...
 
 vet:
 	go vet ./...
 
+# staticcheck must be run with a Go it can read: 1.27.1 with GOTOOLCHAIN=local
+# until it supports the Go 1.27.2 export-data format (see .github/workflows/ci.yml).
+# Needs: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
 lint: vet
+	staticcheck ./...
 
 fmt:
 	gofmt -w .

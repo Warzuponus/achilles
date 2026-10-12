@@ -10,6 +10,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
   security-events: write # for code-scanning upload (needs GitHub Advanced Security on private repos)
@@ -17,13 +21,20 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # 1.27.1 exactly, with GOTOOLCHAIN=local so go.mod cannot pull in a newer one:
+      # this is the toolchain gosec type-checks with, and Go 1.27.2 changed the
+      # compiler export-data format in a way no gosec release can read yet. On
+      # 1.27.2 gosec skipped every analysis that needs types and this job passed
+      # anyway. Move the pin (and drop this note) when gosec supports it.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27"
+          go-version: "1.27.1"
       - name: Install gosec (pinned)
         run: go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
       - name: Build achilles
@@ -38,7 +49,9 @@ jobs:
           # never built or shipped; `make eval-gate` is what checks them.
           # --exclude examples: examples/quickstart is a deliberately vulnerable
           # sample for the compose quickstart (separate module, never shipped).
-          ./bin/achilles --config configs/selfscan.yaml \
+          # --strict-tools: this job has one scanner. If it cannot analyze the
+          # code, "no new findings" means nothing and the job must fail.
+          ./bin/achilles --config configs/selfscan.yaml --strict-tools \
             --baseline .achilles/baseline.json --exclude evals,examples \
             --sarif-report achilles.sarif --github --fail-on high .
       - name: Upload SARIF artifact

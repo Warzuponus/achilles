@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/triage/llm"
 	"github.com/Warzuponus/achilles/internal/vault"
 )
@@ -57,6 +58,11 @@ type options struct {
 	writeBl           string
 	prMini            string
 	sarifReport       string
+	jsonReport        string
+	gitlabSAST        string    // --gitlab-sast: GitLab SAST security report
+	gitlabSecrets     string    // --gitlab-secret-detection: GitLab secret detection security report
+	gitlabCodeQuality string    // --gitlab-code-quality: GitLab Code Quality report
+	startedAt         time.Time // when this run began; GitLab reports state the scan's start and end
 	junitOut          string
 	markdownOut       string
 	htmlReport        string
@@ -70,22 +76,30 @@ type options struct {
 	fixBase           string
 	repoFlag          string
 	strictTools       bool
-	diagnostics       string
-	sbomOut           string
-	reviewOn          bool
-	scaAdvice         bool
-	threatModelOut    string
-	targetLabel       string
-	sourceCommit      string
+	noRepoConfig      bool
+	settingsPath      string // --settings: a file of flag values chosen by the operator
+	// What the settings files contributed (see settings.go).
+	settings            *settingsUse
+	repoSettings        *settingsUse
+	repoSettingsIgnored string // the repository's file, present but refused by --no-repo-config
+	diagnostics         string
+	sbomOut             string
+	reviewOn            bool
+	scaAdvice           bool
+	threatModelOut      string
+	targetLabel         string
+	sourceCommit        string
 
 	// One-flag AI scan, provider presets and LLM-phase controls.
 	aiOn           bool          // --ai: triage + remediate + review + SCA advice + all reports
 	reportDir      string        // --report-dir: where --ai writes report.html/.md/.sarif
-	llmProvider    string        // --llm-provider: openai | openrouter | ollama (sets the base URL)
+	llmProvider    string        // --llm-provider: openai | openrouter | ollama | anthropic (sets the base URL)
 	llmBudget      time.Duration // --llm-budget: time allowed for all LLM phases (separate from --timeout)
 	llmConcurrency int           // --llm-concurrency: findings triaged in parallel
 	llmNoCode      bool          // --llm-no-code: never send source snippets to the model
+	verifyTimeout  time.Duration // --verify-timeout: clock for --verify-fixes re-scans, separate from --timeout
 	keepDismissed  bool          // --keep-dismissed: do not move AI-dismissed findings out of the gate
+	calibrate      bool          // --calibrate: let feedback history resolve chronically noisy rules without a model
 	showVersion    bool          // --version
 
 	// Verification depth (ideas adapted from the VulnHunter project's methodology).
@@ -93,6 +107,9 @@ type options struct {
 	deepVerify   int  // --deep-verify N: let the model read/grep the repo to settle the N most important findings
 	deepMaxSteps int  // --deep-max-steps: tool-call budget per deep-verified finding
 	llmSamples   int  // --llm-samples K: ask K times on borderline verdicts and keep the majority
+	// --verdict-cache-days: reuse a verdict from an earlier run for this many days
+	// when the code, prompt and models are unchanged; 0 turns the cache off.
+	verdictCacheDays int
 
 	// Issue filing (see internal/issues).
 	issuesMinSeverity string // --issues-min-severity
@@ -106,7 +123,8 @@ type options struct {
 	target string // the path to scan (first positional argument; default ".")
 }
 
-func parseFlags(argv []string) (*options, error) {
+// defineFlags builds the flag set and the options its flags write into.
+func defineFlags() (*flag.FlagSet, *options) {
 	fs := flag.NewFlagSet("achilles", flag.ContinueOnError)
 	o := &options{}
 	fs.StringVar(&o.configPath, "config", "", "tool registry file (default: the registry embedded in the binary)")
@@ -119,8 +137,8 @@ func parseFlags(argv []string) (*options, error) {
 	fs.StringVar(&o.vaultTenant, "vault-tenant", "default", "project this scan belongs to; the War Room lists results per project (postgres backend; the file backend is addressed by --vault)")
 	fs.StringVar(&o.sarifOut, "sarif-out", "", "write each tool's SARIF into this directory")
 	fs.StringVar(&o.fromSarif, "from-sarif", "", "skip scanning; normalize this existing SARIF file")
-	fs.StringVar(&o.failOn, "fail-on", "", "exit non-zero if a finding at/above this severity exists: critical|high|medium|low")
-	fs.DurationVar(&o.timeout, "timeout", 5*time.Minute, "scan timeout")
+	fs.StringVar(&o.failOn, "fail-on", "", "exit non-zero if a finding at/above this severity exists: critical|high|medium|low|info (anything else is an error)")
+	fs.DurationVar(&o.timeout, "timeout", 5*time.Minute, "time allowed for the scanners; the AI review (--llm-budget) and fix verification (--verify-timeout) have their own clocks")
 	fs.BoolVar(&o.triageOn, "triage", false, "run LLM triage + adversarial judge on findings")
 	fs.BoolVar(&o.remediateOn, "remediate", false, "propose fixes for high-confidence findings (implies --triage)")
 	fs.BoolVar(&o.ragOn, "rag", false, "use RAG few-shot from past feedback (needs --llm-embed-model)")
@@ -145,12 +163,16 @@ func parseFlags(argv []string) (*options, error) {
 	fs.BoolVar(&o.noDefaultExcludes, "no-default-excludes", false, "disable the built-in vendored/generated/minified noise filter")
 	fs.BoolVar(&o.noCorrelate, "no-correlate", false, "disable cross-tool finding correlation (triage every duplicate report separately)")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "run the scan, print the LLM cost estimate, and stop before any model call or outward-facing action")
-	fs.Float64Var(&o.maxCost, "max-cost", 0, "refuse to start LLM work if the estimated spend exceeds this many USD (needs --price-config)")
+	fs.Float64Var(&o.maxCost, "max-cost", 0, "cap on LLM spend in USD (needs --price-config): refuse to start if the per-finding estimate exceeds it, and stop making model calls once the spend counted during the run reaches it")
 	fs.StringVar(&o.priceConfig, "price-config", "", "YAML per-model token prices for cost estimation (see configs/prices.example.yaml)")
 	fs.StringVar(&o.baselinePath, "baseline", "", "suppress findings present in this baseline file")
 	fs.StringVar(&o.writeBl, "write-baseline", "", "write current findings' fingerprints as a baseline to this file")
 	fs.StringVar(&o.prMini, "pr-mini", "", "auto baseline: if this file is absent, seed it (full scan, no gate); if present, delta-scan against it")
 	fs.StringVar(&o.sarifReport, "sarif-report", "", "write a unified SARIF report to this file")
+	fs.StringVar(&o.jsonReport, "json-report", "", "write the scan as one JSON document (findings, verdicts, dismissed findings, coverage) to this file")
+	fs.StringVar(&o.gitlabSAST, "gitlab-sast", "", "write a GitLab SAST report to this file (conventionally gl-sast-report.json); publish it with artifacts:reports:sast")
+	fs.StringVar(&o.gitlabSecrets, "gitlab-secret-detection", "", "write a GitLab secret detection report to this file (gl-secret-detection-report.json; artifacts:reports:secret_detection)")
+	fs.StringVar(&o.gitlabCodeQuality, "gitlab-code-quality", "", "write a GitLab Code Quality report to this file (gl-code-quality-report.json; artifacts:reports:codequality). Shown in the merge request widget on every GitLab tier")
 	fs.StringVar(&o.junitOut, "junit", "", "write a JUnit XML report to this file")
 	fs.StringVar(&o.markdownOut, "markdown", "", "write a Markdown summary to this file")
 	fs.StringVar(&o.htmlReport, "html-report", "", "write a self-contained HTML report (findings + AI review/advice/threat-model) to this file")
@@ -164,6 +186,8 @@ func parseFlags(argv []string) (*options, error) {
 	fs.StringVar(&o.fixBase, "fix-base", "", "base branch for the auto-fix PR (with --fix-pr; default: the current branch)")
 	fs.StringVar(&o.repoFlag, "repo", os.Getenv("GITHUB_REPOSITORY"), "owner/name for GitHub integrations (default $GITHUB_REPOSITORY)")
 	fs.BoolVar(&o.strictTools, "strict-tools", os.Getenv("ACHILLES_STRICT_TOOLS") == "true", "fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan; recommended in containers and CI")
+	fs.BoolVar(&o.noRepoConfig, "no-repo-config", os.Getenv("ACHILLES_NO_REPO_CONFIG") == "true", "do not let the scanned repository configure the scanners: its ignore/config files (.trivyignore, .gitleaks.toml, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. For code you do not trust")
+	fs.StringVar(&o.settingsPath, "settings", os.Getenv("ACHILLES_SETTINGS"), "YAML file of flag values (flag name: value) for flags not given on the command line. The scanned repository's own .achilles.yaml is read as well, but may only shape the scan; see docs/cli-reference.md")
 	fs.StringVar(&o.diagnostics, "diagnostics", "", "write a diagnostics sidecar (tool/parse failures + LLM token usage) to this JSON file")
 	fs.StringVar(&o.sbomOut, "sbom", "", "generate a CycloneDX SBOM of the target (via Syft) and write it to this file")
 	fs.BoolVar(&o.reviewOn, "review", false, "run the holistic full-repo security review agent (needs --llm-model)")
@@ -173,16 +197,19 @@ func parseFlags(argv []string) (*options, error) {
 	fs.StringVar(&o.sourceCommit, "source-commit", "", "record the scanned source's commit sha in the run metadata (used by achilles-fleet)")
 	fs.BoolVar(&o.aiOn, "ai", false, "full AI-verified scan: --triage --remediate --review --sca-advice, and write report.html, report.md and achilles.sarif into --report-dir (needs an LLM key and --llm-model or --llm-provider)")
 	fs.StringVar(&o.reportDir, "report-dir", "achilles-report", "directory --ai writes its reports into")
-	fs.StringVar(&o.llmProvider, "llm-provider", os.Getenv("ACHILLES_LLM_PROVIDER"), "LLM endpoint preset: openai | openrouter | ollama (sets --llm-base-url; an explicit --llm-base-url wins)")
+	fs.StringVar(&o.llmProvider, "llm-provider", os.Getenv("ACHILLES_LLM_PROVIDER"), "LLM endpoint preset: openai | openrouter | ollama | anthropic (experimental) (sets --llm-base-url; an explicit --llm-base-url wins)")
 	fs.DurationVar(&o.llmBudget, "llm-budget", 45*time.Minute, "time allowed for all LLM phases combined; separate from --timeout, which bounds the scanners")
 	fs.IntVar(&o.llmConcurrency, "llm-concurrency", 4, "findings triaged in parallel (1 = sequential)")
 	fs.BoolVar(&o.llmNoCode, "llm-no-code", false, "privacy mode: send the model only rule, message and location, never source code")
 	fs.BoolVar(&o.keepDismissed, "keep-dismissed", false, "keep findings the AI review confidently dismissed in the gate, issues and counts (default: list them separately)")
+	fs.BoolVar(&o.calibrate, "calibrate", false, "let --feedback history rule out findings from chronically false-positive rules WITHOUT a model review (off by default; never above medium severity; see --rule-health for what it would affect)")
 	fs.BoolVar(&o.showVersion, "version", false, "print the version and exit")
 	fs.BoolVar(&o.verifyFixes, "verify-fixes", true, "with --remediate: apply each proposed patch to a temp copy and re-run the scanner that reported it; the fix is marked verified only if the finding is gone and nothing new appeared")
+	fs.DurationVar(&o.verifyTimeout, "verify-timeout", 15*time.Minute, "time allowed for all --verify-fixes re-scans combined; separate from --timeout, and started when verification starts")
 	fs.IntVar(&o.deepVerify, "deep-verify", 0, "let the model read and search the repository (bounded, read-only) to settle the N highest-priority findings the single-file review could not (0 = off)")
 	fs.IntVar(&o.deepMaxSteps, "deep-max-steps", 6, "with --deep-verify: most tool calls per finding")
 	fs.IntVar(&o.llmSamples, "llm-samples", 1, "ask the model this many times on borderline verdicts and keep the majority (1 = single answer)")
+	fs.IntVar(&o.verdictCacheDays, "verdict-cache-days", 30, "reuse a verdict from an earlier run in this vault for up to this many days when the finding's code, the prompt and the models are all unchanged, instead of asking the model again (0 = always review afresh)")
 	fs.StringVar(&o.issuesMinSeverity, "issues-min-severity", "medium", "with --file-issues: lowest severity to file (critical|high|medium|low)")
 	fs.IntVar(&o.issuesMax, "issues-max", 25, "with --file-issues: most NEW issues to open in one run (highest severity first)")
 	fs.StringVar(&o.issuesGroup, "issues-group", "finding", "with --file-issues: one issue per finding | rule | one rollup issue")
@@ -191,22 +218,74 @@ func parseFlags(argv []string) (*options, error) {
 	fs.BoolVar(&o.issuesStrict, "issues-strict", false, "with --file-issues: exit non-zero if any GitHub call failed")
 	fs.BoolVar(&o.allowPublicIssues, "allow-public-issues", false, "with --file-issues: allow filing vulnerability details as issues in a PUBLIC repository")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: achilles [flags] <target-path>")
+		fmt.Fprintln(os.Stderr, "usage: achilles [flags] <target-path>   (flags may also follow the path)")
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(argv); err != nil {
+	return fs, o
+}
+
+func parseFlags(argv []string) (*options, error) {
+	fs, o := defineFlags()
+	positional, err := parseInterleaved(fs, argv)
+	if err != nil {
 		return nil, err
 	}
-	o.target = "."
-	if fs.NArg() > 0 {
-		o.target = fs.Arg(0)
+	if len(positional) > 1 {
+		return nil, fmt.Errorf("expected one target path, got %d (%s); scan one path per run",
+			len(positional), strings.Join(positional, ", "))
 	}
+	o.target = "."
+	if len(positional) == 1 {
+		o.target = positional[0]
+	}
+	// Flags given on the command line win over settings files, which win over
+	// presets and defaults.
 	explicit := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+	if err := o.loadSettings(fs, explicit); err != nil {
+		return nil, err
+	}
+	if o.failOn != "" {
+		sev, ok := model.ParseSeverity(o.failOn)
+		if !ok {
+			return nil, fmt.Errorf("--fail-on %q is not a severity (want critical, high, medium, low or info)", o.failOn)
+		}
+		o.failOn = string(sev) // canonical: "High" and " high" mean high
+	}
 	if err := o.applyPresets(explicit); err != nil {
 		return nil, err
 	}
 	return o, nil
+}
+
+// parseInterleaved parses flags wherever they appear, before or after the target
+// path, and returns the non-flag arguments.
+//
+// The standard flag package stops at the first non-flag argument, so
+// `achilles . --fail-on high` used to scan with no gate and exit 0: every flag
+// after the path was silently discarded. For a tool whose flags turn on the AI
+// review and the CI gate, silently dropping them is the worst available failure,
+// so parsing resumes after each positional argument instead. A bare "--" still
+// ends flag parsing; everything after it is positional (a path that starts with
+// a dash).
+func parseInterleaved(fs *flag.FlagSet, argv []string) ([]string, error) {
+	var positional []string
+	args := argv
+	for {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		rest := fs.Args()
+		if len(rest) == 0 {
+			return positional, nil
+		}
+		// Parse stopped either at a non-flag argument or just past a "--".
+		if consumed := len(args) - len(rest); consumed > 0 && args[consumed-1] == "--" {
+			return append(positional, rest...), nil
+		}
+		positional = append(positional, rest[0])
+		args = rest[1:]
+	}
 }
 
 // applyPresets expands --llm-provider and --ai. An explicitly given flag (or its

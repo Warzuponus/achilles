@@ -1,0 +1,46 @@
+# Achilles in GitLab CI.
+#
+# Scans merge requests and the default branch, and publishes the results in the
+# formats GitLab reads:
+#
+#   sast, secret_detection   the security reports (the merge request security
+#                            widget and the vulnerability report need GitLab
+#                            Ultimate; the artifacts are downloadable on any tier)
+#   codequality              shown in the merge request widget on every tier
+#
+# Copy the job into your .gitlab-ci.yml. See docs/ci-and-hub.md ("GitLab CI").
+
+achilles:
+  stage: test
+  # Pin a release tag (or a digest) instead of latest for reproducible pipelines.
+  image: ghcr.io/warzuponus/achilles:latest
+  script:
+    - >-
+      achilles
+      --gitlab-sast gl-sast-report.json
+      --gitlab-secret-detection gl-secret-detection-report.json
+      --gitlab-code-quality gl-code-quality-report.json
+      --html-report achilles-report.html
+      --fail-on high
+      .
+  artifacts:
+    # Upload the reports when the gate fails the job too: that is when they matter.
+    when: always
+    expire_in: 30 days
+    paths:
+      - achilles-report.html
+    reports:
+      sast: gl-sast-report.json
+      secret_detection: gl-secret-detection-report.json
+      codequality: gl-code-quality-report.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# To add the AI review, store the key as a masked CI/CD variable named
+# ACHILLES_LLM_API_KEY and add to the command, for example:
+#
+#   --ai --report-dir achilles-report --llm-provider openrouter --llm-model <model>
+#
+# Achilles prints where code will be sent before any model call. See
+# docs/llm-and-agents.md.

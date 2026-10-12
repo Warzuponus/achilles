@@ -2,7 +2,7 @@
 
 Welcome. This gets you from clone to productive. For *why* things are shaped the
 way they are, read [DESIGN.md](DESIGN.md); for running it (workstation, Docker,
-GitHub Actions, scheduled scans), see [DEPLOY.md](DEPLOY.md); for the test matrix, [TEST_PLAN.md](TEST_PLAN.md).
+GitHub Actions, scheduled scans), see [DEPLOY.md](DEPLOY.md); for how it is tested, [TEST_PLAN.md](TEST_PLAN.md).
 
 ## What Achilles is
 
@@ -26,12 +26,12 @@ load tools.yaml → license gate (--mode) + profile (--profile)
   → run applicable scanners (each in a pinned container or local binary)
   → normalize native output → SARIF-shaped Finding
   → correlate  → enrich (code context, git blame)
-  → [--triage] calibration short-circuit? → RAG few-shot → LLM triage
+  → [--triage] [--calibrate] feedback short-circuit? → RAG few-shot → LLM triage
                → adversarial judge → [--remediate] fix
   → Evidence Vault (append-only provenance) + report (human / SARIF / JUnit / PR annotations / gate)
   → [GitHub, opt-in] PR summary comment · inline review · issue lifecycle · auto-fix PR
 [--research] inventory deps → research agent (cited) → synthesize rule
-             → §9.3 validation gate → admit | quarantine
+             → validation gate → admit | quarantine
 ```
 
 Everything above the adapter line is tool-agnostic. Adding a tool almost never
@@ -53,31 +53,7 @@ make vet              # go vet
 
 ## Repo layout
 
-| Path | What |
-|------|------|
-| `cmd/achilles` | the scanner CLI |
-| `cmd/achillesd` | the War Room HTTP server |
-| `internal/model` | `Finding`, `Verdict`, minimal SARIF types |
-| `internal/config` | loads `configs/tools.yaml` (declarative tool registry) |
-| `internal/policy` | license-mode gate (oss / commercial + attestation) |
-| `internal/scanner` | `Scanner` interface + registry; `generic/` (config-driven) + `opengrep/` (bespoke) |
-| `internal/exec` | container/local `Runner` (path-placeholder + per-tool image/network) |
-| `internal/normalize` | SARIF → `Finding` (shared by every SARIF-emitting tool) |
-| `internal/enrich` | code context + git blame for triage |
-| `internal/triage` | LLM triage + adversarial judge + remediation; `llm/` OpenAI-compatible client |
-| `internal/knowledge` | learning loop: feedback capture, per-rule calibration, chromem-go RAG |
-| `internal/inventory` | detect languages + dependencies (research "recon") |
-| `internal/research` | research agents → rule synthesis → validation gate → generated-rule repo |
-| `internal/vault` | Evidence Vault: `Store` (append-only) + `file` and `postgres` backends |
-| `internal/report` | human report + SARIF / JUnit / Markdown / GitHub-annotation exports + baseline gate |
-| `internal/baseline` | baseline load/write (fail only on new findings) |
-| `internal/vcs` | diff-aware scanning (changed files via git) |
-| `internal/server` | War Room: per-project isolation + discovery/switcher, redaction, handlers, admin API, templates |
-| `internal/tenant` | project (tenant) registry (backed by a vault.Store) |
-| `configs/tools.yaml` | the tool registry (what runs, licenses, argv, images, profiles) |
-| `configs/rules` | in-house Opengrep rules (clean IP, ASCII-only) |
-| `deployments/<tool>` | Dockerfiles for the heavy per-language tools + achillesd |
-| `verify/tier2` | end-to-end verification harness for the heavy tools |
+[CONTRIBUTING.md](CONTRIBUTING.md#where-things-are) has the map of commands and packages.
 
 ## Core concepts
 
@@ -105,19 +81,21 @@ make vet              # go vet
   tries to refute it (only unrefuted true-positives are high-confidence).
   Opt-in via `--triage`/`--remediate`.
 - **Learning loop** — analyst TP/FP feedback (CLI `--feedback` or the War Room)
-  feeds per-rule **calibration** (auto-resolves chronically-noisy rules without
-  an LLM call) and **RAG** few-shot. Feedback in the UI is the *same* signal.
+  feeds **RAG** few-shot and, only when `--calibrate` is passed, per-rule
+  **calibration** (resolves chronically-noisy low-severity rules without an LLM
+  call). Feedback in the UI is the *same* signal.
 - **Research agents (`--research`)** — turn threat intel into new Opengrep rules,
   admitted only if they pass the **validation gate** (compile ∧ match a
   vulnerable fixture ∧ NOT match the patched one). The load-bearing guardrail.
-- **GitHub integration (Tier C, all opt-in + outward-facing)** — write results
+- **GitHub integration (all opt-in + outward-facing)** — write results
   back to a PR/repo, keyed by finding fingerprint so re-runs don't duplicate.
   `--pr-comment <n>` posts/updates one sticky summary comment; `--pr-review <n>
   --pr-head-sha <sha>` posts inline diff comments (deduped, out-of-diff lines
   skipped); `--file-issues` files/reconciles issues (a **closed** issue
   suppresses, a **resolved** one auto-closes — full-repo scans only, auto-close
-  is skipped under `--diff`); `--fix-pr` (with `--remediate`) applies remediation
-  diffs to a fingerprint-named branch and opens a **review PR** — it **never
+  is skipped under `--diff`); `--fix-pr` (with `--remediate`) commits the fixes
+  that passed verification to a fingerprint-named branch, in a temporary
+  worktree, and opens a **review PR** — it **never
   merges** (the guardrail; `--fix-remote`/`--fix-base` tune the push target and
   base). Repo comes from `--repo` or `$GITHUB_REPOSITORY`, token from
   `GITHUB_TOKEN`. Posting is the **CI's** job with its own token; locally these
@@ -149,7 +127,9 @@ not.
 
 - **SARIF-emitting + on PATH / has a public image** → add a `configs/tools.yaml`
   entry (id, license, `commercialSafe`, languages, `image` pinned by digest,
-  `bin`, `argv` writing to `{out}/results.sarif`, `outputFile`). No Go code. Set
+  `bin`, `argv` writing to `{out}/results.sarif`, `outputFile`, and
+  `successExitCodes` so a crash after a partial report is not read as a clean
+  scan). No Go code. Set
   `enabled: true` for the baseline or `profiles: [full]` for opt-in.
 - **Needs a language runtime / no public image / no native SARIF** → add
   `deployments/<tool>/` (a Dockerfile, possibly a wrapper + a SARIF converter),
@@ -163,20 +143,18 @@ not.
 
 | Workflow | Runs | Purpose |
 |----------|------|---------|
-| `ci.yml` | every push/PR | build, vet, gofmt, hermetic + best-effort integration tests |
-| `self-scan.yml` | push/PR | Achilles scans its own Go code (gosec), gates on findings not in `.achilles/baseline.json` |
-| `license-check.yml` | push/PR | fails if any Go dep is copyleft (AGPL/GPL/LGPL) — `go-licenses` |
+| `ci.yml` | every push/PR | build, vet, gofmt, hermetic tests under the race detector (Linux) and on Windows, `govulncheck`, the action against the bundled sample, best-effort integration tests |
+| `self-scan.yml` | push/PR | Achilles scans its own Go code (gosec) with `--strict-tools`, gates on findings not in `.achilles/baseline.json` |
+| `license-check.yml` | push/PR | fails if any Go dep is copyleft (AGPL/GPL/LGPL), or if the shipped license texts are stale |
 | `tier2-verify.yml` | on demand / tool changes | end-to-end verify of the heavy tools (Docker) |
 | `quickstart.yml` | compose / image changes | the docker compose quickstart, end to end |
 
 Copy-paste consumer templates (they do not run here) live in `examples/workflows/`:
-`scan-example.yml` (SARIF upload + PR gate) and `scan-ollama-example.yml` (routed LLM scan).
+`achilles.yml` (the AI-verified scan), `scan-example.yml` (SARIF upload + PR gate),
+`scan-ollama-example.yml` (routed LLM scan) and `scan-hub.yml` (scan other repositories from one place).
 
 ## Conventions & gotchas
 
-- **Flags before the target path** — stdlib `flag` stops at the first positional
-  (`achilles --profile full ./src`, not `./src --profile full`). cobra migration
-  is backlogged.
 - **`configs/rules/*.yaml` must be ASCII** — Opengrep's config reader is
   ASCII-only (an em-dash once caused a scan to exit 2).
 - **Self-scan baseline** — `.achilles/baseline.json` is committed. New gosec
@@ -211,7 +189,8 @@ There is no authentication in the War Room; do not expose it beyond loopback.
 
 ## Where to look next
 
-- [DESIGN.md](DESIGN.md) — architecture, the §-numbered rationale, roadmap status.
+- [DESIGN.md](DESIGN.md) — architecture and the §-numbered rationale.
+- [CONTRIBUTING.md](CONTRIBUTING.md#where-things-are) — a map of the code, and how to make a change.
 - [DEPLOY.md](DEPLOY.md) — the ways to run it: CLI, Docker, GitHub Actions, scheduled scans.
-- [TEST_PLAN.md](TEST_PLAN.md) — per-phase verification matrix.
+- [TEST_PLAN.md](TEST_PLAN.md) — what is tested, where, and what is not.
 - [GitHub issues](https://github.com/Warzuponus/achilles/issues) — backlog and bugs (start here for "what's next").

@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,7 +21,9 @@ import (
 )
 
 // PromptVersion is recorded with every deep verification.
-const PromptVersion = "deep/v1"
+// v2: evidence must point at lines that were shown, not merely at a file that was
+// read in part; the prompt says so.
+const PromptVersion = "deep/v2"
 
 // Hard ceilings: a flag cannot raise a bound past these.
 const (
@@ -170,7 +173,19 @@ type session struct {
 	shared    *Budget
 	used      int
 	seen      map[string]bool
-	trace     []string
+	// lines are the source lines the model has actually been shown, per file.
+	lines map[string]map[int]bool
+	trace []string
+}
+
+// sawLines records the source lines a tool result put in front of the model.
+func (s *session) sawLines(shown []Shown) {
+	for _, l := range shown {
+		if s.lines[l.Path] == nil {
+			s.lines[l.Path] = map[int]bool{}
+		}
+		s.lines[l.Path][l.Line] = true
+	}
 }
 
 func (s *session) exhausted() bool {
@@ -198,6 +213,7 @@ func (s *session) run(ctx context.Context, a Action) string {
 	for _, p := range res.Paths {
 		s.seen[p] = true
 	}
+	s.sawLines(res.shownIn(text))
 	return text
 }
 
@@ -218,7 +234,7 @@ func (v *Verifier) Deep(ctx context.Context, f model.Finding) (model.DeepVerific
 	ctx, cancel := context.WithTimeout(ctx, v.cfg.Timeout)
 	defer cancel()
 
-	sess := &session{sb: v.sb, remaining: v.cfg.TotalBytes, shared: v.cfg.Budget, seen: map[string]bool{}}
+	sess := &session{sb: v.sb, remaining: v.cfg.TotalBytes, shared: v.cfg.Budget, seen: map[string]bool{}, lines: map[string]map[int]bool{}}
 	nonce := newNonce()
 
 	// The finding's own file, through the sandbox: a finding inside a protected
@@ -241,6 +257,14 @@ func (v *Verifier) Deep(ctx context.Context, f model.Finding) (model.DeepVerific
 	ctxText := redact.Prompt(first.Text)
 	if g := min(len(ctxText), sess.remaining); g < len(ctxText) {
 		ctxText = capBytes(ctxText, g, "\n[truncated]")
+	}
+	// Count the lines that are actually sent: a line dropped by the cap above was
+	// not shown. Taking a prefix is the cautious reading if the count is short for
+	// any other reason.
+	if n := strings.Count(ctxText, "\n") - first.header; n >= len(first.Lines) {
+		sess.sawLines(first.Lines)
+	} else if n > 0 {
+		sess.sawLines(first.Lines[:n])
 	}
 
 	msgs := []llm.Message{
@@ -284,7 +308,7 @@ func (v *Verifier) Deep(ctx context.Context, f model.Finding) (model.DeepVerific
 			d.Conclusion = model.Classification(act.Classification)
 			d.Confidence = float64(act.Confidence)
 			d.Reasoning = redact.Prompt(capBytes(cleanText(act.Reasoning), maxReasoningBytes, " …"))
-			d.Evidence, d.EvidenceDropped = filterEvidence(act.Evidence, sess.seen)
+			d.Evidence, d.EvidenceDropped = filterEvidence(act.Evidence, sess.seen, sess.lines)
 			return finish(), nil
 		}
 		if final {
@@ -351,11 +375,16 @@ func (v *Verifier) turn(ctx context.Context, msgs *[]llm.Message) (Action, error
 
 var evidenceRef = regexp.MustCompile(`^(.+?):(\d+)(?:-(\d+))?$`)
 
-// filterEvidence keeps only "file:line" references to files a tool (or the finding's
-// own context window) actually showed the model, so a model cannot cite a file it
-// never read in order to look well-supported. It returns the kept references,
-// de-duplicated and capped, and how many were discarded.
-func filterEvidence(refs []string, seen map[string]bool) (kept []string, dropped int) {
+// maxEvidenceSpan is the longest line range one reference may cover.
+const maxEvidenceSpan = 400
+
+// filterEvidence keeps only "file:line" references to lines a tool (or the
+// finding's own context window) actually showed the model. Checking the file alone
+// was not enough: a model could grep one token in auth.go and then cite
+// auth.go:999 as the sanitizer, and the citation counted. Every line of a cited
+// range has to have been shown. It returns the kept references, de-duplicated and
+// capped, and how many were discarded.
+func filterEvidence(refs []string, seen map[string]bool, lines map[string]map[int]bool) (kept []string, dropped int) {
 	dup := map[string]bool{}
 	for _, r := range refs {
 		m := evidenceRef.FindStringSubmatch(strings.TrimSpace(cleanText(r)))
@@ -364,7 +393,7 @@ func filterEvidence(refs []string, seen map[string]bool) (kept []string, dropped
 			continue
 		}
 		p := strings.TrimPrefix(path.Clean(strings.ReplaceAll(m[1], `\`, "/")), "./")
-		if !seen[p] {
+		if !seen[p] || !linesShown(lines[p], m[2], m[3]) {
 			dropped++
 			continue
 		}
@@ -380,6 +409,27 @@ func filterEvidence(refs []string, seen map[string]bool) (kept []string, dropped
 		kept = append(kept, capBytes(key, 200, ""))
 	}
 	return kept, dropped
+}
+
+// linesShown reports whether every line from lo to hi (hi may be empty: just lo)
+// is among the lines shown.
+func linesShown(shown map[int]bool, lo, hi string) bool {
+	a, err := strconv.Atoi(lo)
+	if err != nil || a < 1 {
+		return false
+	}
+	b := a
+	if hi != "" {
+		if b, err = strconv.Atoi(hi); err != nil || b < a || b-a > maxEvidenceSpan {
+			return false
+		}
+	}
+	for n := a; n <= b; n++ {
+		if !shown[n] {
+			return false
+		}
+	}
+	return true
 }
 
 func optionalRange(end string) string {

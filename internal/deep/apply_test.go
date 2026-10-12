@@ -67,11 +67,11 @@ func TestApply_Confirm(t *testing.T) {
 		}
 	})
 	t.Run("lifts a refutation", func(t *testing.T) {
-		prior := vd(model.ClassTruePositive, 0.9)
-		prior.Refuted, prior.RefuteReason = true, "judge said no"
+		prior := vd(model.ClassTruePositive, 0.8)
+		prior.Refuted, prior.RefuteSupported, prior.RefuteReason = true, true, "judge said no"
 		f := finding(model.SeverityHigh, prior)
 		if !f.Dismissed() {
-			t.Fatal("precondition: a refuted finding is dismissed")
+			t.Fatal("precondition: a true positive with a backed refutation is dismissed")
 		}
 		Apply(&f, deepRes(model.ClassTruePositive, 0.8, 2))
 		if f.Verdict.Refuted || f.Dismissed() {
@@ -359,4 +359,32 @@ func equalInts(a, b []int) bool {
 		}
 	}
 	return true
+}
+
+// Dependency advisories are often the most severe findings in a scan, so without
+// this they would take every --deep-verify slot, for a question (is the vulnerable
+// version in use?) the deep pass is not built to answer.
+func TestSelect_SkipsDependencyAdvisories(t *testing.T) {
+	cve := finding(model.SeverityCritical, nil)
+	cve.Tool, cve.RuleID = "trivy", "CVE-2024-3094"
+	osv := finding(model.SeverityCritical, nil)
+	osv.Tool, osv.RuleID = "osv-scanner", "GHSA-j8r2-6x86-q33q"
+	code := finding(model.SeverityHigh, nil)
+
+	got := Select([]model.Finding{cve, osv, code}, 5)
+	if len(got) != 1 || got[0] != 2 {
+		t.Errorf("selected %v, want only the code finding (index 2)", got)
+	}
+}
+
+func TestApply_NeverDismissesADependencyAdvisory(t *testing.T) {
+	f := finding(model.SeverityHigh, nil)
+	f.Tool, f.RuleID = "trivy", "CVE-2024-3094"
+	Apply(&f, deepRes(model.ClassFalsePositive, 0.95, 3, "go.mod:7"))
+	if f.Verdict != nil || f.Dismissed() {
+		t.Errorf("a deep pass must not rule out a known CVE: %+v", f.Verdict)
+	}
+	if f.Deep == nil {
+		t.Error("the outcome is still recorded")
+	}
 }

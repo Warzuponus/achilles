@@ -469,3 +469,41 @@ func TestCompleteAndDecode_RepairSumsUsageAndClearsStaleFields(t *testing.T) {
 		t.Errorf("usage = %+v, want both calls (30 total tokens)", resp.Usage)
 	}
 }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// Anthropic's OpenAI-compatible endpoint answers 400 to an explicit temperature
+// on current Claude models, and triage sends temperature 0 on every call. The
+// preset therefore failed on the first request, every time.
+func TestTemperature_OmittedForTheAnthropicEndpoint(t *testing.T) {
+	sent := func(baseURL string) map[string]any {
+		t.Helper()
+		var body map[string]any
+		cl := NewOpenAI(baseURL, "k", "claude-opus-5-5")
+		cl.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			b, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(b, &body)
+			return &http.Response{StatusCode: 200, Header: http.Header{},
+				Body: io.NopCloser(strings.NewReader(okReply))}, nil
+		})}
+		if _, err := cl.Complete(context.Background(), Request{Messages: userMsg, Temperature: 0.3}); err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+
+	for _, u := range []string{"https://api.anthropic.com/v1", "https://API.Anthropic.com/v1/"} {
+		if v, ok := sent(u)["temperature"]; ok {
+			t.Errorf("%s: temperature must not be sent, got %v", u, v)
+		}
+	}
+	// Every other endpoint still gets what the caller asked for.
+	for _, u := range []string{"https://api.openai.com/v1", "https://openrouter.ai/api/v1", "http://localhost:11434/v1",
+		"https://api.anthropic.com.evil.example/v1"} {
+		if v, ok := sent(u)["temperature"]; !ok || v.(float64) != 0.3 {
+			t.Errorf("%s: temperature should be sent as given, got %v (present=%v)", u, v, ok)
+		}
+	}
+}

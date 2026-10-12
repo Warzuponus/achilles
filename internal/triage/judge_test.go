@@ -212,3 +212,161 @@ func TestJudge_OverturnRecordedInProvenanceAndVault(t *testing.T) {
 		t.Errorf("want 1 verdict record, got %d", verdicts)
 	}
 }
+
+// --- triage/v5: a refutation has to be backed before it can dismiss ---
+
+const (
+	jTPModest = `{"classification":"true_positive","confidence":0.8,"exploitability":"reachable","reasoning":"tainted"}`
+
+	// newFinding's context is the tool snippet "eval(user_input)".
+	jRefuteBacked   = `{"refuted":true,"confidence":0.9,"evidence":"eval(user_input)","reason":"user_input is a module constant"}`
+	jRefuteInvented = `{"refuted":true,"confidence":0.9,"evidence":"value = sanitize(request.args)","reason":"it is sanitized"}`
+	jRefuteUnsure   = `{"refuted":true,"confidence":0.4,"evidence":"eval(user_input)","reason":"might be a constant"}`
+)
+
+func triageWith(t *testing.T, triageResp, judgeResp string) *model.Verdict {
+	t.Helper()
+	eng, _ := judgeEngine(t, triageResp, judgeResp)
+	f := newFinding()
+	if err := eng.Triage(context.Background(), "r", f); err != nil {
+		t.Fatal(err)
+	}
+	return f.Verdict
+}
+
+// The bug this guards: the judge prompt for an uncertain verdict invites a
+// refutation in EITHER direction, so "refuted: this is clearly exploitable" used to
+// take the finding out of the gate.
+func TestJudge_RefutedUncertainIsNeverDismissed(t *testing.T) {
+	for _, judge := range []string{jRefute, jRefuteBacked} {
+		v := triageWith(t, jUN, judge)
+		if v.Refuted {
+			t.Errorf("an uncertain verdict has no direction to refute; Refuted must stay false (judge %s)", judge)
+		}
+		if v.Dismissed() {
+			t.Errorf("a refuted uncertain verdict must never be dismissed (judge %s)", judge)
+		}
+		if !strings.Contains(v.RefuteReason, "no direction taken") {
+			t.Errorf("the judge's note should be kept and labelled, got %q", v.RefuteReason)
+		}
+	}
+}
+
+func TestJudge_BareRefutationDisputesButDoesNotDismiss(t *testing.T) {
+	// No confidence, no quote: the judge's word alone.
+	v := triageWith(t, jTPModest, jRefute)
+	if !v.Refuted {
+		t.Fatal("the disagreement must still be recorded")
+	}
+	if v.RefuteSupported || v.Dismissed() {
+		t.Errorf("an unbacked refutation must not dismiss: %+v", v)
+	}
+	if !v.Disputed() {
+		t.Error("it should read as disputed")
+	}
+	if v.HighConfidence() {
+		t.Error("a disputed finding must not be auto-remediated")
+	}
+}
+
+func TestJudge_BackedRefutationDismissesAModestTruePositive(t *testing.T) {
+	v := triageWith(t, jTPModest, jRefuteBacked)
+	if !v.RefuteSupported || v.JudgeConfidence != 0.9 || v.RefuteEvidence == "" {
+		t.Fatalf("support not recorded: %+v", v)
+	}
+	if !v.Dismissed() || v.Disputed() {
+		t.Errorf("a confident refutation quoting real context should dismiss a 0.8 true positive: %+v", v)
+	}
+}
+
+func TestJudge_RefutationQuotingTextThatIsNotThereDoesNotDismiss(t *testing.T) {
+	v := triageWith(t, jTPModest, jRefuteInvented)
+	if v.RefuteSupported || v.Dismissed() {
+		t.Errorf("an invented quote must not count as evidence: %+v", v)
+	}
+}
+
+func TestJudge_UnsureRefutationDoesNotDismiss(t *testing.T) {
+	v := triageWith(t, jTPModest, jRefuteUnsure)
+	if v.RefuteSupported || v.Dismissed() {
+		t.Errorf("a judge below the dismissal floor must not dismiss: %+v", v)
+	}
+}
+
+func TestJudge_SureTruePositiveIsNotDismissedEvenByABackedRefutation(t *testing.T) {
+	v := triageWith(t, jTP, jRefuteBacked) // triage confidence 0.95
+	if !v.RefuteSupported {
+		t.Fatalf("the refutation itself is supported: %+v", v)
+	}
+	if v.Dismissed() {
+		t.Error("a triage pass that was sure is escalated to a human, not overruled")
+	}
+	if !v.Disputed() {
+		t.Error("it should read as disputed")
+	}
+}
+
+func TestEvidenceInContext(t *testing.T) {
+	ctx := "// the finding:\n" +
+		"     10 | func run(w http.ResponseWriter, r *http.Request) {\n" +
+		">>   11 | \tcmd := exec.Command(\"sh\", \"-c\", r.URL.Query().Get(\"q\"))\n" +
+		"     12 | }\n"
+	yes := []string{
+		`cmd := exec.Command("sh", "-c", r.URL.Query().Get("q"))`,                // the code alone
+		`>>   11 | cmd := exec.Command("sh", "-c", r.URL.Query().Get("q"))`,      // gutter copied
+		"cmd  :=  exec.Command(\"sh\",   \"-c\", r.URL.Query().Get(\"q\"))",      // spacing differs
+		"`r.URL.Query().Get(\"q\")`",                                             // a fragment, in backticks
+		"something invented\nfunc run(w http.ResponseWriter, r *http.Request) {", // one real line is enough
+	}
+	no := []string{
+		"",
+		"}",        // too short to mean anything
+		"12 | }",   // a real line, but nothing in it
+		"--------", // long enough, says nothing
+		`cmd := exec.Command("ls")`,
+		"the value is a constant",
+	}
+	for _, e := range yes {
+		if !evidenceInContext(e, ctx) {
+			t.Errorf("should match: %q", e)
+		}
+	}
+	for _, e := range no {
+		if evidenceInContext(e, ctx) {
+			t.Errorf("should NOT match: %q", e)
+		}
+	}
+	if evidenceInContext("eval(user_input)", "(source code withheld by --llm-no-code)") {
+		t.Error("with no code shown, nothing can be quoted from it")
+	}
+}
+
+func TestParseJudge_LooseRepliesFailSafe(t *testing.T) {
+	if j := parseJudge(`not json`); j.Refuted {
+		t.Error("an unparseable reply does not refute")
+	}
+	// A wrong-typed support field must not leave a half-filled refutation.
+	j := parseJudge(`{"refuted":true,"confidence":"very","evidence":"x","reason":"r"}`)
+	if !j.Refuted || j.Reason != "r" || j.Confidence != 0 || j.Evidence != "" {
+		t.Errorf("loose reply = %+v", j)
+	}
+	if j := parseJudge(`{"refuted":true,"confidence":85}`); j.Confidence != 0.85 {
+		t.Errorf("percent confidence = %v, want 0.85", j.Confidence)
+	}
+}
+
+func TestParseVerdict_ConfidenceIsNormalized(t *testing.T) {
+	for in, want := range map[string]float64{"85": 0.85, "0.85": 0.85, "-1": 0, "1000": 0, "1": 1} {
+		v, err := parseVerdict(`{"classification":"false_positive","confidence":` + in + `}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.Confidence != want {
+			t.Errorf("confidence %s -> %v, want %v", in, v.Confidence, want)
+		}
+	}
+	v, _ := parseVerdict(`{"classification":"true_positive","confidence":0.8,"refuted":true,"refuteSupported":true,"judgeConfidence":1,"refuteEvidence":"x"}`)
+	if v.Refuted || v.RefuteSupported || v.JudgeConfidence != 0 || v.RefuteEvidence != "" {
+		t.Errorf("a model must not be able to set the judge's fields: %+v", v)
+	}
+}

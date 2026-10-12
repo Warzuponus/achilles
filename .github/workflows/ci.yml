@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# A newer push to a pull request replaces the run of the older one: only the last
+# result matters, and the repository is billed for every minute while it is private.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -36,12 +43,16 @@ jobs:
         run: go vet ./...
       - name: Build
         run: go build ./...
-      - name: Tree hygiene (no local paths, key material, deployment state, old names)
+      - name: Tree hygiene (no local paths, key material, deployment state, cloud services)
         run: scripts/check-tree.sh
       - name: Dependency hygiene (no cloud SDK modules)
         run: make check-deps
-      - name: Test (hermetic)
-        run: go test ./...
+      - name: Installer (checksum and signature checks, against a fake release)
+        run: sh scripts/install_test.sh
+      # -race: findings are triaged, scanned and verified concurrently, and nothing
+      # else would notice a data race in those paths.
+      - name: Test (hermetic, race detector on)
+        run: go test -race ./...
       # Triage-context eval: hermetic (no model, no key), so it can gate. Fails if
       # a change takes deciding evidence out of the triage prompt for any corpus
       # case. Refresh the baseline deliberately with `make eval-baseline`.
@@ -56,12 +67,73 @@ jobs:
   # install into a failed job instead of a quietly partial scan.
   action:
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run the action against the bundled sample
         uses: ./
         with:
           version: source # build from this checkout, not a published release
+          # The Go that gosec scans with: 1.27.2 is not readable by any gosec
+          # release yet (see self-scan.yml), and --strict-tools below would
+          # rightly fail the job over an incomplete gosec run.
+          go-version: "1.27.1"
           target: examples/quickstart
           upload-report: "false"
           args: --strict-tools
+
+  # Known vulnerabilities in the Go standard library and in dependencies, limited to
+  # code this project actually reaches. A security scanner must not ship on a
+  # toolchain or dependency with a published fix outstanding; when this fails, bump
+  # the `toolchain` line or the module in go.mod.
+  vulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27'
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+  # A linter beyond `go vet`. It runs on Go 1.27.1 with GOTOOLCHAIN=local for the
+  # reason self-scan.yml does: Go 1.27.2 changed the compiler's export-data format
+  # and staticcheck, like gosec, cannot read it yet, so on 1.27.2 it reports only
+  # import errors. Lift the pin with the others when the tools catch up.
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+      - name: staticcheck (linux, windows, darwin)
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+          for os in linux windows darwin; do
+            echo "== GOOS=$os"
+            GOOS=$os "$(go env GOPATH)/bin/staticcheck" ./...
+          done
+
+  # Windows is a release target (.goreleaser.yaml builds windows/amd64), so it is
+  # built and tested here. Three packages used to fail on Windows without anyone
+  # seeing it, one of them because the file vault had no cross-process lock there.
+  #
+  # Not on pull requests: a Windows runner is billed at twice the Linux rate. It runs
+  # on every push to main and on demand (Actions -> CI -> Run workflow, on any
+  # branch), so run it by hand for a change that touches paths, locking or processes.
+  test-windows:
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27'
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test ./...

@@ -17,10 +17,16 @@ For each finding that has a diff, Achilles:
 4. Compares the re-scan with the original:
    - the original finding must be gone, and
    - the scanner must not report anything new.
-5. Deletes the temporary copy, whatever the outcome.
+5. Puts the patched file back and reuses the copy for the next fix, so a run makes
+   one copy per concurrent verification rather than one per fix. Every copy is
+   deleted at the end, whatever the outcome.
 
 Each tool's findings on the unpatched target are computed once and reused for
 every fix from that tool. Up to two fixes are verified at a time.
+
+Verification runs after the AI review and has its own clock, `--verify-timeout`
+(default 15 minutes), which starts when verification starts. A fix whose re-scan did
+not finish in time is reported as `error`, never as verified.
 
 ## How "gone" and "new" are decided
 
@@ -32,9 +38,13 @@ nearby will keep a fix from verifying.
 
 A finding in the patched copy counts as **new** if neither its fingerprint nor its
 rule and file appear among the findings the scanner reported before (or among the
-findings the main scan kept or dismissed). So an extra instance of a rule that
-already fires in that file is not reported as new; a rule that did not fire there
-before is.
+findings the main scan kept or dismissed).
+
+Instances are also counted. For each rule and file, the patched copy may hold at most
+as many findings as the original did, and one fewer where the fixed finding was. So
+a patch that removes the flagged line but adds another instance of the same weakness
+elsewhere in the file, or that only moves the flagged code out of the 10-line window,
+is reported as `introduces_new`, not `verified`.
 
 ## What it proves, and what it does not
 
@@ -60,7 +70,7 @@ and test every fix. Achilles still never merges anything.
 | `not_fixed` | The diff applied but the scanner still reports the finding. |
 | `introduces_new` | The finding is gone but the scanner reports new findings; they are listed in `newFindings` (at most 20). |
 | `patch_failed` | The diff was rejected as unsafe (see below) or does not apply cleanly to the code. The scanner is not run. |
-| `skipped` | Verification was not attempted: the target is over the size cap, the finding is in an excluded directory, or the reporting tool cannot be re-run (a shadow rule, or a tool no longer registered). Says nothing about the patch. |
+| `skipped` | Verification was not attempted: the target is over the size cap, the finding is inside version-control state, or the reporting tool cannot be re-run (a shadow rule, or a tool no longer registered). Says nothing about the patch. |
 | `error` | Verification started but the baseline or re-scan failed (tool crash, timeout, unreadable output). Never treated as verified. |
 
 ## Safety and size caps
@@ -71,12 +81,28 @@ sees it. A diff is rejected (`patch_failed`) if it:
 - names an absolute path, a `..` segment, or anything under `.git`;
 - uses a quoted/escaped path or a backslash;
 - is a binary patch, or creates or changes a symlink;
-- names no files, touches more than 20 files, or is larger than 256 KiB.
+- names no files, or is larger than 256 KiB;
+- **changes anything other than the file the finding is in.** The model is shown that
+  one file, so an edit anywhere else is code it wrote without seeing, and it is how a
+  "fix" for one flagged line would also add a workflow step, a build target or a
+  dependency. Creating, deleting, renaming or copying a file, and changing a file's
+  mode, are rejected too;
+- targets a file that runs by itself in CI or on checkout (`.github/`, other CI
+  pipeline definitions, `.gitmodules`, `.gitattributes`, git hooks), even when that
+  is where the finding is. Fix those by hand;
+- names a path without the usual `a/` `b/` prefix, which would leave it to git to
+  guess which file to patch.
+
+The same check runs again immediately before `--fix-pr` applies a diff, whether or
+not verification ran, so `--verify-fixes=false` does not switch it off.
 
 The copy skips `.git`, `node_modules`, `vendor`, `.achilles`, `.terraform`, virtualenvs
 and common build-output directories (`dist`, `build`, `target`, `out`, `.next`,
 `.gradle`, `__pycache__`), and never follows or recreates symlinks or special files.
-A finding inside a skipped directory is reported as `skipped`.
+Those build-output names are also ordinary names for source directories, so when the
+finding itself is inside one, that directory is copied for that verification. Only a
+finding inside version-control or Achilles state (`.git`, `.hg`, `.svn`, `.achilles`)
+is reported as `skipped`.
 
 If the target is larger than **200 MiB** or more than **50,000 files**, the result is
 `skipped: target too large`, not an error, and the scan carries on.

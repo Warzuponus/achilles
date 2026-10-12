@@ -49,7 +49,15 @@ the fleet rollup. It is protected by being reachable only from your own machine:
   `--allowed-hosts` — this defeats DNS rebinding;
 - state-changing requests are protected against cross-site requests (cross-origin
   `POST`s are rejected);
-- secrets found in code are redacted before they reach the UI or API.
+- secrets found in code are redacted before they reach the UI or API: a credential
+  finding's matched text is withheld outright, other text is pattern-masked, and the
+  audit export never serves raw scanner output. The Evidence Vault on disk is the
+  unredacted record, so protect that file (it is created owner-only).
+
+Feedback recorded through the War Room is ordinary analyst feedback: with
+`--calibrate` (off by default) enough false-positive labels on a rule will rule that
+rule's low- and medium-severity findings out of later scans. Anyone who can reach the
+port can therefore influence those scans, which is one more reason to keep it local.
 
 Do not bind it to a LAN or public address, or forward its port, expecting a login to
 protect it. To share it, put your own authenticating reverse proxy in front of it (and
@@ -63,10 +71,14 @@ confident "false positive" verdict takes a finding out of the `--fail-on` gate, 
 issues Achilles files, and the headline counts (it stays listed in a separate
 section of every report, and in SARIF as a suppressed result). That makes the
 scanned repository an adversary: a comment in the code can try to talk the model into
-dismissing a real vulnerability. Mitigations in place: every prompt tells the model
-that repository text is untrusted data; a second adversarial pass tries to refute
+dismissing a real vulnerability. Mitigations in place: every prompt tells the model,
+first, that repository text is untrusted data, and marks where each piece of it
+begins and ends with an id that is random per request, so text in the code cannot
+pose as the end of the code or as an instruction; a second adversarial pass tries to refute
 each verdict; findings about credentials are never sent to the model and never
-dismissed; low-confidence and overturned verdicts are never dismissed.
+dismissed; low-confidence and overturned verdicts are never dismissed; and the
+second pass can rule a finding out only by quoting code that Achilles verifies was in
+the prompt, never on its say-so.
 
 None of that is a guarantee. **Do not rely on the AI review to gate code from authors
 you do not trust**: for that, run with `--keep-dismissed` (the gate then uses raw
@@ -80,6 +92,59 @@ ollama`) keeps everything on your machine.
 Filing findings as GitHub issues publishes vulnerability details to everyone who can
 read the repository. Achilles refuses to do so in a public repository unless you pass
 `--allow-public-issues`.
+
+## Security model: the scanned repository can configure the scanners
+
+Scanners read ignore lists and configuration from the repository they scan:
+`.gitleaks.toml` and `.gitleaksignore`, `.trivyignore` and `trivy.yaml`,
+`.semgrepignore`, `osv-scanner.toml`, and inline comments such as `#nosec`,
+`nosemgrep` and `gitleaks:allow`. That is how a team records "we looked at this and
+it is fine". It also means a pull request can add a secret and the allowlist entry
+that hides it in the same change.
+
+What Achilles does about it:
+
+- Every such file that is present is named on stderr and in the reports, so a
+  suppression is never silent.
+- With `--diff`, a change that modifies one of those files gets a warning in the
+  output and at the top of every report.
+- `--no-repo-config` refuses them: files Achilles would pass to a scanner are not
+  passed, and a scanner that reads one on its own (most do) is reported as
+  **incomplete**, which fails a `--strict-tools` run. Its findings still count; its
+  silence is not treated as evidence.
+
+The repository's own Achilles settings file, `.achilles.yaml`, is held to the same
+rules and to a tighter one. It can set only the flags that shape the scan of that
+repository (profile, exclusions, baseline, timeout, a gate where the operator set
+none, and a few stricter-only switches). It cannot name an endpoint or a model, turn
+on a feature that sends code to one, select the tool registry or the runner, choose
+where anything is written, or cause anything to be posted; a file that tries is an
+error and the scan does not run. A value given on the command line or in a
+`--settings` file always wins over it. It can still weaken a scan within those
+limits, most obviously with `exclude`, which is why it is announced, reported, flagged
+when a diff changes it, and ignored under `--no-repo-config`.
+
+Three more things Achilles reads can live in the repository and decide what a scan
+reports: the baseline (every fingerprint in it is a finding that is not reported), the
+generated-rule repository, and the Evidence Vault if you commit it. A pull request can
+change them with the code.
+
+- With `--diff`, a change to any of them in the commits under review is flagged on
+  stderr and at the top of every report, the same as a change to a scanner's ignore
+  file. Only committed changes count, so a baseline restored from a CI cache or a
+  vault this run appended to is not a false alarm.
+- A committed vault's feedback history is what `--calibrate` dismisses findings on
+  and what `--rag` shows the model as examples. When either is in use with such a
+  vault it is named in the output and the reports, and `--no-repo-config` turns both
+  off for the run. Keeping the vault outside the repository (`--vault`, or the
+  PostgreSQL backend) avoids the question.
+- Cached verdicts are not affected: each is signed with a key kept in the Achilles
+  home directory, so an entry that arrives with a repository is ignored.
+
+What it does not do: `--no-repo-config` does not neutralize inline suppression
+comments, and it cannot make a scanner ignore a file it loads by itself. If you gate
+code from authors you do not trust, review changes to those files and comments as
+part of the change, or scan a checkout from which they have been removed.
 
 ## Deploying safely
 

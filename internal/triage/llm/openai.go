@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +41,23 @@ type HTTPError struct {
 }
 
 func (e *HTTPError) Error() string { return fmt.Sprintf("llm HTTP %d: %s", e.Status, e.Body) }
+
+// fixedSampling reports whether the endpoint at baseURL is known to reject an
+// explicit temperature, so the field is left out without the operator having to
+// find ACHILLES_LLM_OMIT_TEMPERATURE.
+//
+// Anthropic's OpenAI-compatibility endpoint: current Claude models no longer take
+// sampling parameters, and answer 400 to the temperature of 0 that triage sends.
+// Every call failed, so the --llm-provider anthropic preset never produced a
+// verdict. (That endpoint also ignores response_format, which is harmless: replies
+// are validated and repaired the same way as for any model without JSON mode.)
+func fixedSampling(baseURL string) bool {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Hostname(), "api.anthropic.com")
+}
 
 // NewOpenAI builds a client. A trailing slash on baseURL is tolerated.
 func NewOpenAI(baseURL, apiKey, model string) *OpenAIClient {
@@ -75,7 +94,8 @@ type jsonSchema struct {
 type chatResponse struct {
 	Model   string `json:"model"`
 	Choices []struct {
-		Message struct {
+		FinishReason string `json:"finish_reason"`
+		Message      struct {
 			Content string `json:"content"`
 			// Reasoning servers (DeepSeek-style, vLLM, Ollama) put the answer here
 			// instead of Content when the output is cut off or Content is unused.
@@ -105,7 +125,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, req Request) (Response, err
 	}
 
 	body := chatRequest{Model: model, Messages: req.Messages}
-	if !c.Opts.OmitTemperature {
+	if !c.Opts.OmitTemperature && !fixedSampling(c.BaseURL) {
 		t := req.Temperature
 		body.Temperature = &t
 	}
@@ -146,14 +166,28 @@ func (c *OpenAIClient) Complete(ctx context.Context, req Request) (Response, err
 	}
 	for attempt := 0; ; attempt++ {
 		resp, err := c.attempt(ctx, endpoint, buf)
-		var he *HTTPError
-		if err != nil && errors.As(err, &he) && retryableStatus(he.Status) && attempt < retries {
-			if serr := c.wait(ctx, backoff(attempt, he.RetryAfter)); serr != nil {
-				return Response{}, serr
-			}
-			continue
+		if err == nil || attempt >= retries || ctx.Err() != nil {
+			return resp, err
 		}
-		return resp, err
+		var (
+			he   *HTTPError
+			te   *transportError
+			wait time.Duration
+		)
+		switch {
+		case errors.As(err, &he) && retryableStatus(he.Status):
+			wait = backoff(attempt, he.RetryAfter)
+			if he.RetryAfter <= 0 {
+				wait = jitter(wait)
+			}
+		case errors.As(err, &te):
+			wait = jitter(backoff(attempt, 0))
+		default:
+			return resp, err
+		}
+		if serr := c.wait(ctx, wait); serr != nil {
+			return Response{}, serr
+		}
 	}
 }
 
@@ -162,12 +196,57 @@ const (
 	maxBackoff     = 30 * time.Second
 )
 
+// retryableStatus reports the HTTP statuses that a second try can fix: rate
+// limits, timeouts, and a server or gateway having a bad moment. 500 is included
+// because providers answer it for transient internal errors far more often than
+// for anything about the request; the retry count bounds the cost of being wrong.
 func retryableStatus(code int) bool {
 	switch code {
-	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+	case http.StatusRequestTimeout, http.StatusTooManyRequests,
+		http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout,
+		529: // "overloaded", used by some providers
 		return true
 	}
 	return false
+}
+
+// transportError is a request that never got an HTTP answer, or got part of one:
+// a reset connection, an EOF mid-body, a dial or TLS timeout. These are the most
+// ordinary transient failures there are and were not retried at all.
+type transportError struct{ err error }
+
+func (e *transportError) Error() string { return e.err.Error() }
+func (e *transportError) Unwrap() error { return e.err }
+
+// jitter spreads a wait over the upper half of its range. Findings are reviewed in
+// parallel, so without it every worker that hit the same rate limit retries at the
+// same instant and hits it again.
+func jitter(d time.Duration) time.Duration {
+	if d <= 1 {
+		return d
+	}
+	half := d / 2
+	return half + time.Duration(rand.Int64N(int64(half)+1)) // #nosec G404 -- spreading retries in time; nothing secret or security-relevant is derived from it
+}
+
+// retryAfter reads a Retry-After header: a number of seconds, or an HTTP date.
+func retryAfter(h string, now time.Time) time.Duration {
+	h = strings.TrimSpace(h)
+	if h == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(h); err == nil {
+		if secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+		return 0
+	}
+	if t, err := http.ParseTime(h); err == nil {
+		if d := t.Sub(now); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 // backoff is the server's Retry-After when given, else 1s, 2s, 4s... — always
@@ -213,17 +292,21 @@ func (c *OpenAIClient) attempt(ctx context.Context, endpoint string, buf []byte)
 
 	resp, err := c.HTTP.Do(httpReq)
 	if err != nil {
-		return Response{}, fmt.Errorf("llm request: %w", err)
+		return Response{}, &transportError{fmt.Errorf("llm request: %w", err)}
 	}
 	defer resp.Body.Close()
 
-	data, _ := io.ReadAll(resp.Body)
+	data, readErr := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		he := &HTTPError{Status: resp.StatusCode, Body: strings.TrimSpace(string(data))}
-		if secs, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil && secs > 0 {
-			he.RetryAfter = time.Duration(secs) * time.Second
+		return Response{}, &HTTPError{
+			Status: resp.StatusCode, Body: strings.TrimSpace(string(data)),
+			RetryAfter: retryAfter(resp.Header.Get("Retry-After"), time.Now()),
 		}
-		return Response{}, he
+	}
+	if readErr != nil {
+		// The connection dropped mid-body. Decoding what arrived would report
+		// "unexpected end of JSON input", which hides what happened and is not retried.
+		return Response{}, &transportError{fmt.Errorf("llm response cut off: %w", readErr)}
 	}
 
 	var cr chatResponse
@@ -245,8 +328,9 @@ func (c *OpenAIClient) attempt(ctx context.Context, endpoint string, buf []byte)
 		content = m.Reasoning
 	}
 	return Response{
-		Content: content,
-		Model:   cr.Model,
+		Content:   content,
+		Truncated: cr.Choices[0].FinishReason == "length",
+		Model:     cr.Model,
 		Usage: Usage{
 			PromptTokens:     cr.Usage.PromptTokens,
 			CompletionTokens: cr.Usage.CompletionTokens,

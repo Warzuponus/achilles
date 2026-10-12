@@ -23,7 +23,7 @@ func (s stubVerifier) Verify(_ context.Context, f model.Finding, _ string) verif
 }
 
 func fixFinding(fp, diff string) model.Finding {
-	f := model.Finding{Tool: "fake", RuleID: "r", Fingerprint: fp}
+	f := model.Finding{Tool: "fake", RuleID: "r", Fingerprint: fp, Location: model.Location{File: "x"}}
 	if diff != "" {
 		f.Remediation = &model.Remediation{Summary: "s", Diff: diff, Confidence: 0.9}
 	}

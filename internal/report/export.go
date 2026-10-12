@@ -5,7 +5,9 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/redact"
@@ -28,18 +30,29 @@ func sarifLevel(s model.Severity) string {
 func WriteSARIFReport(w io.Writer, s model.Scan) error {
 	// Results must be a non-nil array: SARIF requires `results` to be an array,
 	// and GitHub code scanning rejects `"results": null` (which a nil slice emits).
+	rules, ruleIndex := sarifRules(s.Findings, s.Dismissed)
 	run := model.SarifRun{
-		Tool:    model.SarifTool{Driver: model.SarifDriver{Name: "achilles"}},
+		Tool:    model.SarifTool{Driver: model.SarifDriver{Name: "achilles", Rules: rules}},
 		Results: []model.SarifResult{},
 	}
-	for _, f := range s.Findings {
-		run.Results = append(run.Results, sarifResult(f, false))
-	}
-	// Findings the AI review ruled out are still emitted, marked suppressed, so
-	// code scanning shows them as dismissed (with the reason) and does not re-open
-	// them as new alerts on the next run.
-	for _, f := range s.Dismissed {
-		run.Results = append(run.Results, sarifResult(f, true))
+	all := append(append([]model.Finding{}, s.Findings...), s.Dismissed...)
+	hashes := lineHashes(all)
+	for i, f := range all {
+		// Findings the AI review ruled out are still emitted, marked suppressed, so
+		// code scanning shows them as dismissed (with the reason) and does not
+		// re-open them as new alerts on the next run.
+		r := sarifResult(f, i >= len(s.Findings))
+		if idx, ok := ruleIndex[f.RuleID]; ok {
+			r.RuleIndex = &idx
+		}
+		if hashes[i] != "" {
+			r.PartialFingerprints = map[string]string{"primaryLocationLineHash": hashes[i]}
+		}
+		if s.BaselineApplied {
+			r.BaselineState = "new"
+		}
+		r.Fixes = sarifFix(f)
+		run.Results = append(run.Results, r)
 	}
 	if len(s.FailedTools) > 0 {
 		inv := model.SarifInvocation{ExecutionSuccessful: false}
@@ -129,6 +142,7 @@ type junitSuites struct {
 	XMLName  xml.Name     `xml:"testsuites"`
 	Tests    int          `xml:"tests,attr"`
 	Failures int          `xml:"failures,attr"`
+	Errors   int          `xml:"errors,attr"`
 	Suites   []junitSuite `xml:"testsuite"`
 }
 
@@ -136,6 +150,7 @@ type junitSuite struct {
 	Name     string      `xml:"name,attr"`
 	Tests    int         `xml:"tests,attr"`
 	Failures int         `xml:"failures,attr"`
+	Errors   int         `xml:"errors,attr"`
 	Cases    []junitCase `xml:"testcase"`
 }
 
@@ -143,6 +158,7 @@ type junitCase struct {
 	Name      string        `xml:"name,attr"`
 	Classname string        `xml:"classname,attr"`
 	Failure   *junitFailure `xml:"failure,omitempty"`
+	Error     *junitFailure `xml:"error,omitempty"`
 }
 
 type junitFailure struct {
@@ -150,22 +166,49 @@ type junitFailure struct {
 	Text    string `xml:",chardata"`
 }
 
-// WriteJUnit emits JUnit XML (each finding is a failing test case) for CI
-// systems that render test reports.
+// WriteJUnit emits JUnit XML for CI systems that render test reports. Each
+// finding is a failing test case. Each scanner that failed, or could not analyze
+// everything, is a test case in error: a JUnit report with no failures is rendered
+// as a green run, and a scan whose scanners did not run is not one.
 func WriteJUnit(w io.Writer, s model.Scan) error {
-	suite := junitSuite{Name: "achilles", Tests: len(s.Findings), Failures: len(s.Findings)}
+	suite := junitSuite{Name: "achilles"}
+	for _, tool := range s.FailedTools {
+		suite.Errors++
+		suite.Cases = append(suite.Cases, junitCase{
+			Name:      fmt.Sprintf("scanner %s completed", tool),
+			Classname: "achilles.scan",
+			Error: &junitFailure{
+				Message: fmt.Sprintf("%s failed to run or could not analyze everything; the scan is incomplete", tool),
+				Text:    "A missing result from this scanner is not evidence of safety. See the run log, --diagnostics, or `achilles doctor`.",
+			},
+		})
+	}
+	if t := s.Triage; t != nil && t.Aborted != "" {
+		suite.Errors++
+		suite.Cases = append(suite.Cases, junitCase{
+			Name:      "AI review completed",
+			Classname: "achilles.review",
+			Error:     &junitFailure{Message: "the AI review did not complete: " + t.Aborted, Text: "The findings in this report were not reviewed."},
+		})
+	}
 	for _, f := range s.Findings {
 		loc := f.Location.File
 		if f.Location.Region.StartLine > 0 {
 			loc = fmt.Sprintf("%s:%d", loc, f.Location.Region.StartLine)
 		}
+		msg := f.Message
+		if f.IsSecret() {
+			msg = redact.Secrets(msg) // a test report is a CI artifact many people can open
+		}
+		suite.Failures++
 		suite.Cases = append(suite.Cases, junitCase{
 			Name:      fmt.Sprintf("%s (%s)", f.RuleID, loc),
 			Classname: f.Tool,
-			Failure:   &junitFailure{Message: f.Message, Text: fmt.Sprintf("[%s] %s at %s", f.Severity, f.RuleID, loc)},
+			Failure:   &junitFailure{Message: msg, Text: fmt.Sprintf("[%s] %s at %s", f.Severity, f.RuleID, loc)},
 		})
 	}
-	doc := junitSuites{Tests: len(s.Findings), Failures: len(s.Findings), Suites: []junitSuite{suite}}
+	suite.Tests = len(suite.Cases)
+	doc := junitSuites{Tests: suite.Tests, Failures: suite.Failures, Errors: suite.Errors, Suites: []junitSuite{suite}}
 	if _, err := io.WriteString(w, xml.Header); err != nil {
 		return err
 	}
@@ -183,12 +226,33 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 		fmt.Fprintf(w, "> **Incomplete scan:** %s failed to run, so missing results are not evidence of safety.\n\n",
 			strings.Join(s.FailedTools, ", "))
 	}
+	if len(s.RepoConfigChanged) > 0 {
+		fmt.Fprintf(w, "> **This change modifies scanner configuration:** %s. It can hide findings in the same change; review it as part of this scan.\n\n",
+			MarkdownText(strings.Join(s.RepoConfigChanged, "; ")))
+	}
+	if len(s.RepoConfig) > 0 {
+		fmt.Fprintf(w, "Scanner configuration from the scanned repository was in effect (%s). It can remove findings before Achilles sees them.\n\n",
+			MarkdownText(strings.Join(s.RepoConfig, "; ")))
+	}
+	if t := s.Triage; t != nil && t.Aborted != "" {
+		fmt.Fprintf(w, "> **The AI review did not complete:** %s. The findings below are scanner output that was not reviewed.\n\n", MarkdownText(t.Aborted))
+	}
 	if t := s.Triage; t != nil {
 		fmt.Fprintf(w, "AI review (`%s`) gave a verdict on %d of %d findings", t.Model, t.Triaged, t.Total)
 		if t.Failed+t.Skipped > 0 {
 			fmt.Fprintf(w, " (%d failed, %d not reached)", t.Failed, t.Skipped)
 		}
-		fmt.Fprint(w, ".\n\n")
+		if t.AutoResolved > 0 {
+			fmt.Fprintf(w, "; %d of those came from analyst feedback on the rule (`--calibrate`), not from a model review", t.AutoResolved)
+		}
+		if t.Reused > 0 {
+			fmt.Fprintf(w, "; %d were reused from earlier runs (same code, prompt and models)", t.Reused)
+		}
+		fmt.Fprint(w, ".")
+		if t.Advisories > 0 {
+			fmt.Fprintf(w, " %d dependency advisories are listed as reported: the AI review does not judge known CVEs in dependencies.", t.Advisories)
+		}
+		fmt.Fprint(w, "\n\n")
 	}
 	if len(s.Findings) == 0 {
 		msg := "No findings. ✅\n"
@@ -210,18 +274,16 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 			if f.Verdict != nil {
 				verdict = string(f.Verdict.Classification)
 				switch {
+				case f.Verdict.Disputed():
+					verdict += " (**disputed by judge**)"
 				case f.Verdict.Refuted:
 					verdict += " (refuted)"
 				case f.Verdict.Overturned:
 					verdict += " (**overturned by judge**)"
 				}
 			}
-			msg := f.Message
-			if f.IsSecret() {
-				msg = redact.Secrets(msg)
-			}
 			fmt.Fprintf(w, "| %s | `%s` | %s | %s | %s |\n",
-				f.Severity, f.RuleID, loc, verdict, mdEscape(msg))
+				f.Severity, markdownCode(f.RuleID), MarkdownText(loc), verdict, FindingMessage(f))
 		}
 	}
 	if len(s.Dismissed) > 0 {
@@ -240,16 +302,55 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 					why = f.Verdict.RefuteReason
 				}
 			}
-			fmt.Fprintf(w, "| `%s` | %s | %s |\n", f.RuleID, loc, mdEscape(why))
+			fmt.Fprintf(w, "| `%s` | %s | %s |\n", markdownCode(f.RuleID), MarkdownText(loc), MarkdownText(why))
 		}
 		fmt.Fprint(w, "\n</details>\n")
 	}
 	return nil
 }
 
-func mdEscape(s string) string {
-	s = strings.ReplaceAll(s, "|", "\\|")
-	return strings.ReplaceAll(s, "\n", " ")
+var mentionRE = regexp.MustCompile(`@([A-Za-z0-9])`)
+
+// maxMarkdownText bounds one piece of untrusted text in a comment or table cell.
+const maxMarkdownText = 1000
+
+// MarkdownText prepares untrusted text for a Markdown comment or table cell. A
+// scanner's message, a file name and a model's reasoning all derive from the code
+// being scanned, which may be hostile, and this text is posted where the whole
+// repository reads it. So: credentials are masked, it is put on one line, HTML
+// (including comments, which could forge Achilles' own hidden markers) is shown
+// as text, @mentions notify nobody, a pipe cannot break out of a table cell, and
+// the length is bounded.
+func MarkdownText(s string) string {
+	s = redact.Prompt(strings.Join(strings.Fields(s), " "))
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, "-->", "--&gt;")
+	s = mentionRE.ReplaceAllString(s, "@\u200b$1")
+	s = strings.ReplaceAll(s, "|", `\|`)
+	if len(s) > maxMarkdownText {
+		cut := maxMarkdownText
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = s[:cut] + " ... (truncated)"
+	}
+	return s
+}
+
+// FindingMessage is a finding's message made safe for Markdown. A credential
+// finding's message gets the stronger mask first: the message may quote the secret.
+func FindingMessage(f model.Finding) string {
+	msg := f.Message
+	if f.IsSecret() {
+		msg = redact.Secrets(msg)
+	}
+	return MarkdownText(msg)
+}
+
+// markdownCode prepares a short untrusted value (a rule id) for a code span: a
+// backtick in it would close the span.
+func markdownCode(s string) string {
+	return MarkdownText(strings.ReplaceAll(s, "`", "'"))
 }
 
 // --- GitHub Actions annotations ---

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Warzuponus/achilles/internal/config"
 	"github.com/Warzuponus/achilles/internal/correlate"
@@ -55,9 +56,17 @@ func triageScan(ctx context.Context, o *options, ev vault.Store, runID string, s
 		return llm.Usage{}, fmt.Errorf("--max-cost needs --price-config: dollars require per-model prices, " +
 			"which Achilles does not ship (see configs/prices.example.yaml)")
 	}
+	// From here every model call of the run is counted, and refused once the cap
+	// is reached: the estimate below is a forecast of one phase, not a limit.
+	if o.maxCost > 0 && !o.dryRun {
+		runMeter = newSpendMeter(o.maxCost, priceTable)
+	}
 	// Other LLM work is not part of the per-finding estimate; name it rather than
 	// let a partial number read as the whole bill.
 	var excluded []string
+	if o.deepVerify > 0 {
+		excluded = append(excluded, fmt.Sprintf("--deep-verify (up to %d findings, several calls each)", o.deepVerify))
+	}
 	if o.reviewOn {
 		excluded = append(excluded, "--review (one whole-repo call per scan)")
 	}
@@ -83,7 +92,16 @@ func triageScan(ctx context.Context, o *options, ev vault.Store, runID string, s
 			baseURL: o.llmBaseURL, triageModel: o.llmModel, judgeModel: o.llmJudge,
 			embedModel: o.llmEmbed, remediate: o.remediateOn, rag: o.ragOn, tasks: tasks,
 			dryRun: o.dryRun, maxCost: o.maxCost, prices: priceTable, excluded: excluded,
-			noCode: o.llmNoCode, keepDismissed: o.keepDismissed, concurrency: o.llmConcurrency, samples: o.llmSamples,
+			noCode: o.llmNoCode, keepDismissed: o.keepDismissed, calibrate: o.calibrate, concurrency: o.llmConcurrency, samples: o.llmSamples,
+		}
+		if o.verdictCacheDays > 0 && !o.dryRun {
+			// The key that makes cached verdicts trustworthy lives in the Achilles
+			// home directory. Without it the cache is simply off for this run.
+			if secret, err := verdictCacheSecret(); err != nil {
+				fmt.Fprintf(os.Stderr, "achilles: verdict cache off for this run: %v\n", err)
+			} else {
+				opts.cacheMaxAge, opts.cacheSecret = time.Duration(o.verdictCacheDays)*24*time.Hour, secret
+			}
 		}
 		if o.deepVerify > 0 {
 			opts.afterTriage = func(c context.Context) error { return deepVerifyFindings(c, o, ev, runID, scan) }
@@ -111,8 +129,14 @@ type triageOpts struct {
 	prices   cost.Table
 	excluded []string // LLM work the estimate deliberately omits, for the report
 
+	// Verdict cache (--verdict-cache-days): reuse a verdict for at most this long.
+	// Zero, or no signing secret, leaves it off.
+	cacheMaxAge time.Duration
+	cacheSecret []byte
+
 	noCode        bool // --llm-no-code: prompts carry no source; verdicts are then never trusted to dismiss
 	keepDismissed bool // --keep-dismissed: leave AI-dismissed findings in scan.Findings
+	calibrate     bool // --calibrate: resolve chronically noisy rules from feedback, with no model call
 	concurrency   int  // findings triaged in parallel; <1 means 1
 	samples       int  // --llm-samples: re-ask borderline verdicts this many times in total; <2 means once
 
@@ -156,9 +180,26 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	en.IncludeBlame = true // best-effort git attribution in the prompt context
 	eng := triage.NewEngine(router, ev, en, scan.Target).SetNoCode(o.noCode).SetSamples(o.samples)
 
-	// Learning layer (DESIGN.md §8): calibration from accumulated feedback.
-	fb := knowledge.NewFeedbackStore(ev)
-	eng.SetCalibrator(knowledge.NewCalibrator(fb, calMinSamples, calFPThreshold))
+	// Verdict cache: a finding whose code, prompt and models are unchanged since an
+	// earlier run keeps that run's verdict instead of being reviewed again.
+	if o.cacheMaxAge > 0 && len(o.cacheSecret) > 0 {
+		scopeOf := func(task, fallback string) string {
+			if tm, ok := tasks[task]; ok && tm.Model != "" {
+				return tm.Model + "@" + tm.BaseURL
+			}
+			return fallback
+		}
+		eng.SetVerdictCache(
+			triage.CacheScope(o.baseURL, scopeOf("triage", o.triageModel), scopeOf("judge", o.triageModel)),
+			o.cacheMaxAge, o.cacheSecret, nil)
+	}
+
+	// Learning layer (DESIGN.md §8): calibration from accumulated feedback. Opt-in:
+	// it takes findings out of the gate on past labels alone, with no model looking
+	// at the code in front of it, so it never happens unless the operator asks.
+	if o.calibrate {
+		eng.SetCalibrator(knowledge.NewCalibrator(knowledge.NewFeedbackStore(ev), knowledge.DefaultPolicy, time.Now()))
+	}
 
 	// RAG few-shot (opt-in; needs an embeddings model).
 	if o.rag {
@@ -260,6 +301,7 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		fatal       error
 		failedN     int
 		withheldN   int
+		advisoryN   int
 		succeeded   int
 		consecutive int
 	)
@@ -274,6 +316,16 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 			mu.Lock()
 			withheldN++
 			mu.Unlock()
+			return
+		case errors.Is(err, triage.ErrAdvisory):
+			mu.Lock()
+			advisoryN++
+			mu.Unlock()
+			return
+		case errors.Is(err, errCostCap):
+			// Not a failure of the endpoint: the cap stopped the call. This finding and
+			// those after it are "not reached", as when the time budget runs out. Calls
+			// already in flight are left to finish: their tokens are spent either way.
 			return
 		case err != nil:
 			if llmCtx.Err() != nil {
@@ -295,7 +347,7 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		consecutive = 0
 		mu.Unlock()
 		if o.remediate {
-			if err := eng.Remediate(llmCtx, runID, f); err != nil && llmCtx.Err() == nil {
+			if err := eng.Remediate(llmCtx, runID, f); err != nil && llmCtx.Err() == nil && !errors.Is(err, errCostCap) {
 				fmt.Fprintf(os.Stderr, "achilles: remediation failed for %s: %s\n", f.RuleID, oneLine(err))
 			}
 		}
@@ -363,13 +415,13 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	fmt.Fprintf(os.Stderr, "achilles: llm usage — %d prompt + %d completion = %d total token(s)\n",
 		u.PromptTokens, u.CompletionTokens, u.TotalTokens)
 
+	// A broken key or endpoint ends the AI review, not the run. The scanners have
+	// already done their work, possibly for many minutes; that result is still
+	// reported, labeled as unreviewed, and the caller exits non-zero afterwards.
+	var aborted *triageAbortedError
 	if fatal != nil {
-		return u, fmt.Errorf("AI review aborted after %d failed finding(s) with no success: %s\n"+
-			"  check the API key, --llm-base-url / --llm-provider and --llm-model, then re-run (no report was written)",
-			failedN, oneLine(fatal))
-	}
-
-	if o.afterTriage != nil {
+		aborted = &triageAbortedError{failed: failedN, cause: oneLine(fatal)}
+	} else if o.afterTriage != nil {
 		if err := o.afterTriage(ctx); err != nil {
 			return u, err
 		}
@@ -377,15 +429,49 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 
 	// Coverage: how much of the scan got a verdict. Reports print this beside the
 	// verdicts so an unreviewed finding is never mistaken for a reviewed one.
-	stats := model.TriageStats{Model: o.triageModel, Total: len(scan.Findings), Failed: failedN, Withheld: withheldN}
+	stats := model.TriageStats{Model: o.triageModel, Total: len(scan.Findings), Failed: failedN, Withheld: withheldN, Advisories: advisoryN}
 	for _, f := range scan.Findings {
 		if f.Verdict != nil {
 			stats.Triaged++
 		}
 	}
-	stats.Skipped = stats.Total - stats.Triaged - stats.Failed - stats.Withheld
+	for _, f := range scan.Findings {
+		if f.Verdict != nil && f.Provenance != nil && f.Provenance.ReusedFrom != "" {
+			stats.Reused++
+		}
+	}
+	if stats.Reused > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: %d verdict(s) reused from earlier runs: the same code was reviewed with the same prompt and models (--verdict-cache-days 0 to review everything afresh)\n", stats.Reused)
+	}
+	// Name what calibration decided: these verdicts are feedback history, not a review.
+	calibratedRules := map[string]int{}
+	for _, f := range scan.Findings {
+		if f.Verdict != nil && f.Provenance != nil && f.Provenance.PromptVersion == "calibration" {
+			stats.AutoResolved++
+			calibratedRules[f.Tool+"/"+f.RuleID]++
+		}
+	}
+	if stats.AutoResolved > 0 {
+		names := make([]string, 0, len(calibratedRules))
+		for r, n := range calibratedRules {
+			names = append(names, fmt.Sprintf("%s (%d)", r, n))
+		}
+		sort.Strings(names)
+		fmt.Fprintf(os.Stderr, "achilles: --calibrate ruled out %d finding(s) from analyst feedback, with NO model review: %s\n"+
+			"  (run --rule-health to see the labels behind this; drop --calibrate to have them reviewed)\n",
+			stats.AutoResolved, strings.Join(names, ", "))
+	}
+	stats.Skipped = stats.Total - stats.Triaged - stats.Failed - stats.Withheld - stats.Advisories
 	if stats.Skipped < 0 {
 		stats.Skipped = 0
+	}
+	if aborted != nil {
+		// Nothing is dismissed on the strength of a review that fell over: whatever
+		// verdicts exist came from before the endpoint broke, and are too few to trust
+		// as a pass over the scan.
+		stats.Aborted = aborted.cause
+		scan.Triage = &stats
+		return u, aborted
 	}
 	switch {
 	case o.keepDismissed:
@@ -397,10 +483,31 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	scan.Triage = &stats
 	fmt.Fprintf(os.Stderr, "achilles: AI review — verdict on %d of %d finding(s); %d dismissed as false positives, %d failed, %d withheld (credentials), %d not reached\n",
 		stats.Triaged, stats.Total, stats.Dismissed, stats.Failed, stats.Withheld, stats.Skipped)
+	if stats.Advisories > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: %d dependency advisory finding(s) (known CVEs in dependencies) are kept as reported and were not sent to the model: "+
+			"an advisory is fixed by upgrading, not by a verdict (--sca-advice plans the upgrades)\n", stats.Advisories)
+	}
+	if stats.Skipped > 0 && runMeter.reached() {
+		fmt.Fprintf(os.Stderr, "achilles: --max-cost stopped the AI review: %d finding(s) were not reviewed (most severe were reviewed first). Raise --max-cost or narrow the scan with --diff / --baseline.\n", stats.Skipped)
+	}
 	if stats.Skipped > 0 && ctx.Err() != nil {
 		fmt.Fprintln(os.Stderr, "achilles: the --llm-budget ran out; the findings above were reviewed most severe first. Raise --llm-budget or narrow the scan with --diff / --baseline.")
 	}
 	return u, nil
+}
+
+// triageAbortedError is returned when the AI review had to stop: the key was
+// rejected, the credits ran out, or every call failed. The scan itself is intact,
+// so the caller still writes the reports (without verdicts) and then exits 2.
+type triageAbortedError struct {
+	failed int
+	cause  string
+}
+
+func (e *triageAbortedError) Error() string {
+	return fmt.Sprintf("AI review aborted after %d failed finding(s) with no success: %s\n"+
+		"  check the API key, --llm-base-url / --llm-provider and --llm-model, then re-run",
+		e.failed, e.cause)
 }
 
 // fatalLLMError reports failures that no retry or later finding can fix: a rejected

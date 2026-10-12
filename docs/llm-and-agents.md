@@ -25,6 +25,14 @@ achilles --ai --llm-provider openrouter --llm-model <model> /path/to/code
 | Ollama (local) | `ollama` | `http://localhost:11434/v1` | none |
 | Anthropic (experimental) | `anthropic` | `https://api.anthropic.com/v1` | required |
 
+**The `anthropic` preset is experimental.** It uses Anthropic's OpenAI-compatibility
+endpoint, which Anthropic offers for trying its models rather than for production use.
+Achilles leaves `temperature` out of requests to it (current Claude models reject an
+explicit value), and that endpoint does not enforce a JSON schema, so replies are
+validated and repaired the way they are for any model without JSON mode. This project's
+tests have not run against the live Anthropic API. For Claude models today, OpenRouter
+(`--llm-provider openrouter --llm-model anthropic/<model>`) is the exercised path.
+
 Anything else (vLLM, LiteLLM, Azure OpenAI, a gateway) is `--llm-base-url`. An
 explicit `--llm-base-url` always wins over a provider preset. There is deliberately
 no default model: model names change faster than this project, so pick one that
@@ -48,8 +56,11 @@ and Achilles prints the destination host before it starts. Before sending:
 
 - credentials in the code and messages are masked (cloud keys, tokens, private keys,
   `password = "..."` style assignments);
-- findings **about** credentials (Gitleaks and other secret rules) are never sent to the
-  model at all, and are never dismissed by it;
+- findings **about** credentials are never sent to the model at all, and are never
+  dismissed by it. That covers Gitleaks, anything a scanner itself classes as a secret
+  (Trivy's secret results), and rules or CWEs that name a credential. The matched text
+  of such a finding is not kept either: not on the finding, not in the stored scanner
+  output, and not as a `--rag` example;
 - `--llm-no-code` sends only rule names, messages and file locations. Verdicts made
   without seeing code are weak, so in this mode the AI never dismisses a finding;
 - a local model (`--llm-provider ollama`) keeps everything on your machine.
@@ -81,7 +92,7 @@ routing can be proven instead of asserted:
 
 ```bash
 make eval-context                                    # hermetic: no model, no key
-make eval-verdict-ollama EVAL_ARGS="--repeat 3"      # the Ollama open-model routing (needs a key)
+make eval-verdict EVAL_MODEL=<model> EVAL_ARGS="--model-config <routing.yaml> --repeat 3"   # needs a key; spends money
 ```
 
 **Eval the routing, not a model.** The verdict target drives a committed
@@ -96,7 +107,9 @@ against regressions (`make eval-gate`).
 
 **Verdict mode** runs the real triage→judge path against a live model and scores
 verdicts against the labels. Its headline is **balanced accuracy**, which weights
-both classes equally: a triager that confirms everything scores 100% on a
+both classes equally (scored on whether the review *confirmed* a finding; the report
+also prints what was actually *dismissed* from the gate, which is the number users
+feel): a triager that confirms everything scores 100% on a
 true-positive-only corpus and 50% here. It also reports TP recall, FP suppression,
 a calibration gap (`|mean confidence − accuracy|`, so an overconfident model is
 visible), and — with `--repeat` — which cases the model answers inconsistently on
@@ -138,6 +151,21 @@ achilles: estimated LLM spend $0.0340 exceeds --max-cost $0.0100; no model was
 called (raise the cap, narrow the scan with --diff/--baseline, or route cheaper models)
 ```
 
+The cap also holds **during** the run, against what is actually spent. Every chat
+call (the review, the judge, fix suggestions, deep verification, the repo review, the
+dependency advisor, the threat model, research) is priced from the token usage the
+endpoint reports, and once the total reaches the cap no further call is started:
+
+```
+achilles: --max-cost stopped the AI review: 12 finding(s) were not reviewed (most severe were reviewed first). ...
+achilles: LLM spend counted against --max-cost: $1.0042 of $1.0000 over 187 call(s); 31 further call(s) were NOT made
+```
+
+Findings the review did not reach stay in the report, marked as unreviewed, exactly
+as when the time budget runs out. Calls already in flight finish, so the total can
+pass the cap by at most what `--llm-concurrency` calls cost. A model with no price
+is not called at all while a cap is set. Embedding calls for `--rag` are not counted.
+
 **You supply the prices.** Achilles ships no built-in price table: prices change
 without notice, differ per provider for the same model name, and are often
 negotiated, so a cap computed from prices we guessed would be worse than no cap.
@@ -150,8 +178,8 @@ cap it cannot compute.
 What the estimate does and does not cover:
 
 - **Reflected:** the surfaced finding set only (post-noise, post-diff,
-  post-baseline), correlated duplicates costing nothing, and findings the
-  calibrator auto-resolves without an LLM call.
+  post-baseline), correlated duplicates costing nothing, and (with `--calibrate`)
+  findings the calibrator rules out without an LLM call.
 - **Upper bound:** with `--remediate`, every triaged finding is counted, since
   which ones turn out high-confidence is unknowable in advance.
 - **Excluded, and named in the output:** the one-per-scan whole-repo agents
@@ -166,11 +194,16 @@ spend outpaces the estimate.
 ## Cross-tool correlation (before triage)
 
 Achilles runs overlapping engines on purpose, so the same defect often arrives from
-two or three tools — Opengrep and gosec on one Go line, Trivy and Checkov on one
-infrastructure-as-code resource. Before triage, findings that share a **file, line, and CWE set**
-but come from **different tools** are grouped into a cluster, and only the
-highest-severity member is sent to the LLM. The rest inherit its verdict, so a
-defect costs one triage+judge pair no matter how many tools reported it.
+two or three tools — Opengrep and gosec on one Go line, two secret scanners on one
+credential, two dependency scanners on one advisory. Before triage, findings from
+**different tools** at the same **file and line** that are about the same weakness
+are grouped into a cluster: they share a CWE, or CWEs that are parent and child (one
+tool says CWE-78, another CWE-77). Only the highest-severity member is sent to the
+LLM. The rest inherit its verdict, so a defect costs one triage+judge pair no matter
+how many tools reported it. Two credential findings on one line, and two advisories
+with the same id against the same manifest, are clustered too so the report can say
+the tools agree; neither is ever sent to a model. Findings with no CWE and no such
+identity (most infrastructure-as-code findings) are not clustered.
 
 Correlation **collapses nothing**: every finding keeps its own fingerprint,
 severity, and behaviour under `--baseline`, `--file-issues`, and `--fail-on`. The
@@ -194,7 +227,8 @@ and the duplicate records where its verdict came from:
 The key is deliberately strict — a finding with no CWE or no line number never
 clusters, and one tool reporting twice on a line is left alone — because a wrong
 merge costs a wrong verdict while a missed merge costs one extra LLM call. Two
-things still take precedence over an inherited verdict: **calibration** (feedback
+things still take precedence over an inherited verdict: **calibration** (with
+`--calibrate`, feedback
 about a finding's *own* rule outranks a sibling's verdict) and **remediation**,
 which is never inherited, since a patch belongs to one specific finding. Disable
 the whole thing with `--no-correlate`.
@@ -216,7 +250,17 @@ pay it.
   for a structured verdict: `true_positive` / `false_positive` / `uncertain`, a
   confidence, exploitability, and reasoning. A second **adversarial judge** pass
   then tries to *refute* that verdict — only unrefuted true-positives with
-  confidence ≥ 0.7 are treated as high-confidence.
+  confidence ≥ 0.7 are treated as high-confidence. The judge has to back a
+  refutation: it states its own confidence and quotes the line(s) of the context that
+  prove it, and Achilles checks that the quote really is in the context it sent. A
+  refuted true positive is ruled out only when that check passes, the judge was at
+  least 0.7 confident, and the triage pass was itself below 0.9. Otherwise the two
+  passes simply disagree: the finding stays in the gate, marked **disputed by judge**,
+  and gets no automatic fix. Refuting an `uncertain` verdict never rules a finding out.
+  Two kinds of finding are never sent to the model at all: credential findings (their
+  matched text is the secret) and **dependency advisories** (known CVEs in
+  dependencies: there is no code to judge, and a verdict must not be able to hide a
+  vulnerable package). Both cost nothing and are counted separately in every report.
 - **`--remediate`** — for those high-confidence findings, propose a fix: a summary
   plus a unified diff when a clean patch is possible, or prose guidance otherwise.
   Implies `--triage`. Achilles proposes; it never auto-applies (see `--fix-pr` in
@@ -248,7 +292,12 @@ and an answer outside a gate's vocabulary is stored as `unknown`. They can only 
 dismissal *harder* — a verdict whose own gates say reachable + attacker-controlled +
 not (effectively) sanitized + new capability is never dismissed, whatever its
 classification. The prompt also tells the model that comments, docstrings and names
-are claims, not evidence, and that the repository text is untrusted data.
+are claims, not evidence, and that the repository text is untrusted data. Since
+`triage/v6` that text (the scanner's message, the code, past findings, and for the
+judge the first pass's reasoning) sits between markers carrying a random per-request
+id, so a line in the code cannot pass itself off as the end of the code. The prompt
+also defines `confidence`: below 0.7 means "I would need to see more code", and such
+a finding is kept for a person.
 
 ### Self-consistency sampling: `--llm-samples N`
 
@@ -267,6 +316,34 @@ recorded to the vault as `triage-sample`, and a sample that errors is simply
 dropped. `--dry-run` counts `N-1` extra triage calls per finding — an upper bound,
 since only borderline verdicts are re-asked and that cannot be known beforehand.
 Confident, judge-approved verdicts cost nothing extra.
+
+### Not asking twice: the verdict cache
+
+Most of a repeat scan is findings that have not changed. When a finding's rule,
+message and surrounding code, the prompt version, the privacy mode and the models
+are all the same as in an earlier run recorded in the same vault, that run's verdict
+is reused and the model is not called. Line numbers are ignored, so code that only
+moved within its file still matches. The report says how many verdicts were reused,
+and each one records which run it came from.
+
+```
+achilles: 41 verdict(s) reused from earlier runs: the same code was reviewed with the same prompt and models
+```
+
+- `--verdict-cache-days N` (default 30) is how long a verdict may be reused; `0`
+  turns the cache off and reviews everything afresh. The limit exists because a
+  provider can change the model behind a name.
+- Reuse makes results steadier as well as cheaper: a model asked the same question
+  twice does not always answer the same way, which is how a finding can flip between
+  runs when nothing changed.
+- Fix suggestions are not cached; they are requested again for confirmed findings.
+- Cache entries are signed with a key kept in the Achilles home directory
+  (`~/.achilles/verdict-cache.key`, or under `$ACHILLES_HOME`), not in the vault. The
+  vault's default location is inside the scanned directory, so a vault file can arrive
+  with a repository; without the signature a pull request could carry a ready-made
+  "false positive" for its own code. An entry that does not verify is ignored. A fresh
+  CI runner has a fresh key, so in CI the cache only helps if you persist both the
+  vault and the Achilles home between runs.
 
 ### Entry-point hints
 
@@ -312,12 +389,19 @@ Achilles gets quieter over time from analyst feedback:
 achilles --feedback <fingerprint> --label fp --note "md5 used for a cache key"
 ```
 
-- **Calibration** — once a rule accrues enough `fp` feedback, Achilles
-  auto-resolves it *without* an LLM call (deterministic pre-triage for chronically
-  noisy rules).
+- **Calibration** (`--calibrate`, off by default) — when a rule has been labeled
+  false positive often enough, Achilles rules its findings out *without* an LLM call.
+  This takes findings out of the gate on past labels alone, so the bar is high and
+  the decision is bounded: at least 10 **distinct** labeled findings of the rule (one
+  finding labeled ten times counts once, by its latest label), at least 90% of them
+  false positive, labels no older than 180 days, and never a finding above medium
+  severity or about a credential. Every run that uses it prints which rules it ruled
+  out and how many findings, and reports say those verdicts came from feedback rather
+  than a model review. Without `--calibrate`, feedback never dismisses anything.
 - **RAG** (`--rag`, needs `--llm-embed-model`) — injects similar past findings and
   how analysts ruled them as few-shot context for triage.
-- **`--rule-health`** prints per-rule TP/FP rates so you can see what's noisy.
+- **`--rule-health`** prints per-rule TP/FP rates so you can see what's noisy, and
+  which rules `--calibrate` would rule out.
 - **`--mine-rules`** turns analyst-confirmed findings into new Opengrep rules
   (validated before they can run — see [DESIGN.md](../DESIGN.md) §9).
 
@@ -411,7 +495,7 @@ gating decisions to it.
 ### Open models via Ollama Cloud
 
 Ollama Cloud is OpenAI-compatible, so you can mix open models per task. Achilles
-ships a bake-off-derived routing at [`configs/models.ollama.yaml`](../configs/models.ollama.yaml):
+ships an example routing at [`configs/models.ollama.yaml`](../configs/models.ollama.yaml):
 
 ```bash
 export ACHILLES_LLM_API_KEY=<ollama-key>
@@ -422,9 +506,11 @@ achilles --triage --review --sca-advice --threat-model tm.otm.json \
   --html-report report.html .
 ```
 
-That config routes `triage`/`review`/`sca` → `minimax-m2.7` (fast, well-calibrated),
-`judge`/`remediation`/`threat-model` → `kimi-k2.6` (deepest reasoner), with
-`glm-5.2` as the fallback. Tune it freely.
+That config routes `triage`/`review`/`sca` → `minimax-m2.7`, `judge` → `minimax-m3`
+and `remediation`/`threat-model` → `kimi-k2.6`, with `glm-5.2` as the fallback. Only
+the triage and judge pair was measured ([evals](../evals/README.md)); the judge was
+chosen because the alternative refuted most correct true positives. Tune it freely,
+and re-run the eval when you change either of those two.
 
 > **Note on open models.** They're looser than frontier models about JSON shape.
 > Achilles hardens for this (fence-stripping + a schema-validated repair retry), but

@@ -11,8 +11,8 @@
 #   * clang-tidy takes FILES, not a directory, and wants a compile database for
 #     real projects — the wrapper (analyze.sh) discovers sources and uses
 #     compile_commands.json if present, else clang defaults.
-FROM ubuntu:24.04
-# TODO: pin the base image by digest before release.
+FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+# Pinned by digest so a rebuild gets the same base; Dependabot proposes updates.
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends clang-tidy clang curl ca-certificates \

@@ -118,6 +118,13 @@ func CompleteAndDecodeAt(ctx context.Context, c Client, msgs []Message, schema *
 	if reason == nil {
 		return resp, nil
 	}
+	if resp.Truncated {
+		// The reply was cut off at the output limit. It is not malformed, it is
+		// unfinished, and a repair request runs into the same limit: that used to
+		// cost a second call and end in a "still unacceptable" error that said
+		// nothing about the cause.
+		return resp, fmt.Errorf("%w (%v)", ErrTruncated, reason)
+	}
 
 	def := ""
 	if schema != nil {
@@ -144,6 +151,11 @@ func CompleteAndDecodeAt(ctx context.Context, c Client, msgs []Message, schema *
 	}
 	return resp2, nil
 }
+
+// ErrTruncated means the model's reply stopped at its output limit before the
+// answer was complete.
+var ErrTruncated = errors.New("the model's reply was cut off at its output limit before the answer was complete; " +
+	"raise the limit (ACHILLES_LLM_MAX_TOKENS, or the provider's setting for the model)")
 
 // decodeAndValidate unmarshals content into out (via ExtractJSON) and, on success,
 // runs validate. It returns nil when both pass, else the reason to repair.

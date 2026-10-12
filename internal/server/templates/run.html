@@ -4,8 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Achilles — {{.RunID}}</title>
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="/static/warroom.js"></script>
   <style>
     body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; background: #1a1d21; color: #e6e6e6; }
     header { background: #111316; padding: 16px 24px; border-bottom: 1px solid #2a2e34; }
@@ -24,6 +23,7 @@
     button { background: #2a2e34; color: #e6e6e6; border: 1px solid #3a3f47; border-radius: 6px; padding: 5px 12px; cursor: pointer; }
     button:hover { background: #3a3f47; }
     a { color: #a78bfa; text-decoration: none; }
+    .feedback { margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -40,9 +40,9 @@
       <p>{{.Message}}</p>
       {{if .CodeContext}}<pre>{{.CodeContext}}</pre>{{end}}
       {{with .Verdict}}
-      <div class="verdict">triage: <b>{{.Classification}}</b> · confidence {{printf "%.2f" .Confidence}} · {{.Exploitability}}{{if .Refuted}} · <i>refuted by judge</i>{{end}}</div>
+      <div class="verdict">triage: <b>{{.Classification}}</b> · confidence {{printf "%.2f" .Confidence}} · {{.Exploitability}}{{if .Disputed}} · <i>disputed by judge</i>{{else if .Refuted}} · <i>refuted by judge</i>{{end}}</div>
       {{end}}
-      <form hx-post="/runs/{{$.RunID}}/feedback" hx-swap="outerHTML" style="margin-top:8px">
+      <form class="feedback" method="post" action="/runs/{{$.RunID}}/feedback" data-feedback>
         <input type="hidden" name="fingerprint" value="{{.Fingerprint}}">
         <button name="label" value="tp">Mark TP</button>
         <button name="label" value="fp">Mark FP</button>

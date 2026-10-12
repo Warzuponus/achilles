@@ -25,6 +25,20 @@ import (
 //go:embed templates/*.html
 var templatesFS embed.FS
 
+// staticFS holds the War Room's own script. Nothing is loaded from a CDN: the page
+// has to work with no network, and a script fetched from somewhere else would run
+// with access to every finding shown here.
+//
+//go:embed static
+var staticFS embed.FS
+
+// contentSecurityPolicy is sent with every response. Scripts may come from this
+// origin only (no inline script, no eval, no third party), so text that reaches a
+// page from a scanned repository or a model cannot run as code even if an escaping
+// bug let it through. Styles stay inline because the templates carry their own.
+const contentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; " +
+	"img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+
 // Server is the War Room HTTP application.
 //
 // It is a single-user tool and has NO authentication: anyone who can reach the port
@@ -86,7 +100,8 @@ const ctxTenant ctxKey = iota
 // host and cross-origin guards.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", s.handleDashboard)
+	// {$} matches the root only: an unknown path is a 404, not the dashboard.
+	mux.HandleFunc("GET /{$}", s.handleDashboard)
 	mux.HandleFunc("GET /runs/{id}", s.handleRun)
 	mux.HandleFunc("POST /runs/{id}/feedback", s.handleFeedback)
 	mux.HandleFunc("GET /runs/{id}/audit", s.handleAudit)
@@ -102,8 +117,18 @@ func (s *Server) Handler() http.Handler {
 	// Liveness exposes nothing (no project data), so container health checks and
 	// orchestrators can use it without a matching Host header.
 	root.HandleFunc("GET /healthz", handleHealthz)
+	// The script is the same for every project, so it sits outside withTenant (which
+	// can set a cookie) but still behind the host guard.
+	root.Handle("GET /static/warroom.js", s.guard(http.HandlerFunc(handleScript)))
 	root.Handle("/", s.guard(s.withTenant(mux)))
 	return root
+}
+
+// handleScript serves the one embedded script. The file name is fixed here, never
+// taken from the request.
+func handleScript(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeFileFS(w, r, staticFS, "static/warroom.js")
 }
 
 // handleHealthz answers liveness probes. It touches no vault.
@@ -120,6 +145,10 @@ func (s *Server) guard(next http.Handler) http.Handler {
 	cop := http.NewCrossOriginProtection()
 	protected := cop.Handler(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
 		if !s.hostAllowed(r.Host) {
 			http.Error(w, "forbidden: host not allowed (the War Room only answers to localhost; "+
 				"to reach it by another name, start achillesd with --allowed-hosts)", http.StatusForbidden)
@@ -169,19 +198,36 @@ func resolveTenant(w http.ResponseWriter, r *http.Request) string {
 		return v
 	}
 	if v := r.URL.Query().Get("tenant"); tenantRE.MatchString(v) {
-		http.SetCookie(w, &http.Cookie{
-			Name: tenantCookie, Value: v, Path: "/",
-			HttpOnly: true, SameSite: http.SameSiteLaxMode,
-			// The cookie only remembers a selection. Mark it Secure whenever the
-			// request itself arrived over HTTPS (directly or via a TLS-terminating proxy).
-			Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
-		})
+		// This is a GET that changes something (which project later pages and
+		// feedback apply to), so a link on another site must not be able to do it:
+		// following one shows that project for this page only. The switcher on our
+		// own page, a bookmark and a typed URL still remember the choice.
+		if !startedByAnotherSite(r) {
+			http.SetCookie(w, &http.Cookie{
+				Name: tenantCookie, Value: v, Path: "/",
+				HttpOnly: true, SameSite: http.SameSiteLaxMode,
+				// The cookie only remembers a selection. Mark it Secure whenever the
+				// request itself arrived over HTTPS (directly or via a TLS-terminating proxy).
+				Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+			})
+		}
 		return v
 	}
 	if c, err := r.Cookie(tenantCookie); err == nil && tenantRE.MatchString(c.Value) {
 		return c.Value
 	}
 	return "default"
+}
+
+// startedByAnotherSite reports whether the browser says another site initiated this
+// request (Fetch Metadata). Clients that do not send the header are not browsers
+// following a hostile link, so they are not treated as cross-site.
+func startedByAnotherSite(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "cross-site", "same-site":
+		return true
+	}
+	return false
 }
 
 // tenantOptions is the switcher's list: every tenant that holds data (discovered
@@ -221,6 +267,19 @@ func (s *Server) vaultFor(w http.ResponseWriter, r *http.Request) (vault.Store, 
 	return v, true
 }
 
+// vaultUnreadable answers 503 when the read that was just made from v failed, and
+// reports whether it did. A database that is down returns no rows; without this
+// check the page would say "No runs yet", which is a different and false statement.
+// The cause goes to the log (the store printed it), not into the page.
+func vaultUnreadable(w http.ResponseWriter, v vault.Store) bool {
+	if vault.ReadErr(v) == nil {
+		return false
+	}
+	http.Error(w, "The Evidence Vault could not be read, so this page cannot be shown. "+
+		"This does not mean the project is empty. See the achillesd log for the cause.", http.StatusServiceUnavailable)
+	return true
+}
+
 // --- handlers ---
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -228,8 +287,12 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	runs := ListRuns(v)
+	if vaultUnreadable(w, v) {
+		return
+	}
 	s.render(w, "dashboard.html", map[string]any{
-		"Tenant": tenantOf(r), "Runs": ListRuns(v),
+		"Tenant": tenantOf(r), "Runs": runs,
 		"Tenants": s.tenantOptions(tenantOf(r)),
 	})
 }
@@ -240,9 +303,13 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runID := r.PathValue("id")
+	findings := RunFindings(v, runID)
+	if vaultUnreadable(w, v) {
+		return
+	}
 	s.render(w, "run.html", map[string]any{
 		"Tenant": tenantOf(r), "RunID": runID,
-		"Findings": RunFindings(v, runID),
+		"Findings": findings,
 	})
 }
 
@@ -265,8 +332,10 @@ func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(`<div class="verdict">✓ recorded ` + string(label) + ` feedback</div>`))
+	// Plain text: the page's script shows it as text, and a browser without
+	// JavaScript shows it as the result of the form post.
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte("recorded " + string(label) + " feedback\n"))
 }
 
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
@@ -274,10 +343,14 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	records := AuditRecords(v, r.PathValue("id"))
+	if vaultUnreadable(w, v) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(AuditRecords(v, r.PathValue("id")))
+	_ = enc.Encode(records)
 }
 
 // handleEvents streams run summaries as Server-Sent Events. A full live-scan
@@ -313,7 +386,9 @@ func (s *Server) handleListTenants(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	var t tenant.Tenant
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+	// A project definition is a few short fields. Without a bound, anything that can
+	// reach the port could make the server buffer an arbitrarily large body.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxTenantBody)).Decode(&t); err != nil {
 		http.Error(w, "invalid tenant JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -325,6 +400,9 @@ func (s *Server) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, created)
 }
+
+// maxTenantBody bounds the JSON accepted by POST /admin/tenants.
+const maxTenantBody = 64 << 10
 
 // handlePurge applies a tenant's retention policy: delete vault records older
 // than RetentionDays. RetentionDays == 0 means keep forever (no-op).
@@ -368,6 +446,11 @@ func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		perTenant[t.ID] = v.All()
+		// A rollup that silently leaves a project out, or counts it as empty, is
+		// wrong in a way nobody would notice.
+		if vaultUnreadable(w, v) {
+			return
+		}
 	}
 	s.render(w, "fleet.html", map[string]any{
 		"Fleet": metrics.ComputeFleet(perTenant, 10),

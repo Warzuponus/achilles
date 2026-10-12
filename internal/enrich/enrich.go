@@ -1,10 +1,11 @@
 // Package enrich expands a finding with the surrounding source context the LLM
-// needs to triage it well (DESIGN.md §7 step 1). Phase 2 provides file-context
-// (lines around the span); git blame and data-flow come later.
+// needs to triage it well (DESIGN.md §7 step 1): the enclosing function or block
+// around the span, entry-point hints from the same file, and optionally git blame.
 package enrich
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -38,6 +39,10 @@ type Enricher struct {
 	MaxEntryHints int
 	// IncludeBlame appends git-blame attribution to Context (best-effort).
 	IncludeBlame bool
+
+	// cache remembers files already read (see fileCache). New sets it; an Enricher
+	// built as a literal has none and reads from disk every time.
+	cache *fileCache
 }
 
 // New returns an enricher with the given minimum context radius (min 0) and the
@@ -52,6 +57,7 @@ func New(radius int) *Enricher {
 		MaxRefLines:   defaultMaxRefLines,
 		MaxCallSites:  defaultMaxCallSites,
 		MaxEntryHints: defaultMaxEntryHints,
+		cache:         newFileCache(),
 	}
 }
 
@@ -123,11 +129,9 @@ func (e *Enricher) GitBlame(f model.Finding, root string) (Blame, bool) {
 // tree root; the finding's file may be relative to it or absolute. If the file
 // cannot be read, it falls back to any snippet the tool already provided.
 func (e *Enricher) Context(f model.Finding, root string) string {
-	path := f.Location.File
-	if !filepath.IsAbs(path) && root != "" {
-		path = filepath.Join(root, path)
-	}
-	data, err := os.ReadFile(path)
+	data, err := e.cache.read(root+"\x00"+f.Location.File, func() ([]byte, error) {
+		return readWithin(root, f.Location.File)
+	})
 	if err != nil {
 		return f.CodeContext // fall back to the tool's snippet
 	}
@@ -196,4 +200,36 @@ func (e *Enricher) Context(f model.Finding, root string) string {
 		}
 	}
 	return out
+}
+
+// readWithin reads a file a scanner reported, but only from inside the scanned
+// tree. The path comes from a tool's output about a repository that may be hostile,
+// and what is read here is sent to a model and shown in reports: a path with ".."
+// in it, an absolute path elsewhere, or a symlink in the repository that points at
+// ~/.aws/credentials must not be followed. os.Root makes the operating system
+// enforce that, including for a symlink swapped in mid-scan.
+func readWithin(root, file string) ([]byte, error) {
+	if root == "" {
+		return nil, errors.New("no scan root: refusing to read outside one")
+	}
+	rel := file
+	if filepath.IsAbs(file) {
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			return nil, err
+		}
+		if rel, err = filepath.Rel(absRoot, file); err != nil {
+			return nil, err
+		}
+	}
+	rel = filepath.FromSlash(rel)
+	if !filepath.IsLocal(rel) {
+		return nil, fmt.Errorf("%s is outside the scanned tree", file)
+	}
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return r.ReadFile(rel)
 }

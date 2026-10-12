@@ -4,24 +4,37 @@
 # the War Room. If the quickstart in docs/containers.md rots, this fails.
 name: Quickstart
 
+# On a pull request it runs only when the image, the compose files or the sample
+# change. A change to the Go code is checked once, when it reaches main, instead of
+# on every push to every pull request: the job builds the whole image each time.
 on:
   pull_request:
     paths:
       - "deploy/compose/**"
       - "deployments/achilles/**"
+      - "scripts/collect-licenses.sh"
+      - "third_party/**"
       - "examples/quickstart/**"
-      - "configs/**"
-      - "cmd/**"
-      - "internal/**"
       - ".github/workflows/quickstart.yml"
   push:
     branches: [main]
     paths:
       - "deploy/compose/**"
       - "deployments/achilles/**"
+      - "scripts/collect-licenses.sh"
+      - "third_party/**"
+      - "examples/quickstart/**"
+      - "configs/**"
+      - "cmd/**"
+      - "internal/**"
+      - ".github/workflows/quickstart.yml"
   workflow_dispatch:
   schedule:
     - cron: "0 6 * * 1"   # weekly: catches upstream scanner/base-image breakage
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

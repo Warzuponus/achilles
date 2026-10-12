@@ -74,25 +74,28 @@ Ollama Cloud, via `--model-config`. Same inputs as Option A.
 
 ## Option C — the central scan hub
 
-Scan **other** repos from the Achilles repo, so the key + routing live in one place
-and targets need **no secret and no workflow**. This is the GitHub-Actions
-expression of the fleet model.
-Workflow: [`.github/workflows/scan-hub.yml`](../.github/workflows/scan-hub.yml).
+Scan **other** repos from one hub repository, so the LLM key lives in one place and
+targets need **no secret and no workflow**. This is the GitHub-Actions expression of
+the fleet model. Copy
+[`examples/workflows/scan-hub.yml`](../examples/workflows/scan-hub.yml) into
+`.github/workflows/` of the repository you want to be the hub (a private repository
+of your own; it does not run from `examples/`).
 
 ### One-time setup (org/repo admin)
 
 1. **Create a GitHub App** in the org: repository permission **Contents: Read**
    only, no webhook, "Only on this account."
 2. **Install it** on the repos you want scannable — only those get read access.
-3. Add two secrets to the repository that runs the hub (your fork or copy of Achilles):
-   - `SCANNER_APP_ID` — the App's ID
-   - `SCANNER_APP_PRIVATE_KEY` — the App's **private key** (the `.pem` contents,
+3. In the hub repository (Settings → Secrets and variables → Actions) add:
+   - secret `SCANNER_APP_ID` — the App's ID
+   - secret `SCANNER_APP_PRIVATE_KEY` — the App's **private key** (the `.pem` contents,
      from the App's *Private keys* section — **not** the client secret)
-   - (`ACHILLES_LLM_API_KEY` is already the scan-hub's LLM key.)
+   - secret `LLM_API_KEY` — your LLM provider's key
+   - variable `LLM_MODEL` — a model that provider serves
 
 Set the private key reliably with:
 ```bash
-gh secret set SCANNER_APP_PRIVATE_KEY -R <owner>/achilles < your-app.private-key.pem
+gh secret set SCANNER_APP_PRIVATE_KEY -R <owner>/<hub-repo> < your-app.private-key.pem
 ```
 
 ### Running it
@@ -113,12 +116,12 @@ Actions → **Achilles scan hub** → *Run workflow* → enter the target repo n
     repository: ${{ github.repository_owner }}/${{ inputs.target_repo }}
     token: ${{ steps.tok.outputs.token }}
     path: target
-# then a routed scan of ./target → achilles-report.html uploaded as an artifact
+# then an AI-verified scan of ./target; the report is uploaded as an artifact
 ```
 
 Inputs: `target_repo` (required, repo name only — the owner is this repository's owner)
 and `ref` (optional branch/tag/SHA; blank = the default branch). Secrets:
-`SCANNER_APP_ID`, `SCANNER_APP_PRIVATE_KEY`, and the LLM key `ACHILLES_LLM_API_KEY`.
+`SCANNER_APP_ID`, `SCANNER_APP_PRIVATE_KEY`, and the LLM key `LLM_API_KEY`.
 
 **Least privilege by design:** a per-run token scoped to exactly the target repo
 (not a personal PAT). By default results are artifacts of the hub run and nothing is
@@ -128,9 +131,72 @@ on that one repo, so grant the App **Issues: Write** first (it is not needed
 otherwise). To also post SARIF to a target's Security tab, grant **Code scanning:
 Write** and add an upload-sarif step.
 
-Download the report from **the run → Artifacts → `achilles-<repo>` → `achilles-report.html`**
-(the same artifact also holds `achilles.sarif`, `achilles-report.md` and the threat
-model). There is no cloud vault: the artifacts are the record.
+Download the report from **the run → Artifacts → `achilles-report`**: it holds
+`report.html`, `report.md` and `achilles.sarif`. There is no cloud vault: the
+artifacts are the record.
+
+## GitLab CI
+
+Achilles writes the report formats GitLab reads from job artifacts, so it runs as an
+ordinary job. A complete example is in
+[`examples/gitlab/.gitlab-ci.yml`](../examples/gitlab/.gitlab-ci.yml):
+
+```yaml
+achilles:
+  stage: test
+  image: ghcr.io/warzuponus/achilles:latest   # pin a release tag
+  script:
+    - >-
+      achilles
+      --gitlab-sast gl-sast-report.json
+      --gitlab-secret-detection gl-secret-detection-report.json
+      --gitlab-code-quality gl-code-quality-report.json
+      --fail-on high
+      .
+  artifacts:
+    when: always
+    reports:
+      sast: gl-sast-report.json
+      secret_detection: gl-secret-detection-report.json
+      codequality: gl-code-quality-report.json
+```
+
+| Flag | GitLab report | Holds | Where GitLab shows it |
+|------|---------------|-------|-----------------------|
+| `--gitlab-sast` | `artifacts:reports:sast` | findings in code | merge request security widget, pipeline Security tab, vulnerability report (Ultimate) |
+| `--gitlab-secret-detection` | `artifacts:reports:secret_detection` | credential findings, never the matched text | the same places (Ultimate) |
+| `--gitlab-code-quality` | `artifacts:reports:codequality` | every finding, credential messages masked | merge request widget and diff, on every tier |
+
+What to know:
+
+- **Without Ultimate, use the Code Quality report.** GitLab accepts the security
+  reports on any tier but only displays them on Ultimate. The Code Quality report is
+  the one every tier shows on a merge request, which is why it carries all findings,
+  dependency advisories included.
+- **`when: always`** uploads the reports when `--fail-on` fails the job, which is the
+  run you most want them from.
+- **Only findings that count are written**: the ones the gate sees. Findings the AI
+  review dismissed are left out; with `--keep-dismissed` they are written and marked
+  with GitLab's "likely false positive" flag, with the reason. Each finding carries
+  the AI verdict and reasoning in its details, and a fix that passed re-scan
+  verification is attached as a remediation.
+- **An incomplete scan says so.** If a scanner could not run, the report's scan
+  status is `failure` and a message names the tool; the findings from the scanners
+  that did run are still there.
+- **Dependency advisories** are not written as a GitLab dependency scanning report
+  (that format needs per-package data Achilles does not keep). They are in the Code
+  Quality report and in Achilles' own reports.
+- **Schema.** The security reports declare version 15.0.0 of GitLab's
+  [security report schemas](https://gitlab.com/gitlab-org/security-products/security-report-schemas),
+  the oldest of the 15.x line, and use only fields present in every 15.x version.
+  Secret findings name the scanned commit (`$CI_COMMIT_SHA`, or `--source-commit`).
+- **Only new findings on a merge request:** add
+  `--diff origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME` in merge request pipelines
+  (fetch that branch first, or set `GIT_DEPTH: "0"`), and a committed baseline as
+  described in [Reports & Gating](reports-and-gating.md).
+
+The GitHub-specific outputs (`--github`, `--pr-comment`, `--pr-review`,
+`--file-issues`, `--fix-pr`) have no GitLab counterpart yet.
 
 ## Keeping history across CI runs
 
@@ -162,3 +228,4 @@ the run exits non-zero rather than silently reporting success.
 | Deep AI analysis with per-task models | B2 (routed full scan) |
 | One place to scan many repos, no per-repo setup | C (scan hub) |
 | Many repos on a schedule, from one machine | [Fleet](fleet.md) |
+| A GitLab pipeline | [GitLab CI](#gitlab-ci) |

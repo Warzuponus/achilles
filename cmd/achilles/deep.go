@@ -109,7 +109,7 @@ func runDeepVerify(ctx context.Context, o *options, ev vault.Store, runID string
 			defer func() { <-sem }()
 			d, err := verifier.Deep(llmCtx, f)
 			results[n] = outcome{d: d, err: err, ran: true}
-			if err != nil && fatalLLMError(err) {
+			if err != nil && (fatalLLMError(err) || errors.Is(err, errCostCap)) {
 				cancel()
 			}
 		}(n, scan.Findings[i])

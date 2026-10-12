@@ -24,7 +24,7 @@ func runFromSARIF(path, failOn string) error {
 	if err != nil {
 		return fmt.Errorf("read --from-sarif: %w", err)
 	}
-	findings, err := normalize.FromSARIF("unknown", data)
+	findings, err := normalize.Normalize("sarif", "unknown", data)
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func runFromSARIF(path, failOn string) error {
 // silent.
 type toolDiag struct {
 	Tool  string `json:"tool"`
-	Stage string `json:"stage"` // "run" | "normalize"
+	Stage string `json:"stage"` // "run" | "normalize" | "partial" (ran, but said it could not analyze everything)
 	Error string `json:"error"`
 }
 
@@ -93,8 +93,14 @@ func runScanners(ctx context.Context, scanners []scanner.Scanner, tgt scanner.Ta
 					out <- r
 					continue
 				}
-				r.raw = raw
 				r.findings, r.normErr = normalize.Normalize(raw.Format, raw.Tool, raw.Data)
+				if r.normErr == nil {
+					// From here on the raw output is only stored and written out
+					// (vault, --sarif-out), so the matched text of credential
+					// findings comes out of it now.
+					raw.Data = normalize.ScrubRaw(raw.Format, raw.Data, r.findings)
+				}
+				r.raw = raw
 				out <- r
 			}
 		}()
@@ -191,7 +197,12 @@ func buildRunner(kind string) (xexec.Runner, error) {
 	case "local":
 		return xexec.LocalRunner{}, nil
 	case "docker":
-		return xexec.DockerRunner{Network: "none"}, nil // per-tool image comes from config
+		r := xexec.DockerRunner{Network: "none"} // per-tool image comes from config
+		if os.Getenv("ACHILLES_DOCKER_UNCONFINED") == "true" {
+			fmt.Fprintln(os.Stderr, "achilles: ACHILLES_DOCKER_UNCONFINED is set: tool containers run with Docker's default capabilities, not the reduced set")
+			r.Unconfined = true
+		}
+		return r, nil
 	default:
 		return nil, fmt.Errorf("unknown --runner %q (want local|docker)", kind)
 	}
@@ -201,12 +212,17 @@ func applyFailOn(failOn string, scan model.Scan) error {
 	if failOn == "" {
 		return nil
 	}
-	threshold := model.Severity(failOn)
+	threshold, ok := model.ParseSeverity(failOn)
+	if !ok {
+		// An unknown word ranks below every real severity, so without this check a
+		// typo would make ANY finding fail the gate (and "critcal" would look strict).
+		return fmt.Errorf("--fail-on %q is not a severity (want critical, high, medium, low or info)", failOn)
+	}
 	// Gate on non-shadow findings only: shadow (report-only) generated-rule
 	// findings must never fail CI until they age into the active set.
 	worst := report.GatingSeverity(scan)
 	if worst != model.SeverityUnknown && worst.Rank() >= threshold.Rank() {
-		os.Exit(1)
+		return &gateError{worst: worst, threshold: threshold}
 	}
 	return nil
 }

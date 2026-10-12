@@ -1,6 +1,6 @@
 // Package report renders a Scan for humans and passes SARIF through for
-// machine consumers. In Phase 0 the SARIF output is the tool's own document;
-// later phases re-emit a unified SARIF across all tools.
+// machine consumers: one unified SARIF document across all tools, plus HTML,
+// Markdown and JUnit.
 package report
 
 import (
@@ -41,12 +41,32 @@ func WriteHuman(w io.Writer, s model.Scan) {
 			"Install the missing tool(s) or see --diagnostics; this is NOT a clean scan.\n",
 			len(s.FailedTools), strings.Join(s.FailedTools, ", "))
 	}
+	if len(s.RepoConfigChanged) > 0 {
+		fmt.Fprintf(w, "\nWARNING: the change under review modifies scanner configuration (%s). "+
+			"It can hide findings in the same change; review it as part of this scan.\n", strings.Join(s.RepoConfigChanged, "; "))
+	}
+	if len(s.RepoConfig) > 0 {
+		fmt.Fprintf(w, "\nScanner configuration from the scanned repository was in effect (%s). "+
+			"It can remove findings before Achilles sees them.\n", strings.Join(s.RepoConfig, "; "))
+	}
+	if t := s.Triage; t != nil && t.Aborted != "" {
+		fmt.Fprintf(w, "\nWARNING: the AI review did NOT complete (%s). The findings below are scanner output that was not reviewed.\n", t.Aborted)
+	}
 	if t := s.Triage; t != nil {
 		fmt.Fprintf(w, "\nAI review (%s): verdict on %d of %d finding(s)", t.Model, t.Triaged, t.Total)
 		if t.Failed+t.Skipped > 0 {
 			fmt.Fprintf(w, " — %d failed, %d not reached; those are UNVERIFIED", t.Failed, t.Skipped)
 		}
 		fmt.Fprintln(w)
+		if t.Advisories > 0 {
+			fmt.Fprintf(w, "%d dependency advisory finding(s) are listed as reported: the AI review does not judge known CVEs in dependencies\n", t.Advisories)
+		}
+		if t.AutoResolved > 0 {
+			fmt.Fprintf(w, "%d of those verdict(s) came from analyst feedback on the rule (--calibrate), not from a model review\n", t.AutoResolved)
+		}
+		if t.Reused > 0 {
+			fmt.Fprintf(w, "%d of those verdict(s) were reused from earlier runs: the same code, reviewed with the same prompt and models\n", t.Reused)
+		}
 	}
 	if n := len(s.Dismissed); n > 0 {
 		fmt.Fprintf(w, "%d more finding(s) ruled out as false positives by the AI review (not counted above; see the HTML/Markdown report, or --keep-dismissed to include them)\n", n)
@@ -93,6 +113,10 @@ func WriteHuman(w io.Writer, s model.Scan) {
 		if v := f.Verdict; v != nil {
 			status := string(v.Classification)
 			switch {
+			case v.Disputed():
+				// The judge disagreed but did not back it well enough to dismiss the
+				// finding, so it is still here on purpose.
+				status += " (DISPUTED by judge — kept for review)"
 			case v.Refuted:
 				status += " (refuted by judge)"
 			case v.Overturned:
@@ -102,7 +126,7 @@ func WriteHuman(w io.Writer, s model.Scan) {
 				status += " (OVERTURNED by judge — surfaced for review)"
 			}
 			fmt.Fprintf(w, "    triage: %s  confidence=%.2f  exploitability=%s\n", status, v.Confidence, v.Exploitability)
-			if v.Overturned && v.RefuteReason != "" {
+			if (v.Overturned || v.Disputed()) && v.RefuteReason != "" {
 				fmt.Fprintf(w, "    judge: %s\n", v.RefuteReason)
 			}
 			if p := f.Provenance; p != nil && p.CorrelatedFrom != "" {

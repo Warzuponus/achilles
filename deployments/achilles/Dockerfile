@@ -21,14 +21,20 @@
 # reports gosec as FAILED rather than silently clean — see `requires:` in
 # configs/tools.yaml). Build with --build-arg WITH_GO=false for a ~250 MB smaller
 # image that does not scan Go.
+#
+# This is the toolchain gosec SCANS with, and it is held at 1.27.1 on purpose: Go
+# 1.27.2 changed the compiler export-data format and no gosec release (up to
+# v2.29.0) can read it, so with 1.27.2 here gosec could not type-check anything and
+# would silently skip its taint analysis. The build stage below, which compiles what
+# this image actually runs, uses 1.27.2. Move this pin when gosec catches up.
 ARG WITH_GO=true
-FROM golang:1.27@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2 AS go-true
+FROM golang:1.27.1@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2 AS go-true
 FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS go-false
 RUN mkdir -p /usr/local/go
 FROM go-${WITH_GO} AS gotoolchain
 
 # ---- build the Go binaries and the two Go-based scanners ------------------------
-FROM --platform=$BUILDPLATFORM golang:1.27@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.2@sha256:5bc7f572bbaa98885a3a1fd9c0aa76b59e3e14e8628bfc316bbfd0c701e4818c AS build
 ARG TARGETOS=linux
 ARG TARGETARCH
 ARG GOSEC_VERSION=v2.27.1
@@ -43,7 +49,10 @@ RUN go build -trimpath -ldflags='-s -w' -o /out/achilles       ./cmd/achilles \
  && go build -trimpath -ldflags='-s -w' -o /out/achilles-fleet ./cmd/achilles-fleet \
  && go build -trimpath -ldflags='-s -w' -o /out/achilles-eval  ./cmd/achilles-eval
 # `go install` refuses cross-compiled binaries when GOBIN is set, so each scanner is
-# built from a throwaway module instead.
+# built from a throwaway module instead. Each one's license files, and those of every
+# module linked into it, are collected next to it: the image redistributes these
+# binaries, and their licenses require the text to travel with them. A dependency
+# that ships no license file is listed in MISSING.txt rather than failing the build.
 RUN set -eux; \
     for spec in "gosec github.com/securego/gosec/v2/cmd/gosec ${GOSEC_VERSION}" \
                 "osv-scanner github.com/google/osv-scanner/v2/cmd/osv-scanner ${OSV_SCANNER_VERSION}"; do \
@@ -52,6 +61,8 @@ RUN set -eux; \
       go mod init "tools/$1" >/dev/null 2>&1; \
       go get "$2@$3"; \
       go build -trimpath -ldflags='-s -w' -o "/out/$1" "$2"; \
+      ALLOW_MISSING=1 sh /src/scripts/collect-licenses.sh "/licenses/$1" "$2"; \
+      test -s "/licenses/$1/go/LICENSE"; \
     done
 
 # ---- download + verify the non-Go scanners --------------------------------------
@@ -63,6 +74,9 @@ ARG OPENGREP_VERSION=v1.25.0
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /dl
+# Besides the binaries, this keeps the LICENSE each project ships in its own release
+# archive. Opengrep publishes a bare binary, so its LGPL-2.1 text and a note naming
+# the exact source are committed in deployments/achilles/licenses/opengrep/.
 RUN set -eux; \
     case "$TARGETARCH" in \
       amd64) TRIVY_ASSET=Linux-64bit; TRIVY_SHA=bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea; \
@@ -77,10 +91,12 @@ RUN set -eux; \
     fetch trivy.tgz    "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ASSET}.tar.gz" "$TRIVY_SHA"; \
     fetch gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GL_ASSET}.tar.gz" "$GL_SHA"; \
     fetch opengrep     "https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/opengrep_manylinux_${OG_ASSET}" "$OG_SHA"; \
-    mkdir -p /out; \
+    mkdir -p /out /licenses/trivy /licenses/gitleaks; \
     tar -xzf trivy.tgz    -C /out trivy; \
     tar -xzf gitleaks.tgz -C /out gitleaks; \
-    install -m 0755 opengrep /out/opengrep
+    install -m 0755 opengrep /out/opengrep; \
+    tar -xzf trivy.tgz    -C /licenses/trivy    LICENSE; \
+    tar -xzf gitleaks.tgz -C /licenses/gitleaks LICENSE
 
 # ---- runtime ---------------------------------------------------------------------
 # glibc base: the Opengrep release binary is a manylinux build.
@@ -93,7 +109,15 @@ RUN apt-get update \
 COPY --from=build /out/ /usr/local/bin/
 COPY --from=fetch /out/ /usr/local/bin/
 COPY --from=gotoolchain /usr/local/go /usr/local/go
-COPY LICENSE THIRD-PARTY.md /usr/share/doc/achilles/
+# Licenses and notices for everything this image redistributes: Achilles' own
+# (Apache-2.0 section 4 requires NOTICE to accompany it), the Go modules linked into
+# its binaries, and each bundled scanner. The Go toolchain carries its own at
+# /usr/local/go/LICENSE; Debian packages at /usr/share/doc/*/copyright.
+COPY LICENSE NOTICE THIRD-PARTY.md /usr/share/doc/achilles/
+COPY third_party/licenses/         /usr/share/doc/achilles/licenses/achilles/
+COPY deployments/achilles/licenses/ /usr/share/doc/achilles/licenses/
+COPY --from=build /licenses/       /usr/share/doc/achilles/licenses/
+COPY --from=fetch /licenses/       /usr/share/doc/achilles/licenses/
 
 WORKDIR /app
 COPY configs/ /app/configs/
@@ -108,6 +132,7 @@ USER achilles
 # Fail the build (not the first scan) if a bundled tool did not land.
 RUN opengrep --version && trivy --version && gitleaks version && gosec -version \
  && osv-scanner --version \
+ && for l in NOTICE licenses/opengrep/LICENSE licenses/trivy/LICENSE licenses/gitleaks/LICENSE licenses/gosec/go/LICENSE licenses/osv-scanner/go/LICENSE licenses/achilles/go/LICENSE; do test -s "/usr/share/doc/achilles/$l" || { echo "missing license file: $l"; exit 1; }; done \
  && for b in achilles achillesd achilles-fleet achilles-eval; do command -v "$b" >/dev/null || { echo "missing $b"; exit 1; }; done \
  && rm -rf /home/achilles/.cache   # the version probes warm a ~225 MB cache we do not want in the layer
 

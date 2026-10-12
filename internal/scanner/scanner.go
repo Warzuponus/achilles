@@ -21,10 +21,14 @@ type Target struct {
 // RawResult is a tool's native output plus metadata, before normalization.
 type RawResult struct {
 	Tool     string
-	Format   string // "sarif" in Phase 0
+	Format   string // "sarif" unless the tool declares another format
 	Data     []byte
 	ExitCode int
 	Stderr   string
+	// Incomplete is non-empty when the tool ran and reported, but said it could
+	// not analyze part of the target. The findings in Data are real; their
+	// absence proves nothing. The caller keeps them and marks the scan incomplete.
+	Incomplete string
 }
 
 // ScannerMeta describes an engine, including the license facts the policy layer

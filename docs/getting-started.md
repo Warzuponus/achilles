@@ -8,8 +8,10 @@ Achilles is a single static Go binary (Go 1.27, no cgo). Its tool registry
 (`configs/tools.yaml`) and baseline Opengrep rules are **embedded in the binary**, so
 it runs from any directory with no repository checkout. Pick one:
 
-**Install script** (Linux and macOS; verifies the release checksum, and the cosign
-signature if `cosign` is installed):
+**Install script** (Linux and macOS). It verifies the archive against the release's
+checksum file, and the checksum file's cosign signature when `cosign` is installed.
+Without `cosign` it says the signature was not checked; set
+`ACHILLES_REQUIRE_SIGNATURE=1` to make that an error instead:
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/Warzuponus/achilles/main/scripts/install.sh
@@ -57,9 +59,9 @@ achilles tools list         # pinned versions and what is installed
 | Tool | Covers | Notes |
 |------|--------|-------|
 | Opengrep | multi-language patterns | upstream publishes no checksums; the pinned digests were computed at pin time |
-| gosec | Go SAST | needs `go` on PATH to type-check packages |
+| gosec | Go SAST | needs `go` on PATH to type-check packages. No gosec release can yet read what Go 1.27.2 and newer produce: with such a `go` first on PATH, gosec skips its type-based analysis and Achilles reports it as **incomplete** rather than clean. Until gosec catches up, scan Go code with Go 1.27.1 on PATH and `GOTOOLCHAIN=local` |
 | osv-scanner | dependency CVEs (SCA) | needs network access to the OSV database |
-| Trivy | IaC / misconfig / secrets / SCA | |
+| Trivy | IaC / misconfig / secrets / SCA | needs network access on first use for its vulnerability database and misconfiguration checks |
 | Gitleaks | secret scanning | |
 
 **Lookup order.** For each scanner Achilles uses `~/.achilles/bin` first (the pinned,
@@ -83,7 +85,7 @@ A missing scanner is reported, not hidden: the scan prints `N tool(s) FAILED to 
 and lists them (add `--strict-tools` to make that exit 2). To avoid installing
 anything, run the tools in containers instead: `--runner docker` (uses the pinned
 images in `configs/tools.yaml`). *Exception:* Opengrep has no public image and always
-runs as a local binary.
+runs as a local binary; Achilles prints a line saying so.
 
 ## 3. Your first scan
 

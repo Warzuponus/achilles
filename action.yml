@@ -36,9 +36,17 @@ inputs:
     description: >-
       Achilles release to run: a tag such as v0.1.0, `latest`, or `source` (build from
       this action's checkout with Go; for testing the action itself). Empty uses the
-      tag you pinned the action at, else `latest`.
+      tag you pinned the action at. If you pin the action to a commit SHA, set this
+      to the matching release tag, or the latest release is installed.
     required: false
     default: ""
+
+  go-version:
+    description: >-
+      Go version to set up when `version` is `source`. gosec type-checks with the
+      `go` on PATH, so this is also the toolchain your Go code is scanned with.
+    required: false
+    default: "1.27"
 
   # --- AI verification ---
   llm-api-key:
@@ -46,7 +54,7 @@ inputs:
     required: false
     default: ""
   llm-provider:
-    description: "LLM endpoint preset: openai | openrouter | ollama | anthropic. Or set llm-base-url."
+    description: "LLM endpoint preset: openai | openrouter | ollama | anthropic (experimental). Or set llm-base-url."
     required: false
     default: ""
   llm-base-url:
@@ -152,13 +160,20 @@ runs:
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       if: ${{ inputs.version == 'source' }}
       with:
-        go-version: "1.27"
+        go-version: ${{ inputs.go-version }}
+
+    # The release binary is verified against a signed checksum file. That needs
+    # cosign, which runners do not have, and without it the installer can only
+    # check the archive against a checksum served from the same place.
+    - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      if: ${{ inputs.version != 'source' }}
 
     - name: Install Achilles
       shell: bash
       env:
         INPUT_VERSION: ${{ inputs.version }}
         ACTION_REF: ${{ github.action_ref }}
+        ACHILLES_REQUIRE_SIGNATURE: "1"   # no signature, no install
       run: |
         set -euo pipefail
         bindir="${RUNNER_TEMP}/achilles-bin"
@@ -168,7 +183,10 @@ runs:
           if printf '%s' "$ACTION_REF" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$'; then
             version="$ACTION_REF"
           else
+            # Pinned to a commit or a branch: there is no release to match it to, so
+            # the binary would silently differ from the action. Say so.
             version="latest"
+            echo "::notice::The action is pinned at '${ACTION_REF:-unknown}', which is not a release tag, so the latest Achilles release is installed. Set the 'version' input (for example v0.1.0) to pin the binary as well."
           fi
         fi
         if [ "$version" = "source" ]; then
@@ -234,8 +252,9 @@ runs:
         [ -n "$INPUT_FAIL_ON" ] && flags+=(--fail-on "$INPUT_FAIL_ON")
         # shellcheck disable=SC2162
         read -r -d '' -a extra <<< "$INPUT_ARGS" || true
-        # Flags must precede the target path (stdlib flag parsing); extras come last
-        # among the flags so they override the defaults above.
+        # Flags go before the target so this also works with releases that only
+        # parsed flags there; extras come last among them so they override the
+        # defaults above.
         achilles "${flags[@]}" ${extra[@]+"${extra[@]}"} "$INPUT_TARGET"
         code=$?
         {

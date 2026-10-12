@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"github.com/Warzuponus/achilles/internal/config"
 	"github.com/Warzuponus/achilles/internal/correlate"
 	xexec "github.com/Warzuponus/achilles/internal/exec"
-	"github.com/Warzuponus/achilles/internal/inventory"
 	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/noise"
 	"github.com/Warzuponus/achilles/internal/normalize"
@@ -36,6 +36,11 @@ func provisionGeneratedRules(o *options, cfg *config.Config) (activeDir, shadowD
 	if repo.Count("admitted") == 0 {
 		return "", "", cleanup
 	}
+	if !communityRulesAllowed {
+		// --mode commercial: a rule mined from a finding of the community pack is
+		// kept out, as the pack is.
+		repo.ExcludeOrigins(research.OriginExternalRule)
+	}
 	baselineRules := ""
 	for _, tc := range cfg.Tools {
 		if tc.ID == "opengrep" && tc.Rules != "" {
@@ -51,6 +56,9 @@ func provisionGeneratedRules(o *options, cfg *config.Config) (activeDir, shadowD
 	}
 	fmt.Fprintf(os.Stderr, "achilles: generated rules — %d active, %d in %dd shadow window\n",
 		set.ActiveGenerated, set.Shadow, o.ruleShadow)
+	if set.Excluded > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: %d generated rule(s) not loaded in --mode commercial: they were mined from findings of rules Achilles did not write (the community pack's licence forbids commercial use)\n", set.Excluded)
+	}
 	return set.ActiveDir, set.ShadowDir, done
 }
 
@@ -60,6 +68,7 @@ func provisionGeneratedRules(o *options, cfg *config.Config) (activeDir, shadowD
 func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexec.Runner, opengrepRules, shadowRules string) (*scanner.Registry, *opengrep.Scanner, error) {
 	var opengrepOpts []opengrep.Option
 	haveOpengrep := false
+	shadowRunner := runner
 	reg := scanner.NewRegistry()
 	for _, tc := range cfg.Tools {
 		if tc.ID == "syft" {
@@ -72,12 +81,17 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 			fmt.Fprintf(os.Stderr, "achilles: skipping %s — %v\n", tc.ID, err)
 			continue
 		}
-		sc, err := buildScanner(tc, runner, opengrepRules)
+		if o.noRepoConfig {
+			tc.LocalConfig = nil // do not hand the scanner the repository's own ignore/config files
+		}
+		toolRunner := runnerFor(tc, runner, os.Stderr)
+		sc, err := buildScanner(tc, toolRunner, opengrepRules)
 		if err != nil {
 			return nil, nil, err
 		}
 		if tc.ID == "opengrep" {
 			haveOpengrep = true
+			shadowRunner = toolRunner
 			if tc.Bin != "" {
 				opengrepOpts = append(opengrepOpts, opengrep.WithBin(tc.Bin))
 			}
@@ -91,9 +105,22 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 	}
 	var shadow *opengrep.Scanner
 	if haveOpengrep && shadowRules != "" {
-		shadow = opengrep.New(runner, shadowRules, opengrepOpts...)
+		shadow = opengrep.New(shadowRunner, shadowRules, opengrepOpts...)
 	}
 	return reg, shadow, nil
+}
+
+// runnerFor picks how one tool is launched. Under --runner docker a tool with no
+// container image (Opengrep publishes none) cannot be started as a container:
+// `docker run` with an empty image name just fails, and the tool was reported as
+// broken on every such scan. It runs as the local binary instead, and says so,
+// because the user asked for containers and this one tool is not in one.
+func runnerFor(tc config.ToolConfig, runner xexec.Runner, warn io.Writer) xexec.Runner {
+	if _, docker := runner.(xexec.DockerRunner); docker && tc.Image == "" && tc.Bin != "" {
+		fmt.Fprintf(warn, "achilles: %s has no container image, so it runs as the local binary %q (not in a container, unlike the other tools under --runner docker)\n", tc.ID, tc.Bin)
+		return xexec.LocalRunner{}
+	}
+	return runner
 }
 
 // scanTarget runs each applicable scanner and the shadow pass, records raw output
@@ -106,7 +133,7 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 	// when its language isn't present (language-agnostic tools declare "generic"
 	// and always run). Fail open — if detection errors, Languages stays empty and
 	// every tool runs.
-	if inv, ierr := inventory.Scan(absTarget); ierr == nil {
+	if inv, ierr := inventoryOf(absTarget); ierr == nil {
 		tgt.Languages = inv.Languages
 	}
 
@@ -150,6 +177,13 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 		}
 		scan.Tools = append(scan.Tools, r.id)
 		scan.Findings = append(scan.Findings, r.findings...)
+		if r.raw.Incomplete != "" {
+			// The tool ran and its findings stand, but it told us it could not
+			// analyze everything. Its silence about the rest is not a clean bill, so
+			// the scan is marked incomplete exactly as if the tool had failed.
+			fmt.Fprintf(os.Stderr, "achilles: %s ran but could not analyze all of the target, so its results are INCOMPLETE: %s\n", r.id, r.raw.Incomplete)
+			diags = append(diags, toolDiag{Tool: r.id, Stage: "partial", Error: r.raw.Incomplete})
+		}
 
 		if o.sarifOut != "" {
 			if err := os.WriteFile(filepath.Join(o.sarifOut, r.id+".sarif"), r.raw.Data, 0o600); err != nil {
@@ -167,7 +201,7 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 			diags = append(diags, toolDiag{Tool: "opengrep-shadow", Stage: "run", Error: serr.Error()})
 		} else if fs, nerr := normalize.Normalize(raw.Format, raw.Tool, raw.Data); nerr == nil && len(fs) > 0 {
 			recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindRawOutput, Source: "opengrep-shadow"},
-				map[string]any{"sarif": json.RawMessage(raw.Data)})
+				map[string]any{"sarif": json.RawMessage(normalize.ScrubRaw(raw.Format, raw.Data, fs))})
 			relativizeFindings(absTarget, fs)
 			for i := range fs {
 				fs[i].Shadow = true
@@ -210,6 +244,12 @@ func filterFindings(o *options, ev vault.Store, runID, absTarget string, scan *m
 		before := len(scan.Findings)
 		scan.Findings = vcs.FilterFindings(scan.Findings, changed)
 		fmt.Fprintf(os.Stderr, "achilles: diff-aware — %d/%d finding(s) in %d changed file(s)\n", len(scan.Findings), before, len(changed))
+		// The one change a diff-scoped scan must not let pass quietly: the diff
+		// edits the file that tells a scanner what to ignore.
+		if scan.RepoConfigChanged = repoConfigChanged(scan.RepoConfig, changed); len(scan.RepoConfigChanged) > 0 {
+			fmt.Fprintf(os.Stderr, "achilles: WARNING: this change modifies scanner configuration (%s). It can hide findings in the same change; review that file as part of this scan.\n",
+				strings.Join(scan.RepoConfigChanged, "; "))
+		}
 	}
 	return nil
 }
@@ -259,6 +299,7 @@ func applyBaseline(o *options, ev vault.Store, runID string, scan *model.Scan) e
 	}
 	c := b.Classify(scan.Findings)
 	scan.Findings = c.Introduced
+	scan.BaselineApplied = true
 	fmt.Fprintf(os.Stderr, "achilles: baseline — %d introduced, %d pre-existing, %d fixed\n",
 		len(c.Introduced), len(c.PreExisting), len(c.Fixed))
 	recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta, Source: "baseline"},
@@ -282,10 +323,11 @@ func correlateFindings(o *options, ev vault.Store, runID string, scan *model.Sca
 	clusters := correlate.Clusters(scan.Findings)
 	correlate.Annotate(scan.Findings, clusters)
 	if len(clusters) > 0 {
+		saved := correlate.Saved(scan.Findings, clusters)
 		fmt.Fprintf(os.Stderr, "achilles: correlated %d finding(s) into %d cross-tool cluster(s) — %d LLM triage pass(es) saved (--no-correlate to disable)\n",
-			len(clusters)+correlate.Saved(clusters), len(clusters), correlate.Saved(clusters))
+			correlate.Size(clusters), len(clusters), saved)
 		recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta, Source: "correlate"},
-			map[string]any{"clusters": len(clusters), "triagePassesSaved": correlate.Saved(clusters)})
+			map[string]any{"clusters": len(clusters), "triagePassesSaved": saved})
 	}
 	return clusters
 }

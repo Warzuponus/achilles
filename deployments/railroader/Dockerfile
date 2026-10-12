@@ -15,7 +15,7 @@
 #
 # Build:
 #   docker build -t achilles/railroader:4.3.8 deployments/railroader
-FROM ruby:2.7-slim@sha256:39f68389fd3fe8c04ed896b10cc90ba4553a42e555ae18b37b41ea8c3ce965fd
+FROM ruby:4.0-slim@sha256:ba6a00593739f9cb66de80ad2e395a93a52a13635867ee32918ba0ec083b1ff6
 # Pinned by digest so a rebuild gets the same base; Dependabot proposes updates.
 
 # Pin the FULL set of Railroader 4.3.8's direct dependencies to known-good

@@ -53,7 +53,13 @@ type ToolConfig struct {
 	// and the tool is reported as incomplete so the scan is never presented as a
 	// full one.
 	IncompleteWhen []string `yaml:"incompleteWhen"`
-	Rules          string   `yaml:"rules"`
+	// SuccessExitCodes are the exit codes that mean the tool finished its work
+	// (for many scanners that includes "1: findings were reported"). When set, any
+	// other exit code marks the run incomplete even though a report file exists: a
+	// tool that crashes halfway can leave a well-formed report of the half it did.
+	// Empty means the exit code is not checked, only that a report was written.
+	SuccessExitCodes []int  `yaml:"successExitCodes"`
+	Rules            string `yaml:"rules"`
 	// Network is the docker network policy ("none" default for containment,
 	// "default" to allow egress for tools that need it — SCA DBs, NuGet restore).
 	Network string `yaml:"network"`

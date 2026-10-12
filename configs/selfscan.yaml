@@ -13,4 +13,5 @@ tools:
     format: sarif
     argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "-exclude-dir=testdata", "{src}/..."]
     outputFile: "{out}/results.sarif"
+    successExitCodes: [0]
     incompleteWhen: ["skipping SSA analysis"]   # see configs/tools.yaml

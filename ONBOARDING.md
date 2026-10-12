@@ -127,7 +127,9 @@ not.
 
 - **SARIF-emitting + on PATH / has a public image** → add a `configs/tools.yaml`
   entry (id, license, `commercialSafe`, languages, `image` pinned by digest,
-  `bin`, `argv` writing to `{out}/results.sarif`, `outputFile`). No Go code. Set
+  `bin`, `argv` writing to `{out}/results.sarif`, `outputFile`, and
+  `successExitCodes` so a crash after a partial report is not read as a clean
+  scan). No Go code. Set
   `enabled: true` for the baseline or `profiles: [full]` for opt-in.
 - **Needs a language runtime / no public image / no native SARIF** → add
   `deployments/<tool>/` (a Dockerfile, possibly a wrapper + a SARIF converter),

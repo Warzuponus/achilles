@@ -142,8 +142,42 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 		Data:       data,
 		ExitCode:   res.ExitCode,
 		Stderr:     string(res.Stderr),
-		Incomplete: incompleteReason(s.cfg.IncompleteWhen, res),
+		Incomplete: firstNonEmpty(incompleteReason(s.cfg.IncompleteWhen, res), unexpectedExit(s.cfg.SuccessExitCodes, res)),
 	}, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// unexpectedExit returns why a run that wrote a report is still not a complete
+// one: the tool exited with a code that is not among those the registry lists as
+// "finished" (see config.ToolConfig.SuccessExitCodes). It is "" when the code is
+// expected or the registry lists none. The last line the tool printed is quoted,
+// since that is usually the error.
+func unexpectedExit(ok []int, res xexec.Result) string {
+	if len(ok) == 0 {
+		return ""
+	}
+	for _, code := range ok {
+		if res.ExitCode == code {
+			return ""
+		}
+	}
+	reason := fmt.Sprintf("exited with code %d after writing a report, which is not how it ends a completed scan", res.ExitCode)
+	lines := strings.Split(strings.TrimSpace(string(res.Stderr)), "\n")
+	if last := strings.TrimSpace(lines[len(lines)-1]); last != "" {
+		if r := []rune(last); len(r) > 300 {
+			last = string(r[:300]) + "..."
+		}
+		reason += ": " + last
+	}
+	return reason
 }
 
 // incompleteReason returns what the tool said about not analyzing part of the

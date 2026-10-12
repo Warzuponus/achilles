@@ -295,3 +295,52 @@ func TestRun_CompleteRunIsNotMarkedIncomplete(t *testing.T) {
 		t.Errorf("no incompleteWhen configured: %q", raw.Incomplete)
 	}
 }
+
+// exitRunner writes a report and exits with the given code: a tool that crashed
+// partway, after writing what it had.
+type exitRunner struct {
+	code   int
+	stderr string
+}
+
+func (r exitRunner) Run(_ context.Context, c xexec.Command) (xexec.Result, error) {
+	for _, m := range c.Mounts {
+		if m.Name == "out" {
+			_ = os.WriteFile(filepath.Join(m.HostPath, "results.sarif"),
+				[]byte(`{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"t"}},"results":[{"ruleId":"R1","message":{"text":"m"}}]}]}`), 0o644)
+		}
+	}
+	return xexec.Result{ExitCode: r.code, Stderr: []byte(r.stderr)}, nil
+}
+
+// "The report file exists" was the whole test of success, so a scanner that wrote
+// half a report and then crashed read as a clean, complete run.
+func TestRun_UnexpectedExitCodeMakesTheRunIncomplete(t *testing.T) {
+	cfg := testCfg()
+	cfg.SuccessExitCodes = []int{0, 1}
+
+	for _, code := range []int{0, 1} {
+		raw, err := New(exitRunner{code: code}, cfg, "").Run(context.Background(), scanner.Target{Path: "/x"})
+		if err != nil || raw.Incomplete != "" {
+			t.Errorf("exit %d is a completed scan: Incomplete=%q err=%v", code, raw.Incomplete, err)
+		}
+	}
+
+	raw, err := New(exitRunner{code: 137, stderr: "scanning...\nfatal: out of memory\n"}, cfg, "").
+		Run(context.Background(), scanner.Target{Path: "/x"})
+	if err != nil {
+		t.Fatalf("a report was written, so this is not a run error: %v", err)
+	}
+	if !strings.Contains(string(raw.Data), "R1") {
+		t.Error("the findings in the partial report must be kept")
+	}
+	if !strings.Contains(raw.Incomplete, "code 137") || !strings.Contains(raw.Incomplete, "out of memory") {
+		t.Errorf("Incomplete must give the exit code and the tool's last words, got %q", raw.Incomplete)
+	}
+
+	// A tool with no codes configured is judged as before: by its report alone.
+	raw, err = New(exitRunner{code: 137}, testCfg(), "").Run(context.Background(), scanner.Target{Path: "/x"})
+	if err != nil || raw.Incomplete != "" {
+		t.Errorf("no successExitCodes configured: Incomplete=%q err=%v", raw.Incomplete, err)
+	}
+}

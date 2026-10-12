@@ -195,6 +195,12 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **A scanner that crashes after writing part of its report is no longer a clean run.** For
+  config-driven scanners the only test of success was that the report file existed; the
+  exit code was ignored. The registry can now list a tool's `successExitCodes`, and any
+  other exit code marks that scanner incomplete (its findings are kept). Set for gosec,
+  Trivy, Gitleaks and osv-scanner. Gitleaks is now run with `--exit-code 0`, because by
+  default it exits 1 both for "found a leak" and for "failed".
 - **SARIF paths and rule references are read as the specification defines them.** A file
   location is a URI: `src/my%20file.py` and `file:///repo/src/a.py` were taken literally,
   naming files that do not exist, so the code around such a finding could not be read and

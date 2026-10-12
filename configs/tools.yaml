@@ -51,6 +51,7 @@ tools:
     # purpose, which would otherwise make every such scan "incomplete" (below).
     argv: ["-fmt=sarif", "-out={out}/results.sarif", "-no-fail", "-exclude-dir=testdata", "{src}/..."]
     outputFile: "{out}/results.sarif"
+    successExitCodes: [0]          # with -no-fail, findings do not change the exit code
     # When a package will not type-check, gosec still exits 0 and writes a valid
     # report, but skips every analysis that needs types (the taint and SSA rules)
     # for that package. Its report gives no sign of it; this log line is the only
@@ -74,6 +75,7 @@ tools:
     # secret, so without it no IaC / misconfiguration check ever ran.
     argv: ["fs", "--quiet", "--scanners", "vuln,misconfig,secret", "--format", "sarif", "--output", "{out}/results.sarif", "{src}"]
     outputFile: "{out}/results.sarif"
+    successExitCodes: [0]          # trivy exits 0 whatever it finds unless --exit-code is set
     localConfig:                   # honor the repo's own Trivy ignore list
       - file: .trivyignore
         arg: "--ignorefile={src}/.trivyignore"
@@ -89,8 +91,11 @@ tools:
     image: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
     bin: gitleaks                  # local runner; docker uses the image entrypoint
     format: sarif
-    argv: ["dir", "--report-format", "sarif", "--report-path", "{out}/results.sarif", "{src}"]
+    # --exit-code 0: by default gitleaks exits 1 both when it finds a leak and
+    # when it fails, so the two cannot be told apart. With this, 1 means an error.
+    argv: ["dir", "--exit-code", "0", "--report-format", "sarif", "--report-path", "{out}/results.sarif", "{src}"]
     outputFile: "{out}/results.sarif"
+    successExitCodes: [0]
     localConfig:                   # honor the repo's own gitleaks config/allowlist
       - file: .gitleaks.toml
         arg: "--config={src}/.gitleaks.toml"
@@ -108,6 +113,7 @@ tools:
     format: sarif
     argv: ["scan", "--recursive", "--format", "sarif", "--output-file", "{out}/results.sarif", "{src}"]
     outputFile: "{out}/results.sarif"
+    successExitCodes: [0, 1]       # 1: vulnerabilities were found; 127: error; 128: no packages
     # With no dependency manifest in the tree osv-scanner exits 128 and writes no
     # report. That is "nothing to check", not a failed scan.
     nothingToScan: ["No package sources found"]

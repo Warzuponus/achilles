@@ -195,6 +195,15 @@ First public release (`v0.1.0`) is pending.
   the single-page `docs/site.html`.
 
 ### Fixed
+- **SARIF paths and rule references are read as the specification defines them.** A file
+  location is a URI: `src/my%20file.py` and `file:///repo/src/a.py` were taken literally,
+  naming files that do not exist, so the code around such a finding could not be read and
+  diff or baseline matching missed it. They are now decoded, and a path relative to a
+  named base that is itself relative is resolved. A result that names its rule only by
+  index or by reference gets its rule id (and so its severity and CWE) instead of an empty
+  one. On output, a finding with no line is written with no `region` rather than an empty
+  one, which is invalid SARIF. Fingerprints of findings whose path was encoded or a
+  `file:` URI change once.
 - **The JUnit report no longer shows an incomplete scan as a pass.** It listed findings as
   failures and nothing else, so a run in which scanners failed and nothing was found was
   an empty, green suite. Each failed or incomplete scanner (and an AI review that did not

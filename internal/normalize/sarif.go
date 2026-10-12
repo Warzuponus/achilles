@@ -6,6 +6,8 @@ package normalize
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -39,7 +41,8 @@ func FromSARIF(fallbackTool string, data []byte) ([]model.Finding, error) {
 		rules := indexRules(run.Tool.Driver.Rules)
 
 		for _, res := range run.Results {
-			loc := firstLocation(res.Locations)
+			res.RuleID = ruleIDFor(res, run.Tool.Driver.Rules)
+			loc := firstLocation(res.Locations, run.OriginalURIBaseIDs)
 			snippet := ""
 			if len(res.Locations) > 0 {
 				snippet = res.Locations[0].PhysicalLocation.Region.Snippet.Text
@@ -74,13 +77,97 @@ func indexRules(rules []model.SarifRule) map[string]model.SarifRule {
 	return out
 }
 
-func firstLocation(locs []model.SarifLocation) model.Location {
+// ruleIDFor returns the id of the rule a result is about. Most tools set ruleId;
+// the specification also allows naming the rule only by its index in the driver's
+// rule list, or through a rule reference. Such a result used to get an empty rule
+// id, and with it no severity from the rule, no CWE and no category.
+func ruleIDFor(res model.SarifResult, rules []model.SarifRule) string {
+	if res.RuleID != "" {
+		return res.RuleID
+	}
+	if res.Rule != nil && res.Rule.ID != "" {
+		return res.Rule.ID
+	}
+	index := res.RuleIndex
+	if index == nil && res.Rule != nil {
+		index = res.Rule.Index
+	}
+	if index != nil && *index >= 0 && *index < len(rules) {
+		return rules[*index].ID
+	}
+	return ""
+}
+
+// artifactPath turns a SARIF artifact location into a file path.
+//
+// The uri field is a URI reference, not a path: it may be percent-encoded
+// ("src/my%20file.py"), an absolute file URI ("file:///repo/src/a.py"), and
+// relative to a named base that is itself relative ("SRC" -> "src/", relative to
+// "ROOT"). Taken literally, such a value names a file that does not exist: the
+// code around the finding cannot be read, diff and baseline matching miss it,
+// and a fix cannot be applied.
+//
+// A base whose own URI is absolute is deliberately NOT applied: scanners point it
+// at wherever the tree was mounted for them (file:///mnt/src/), and the path
+// relative to that is the path relative to the scanned tree, which is what the
+// rest of Achilles works with.
+func artifactPath(a model.SarifArtifactLocation, bases map[string]model.SarifArtifactLocation) string {
+	p := decodeURIPath(a.URI)
+	if p == "" || path.IsAbs(p) || isWindowsAbs(p) {
+		return p
+	}
+	seen := map[string]bool{}
+	for id := a.URIBaseID; id != "" && !seen[id]; {
+		seen[id] = true
+		base, ok := bases[id]
+		if !ok {
+			break
+		}
+		b := decodeURIPath(base.URI)
+		if b == "" || path.IsAbs(b) || isWindowsAbs(b) || strings.Contains(base.URI, "://") {
+			break // an absolute base: the mount point, not part of the path
+		}
+		p = path.Join(b, p)
+		id = base.URIBaseID
+	}
+	return p
+}
+
+// decodeURIPath returns the path a URI reference names: the scheme and host of a
+// file: URI removed, percent-escapes decoded. Anything it cannot parse is
+// returned unchanged rather than guessed at.
+func decodeURIPath(uri string) string {
+	if strings.HasPrefix(strings.ToLower(uri), "file:") {
+		if u, err := url.Parse(uri); err == nil && u.Path != "" {
+			p := u.Path
+			// file:///C:/repo/a.go parses to "/C:/repo/a.go".
+			if len(p) >= 3 && p[0] == '/' && isWindowsAbs(p[1:]) {
+				p = p[1:]
+			}
+			return p
+		}
+		return uri
+	}
+	if strings.Contains(uri, "%") {
+		if p, err := url.PathUnescape(uri); err == nil {
+			return p
+		}
+	}
+	return uri
+}
+
+func isWindowsAbs(p string) bool {
+	return len(p) >= 3 && p[1] == ':' && (p[2] == '/' || p[2] == '\\') &&
+		((p[0] >= 'a' && p[0] <= 'z') || (p[0] >= 'A' && p[0] <= 'Z'))
+}
+
+func firstLocation(locs []model.SarifLocation, bases map[string]model.SarifArtifactLocation) model.Location {
 	if len(locs) == 0 {
 		return model.Location{}
 	}
 	p := locs[0].PhysicalLocation
 	return model.Location{
-		File: p.ArtifactLocation.URI,
+		File: artifactPath(p.ArtifactLocation, bases),
 		Region: model.Region{
 			StartLine: p.Region.StartLine,
 			StartCol:  p.Region.StartColumn,

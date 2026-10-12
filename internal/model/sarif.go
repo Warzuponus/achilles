@@ -21,6 +21,9 @@ type SarifRun struct {
 	Tool        SarifTool         `json:"tool"`
 	Results     []SarifResult     `json:"results"`
 	Invocations []SarifInvocation `json:"invocations,omitempty"`
+	// OriginalURIBaseIDs maps a symbolic base ("SRCROOT") to the location that a
+	// result's artifact URI is relative to.
+	OriginalURIBaseIDs map[string]SarifArtifactLocation `json:"originalUriBaseIds,omitempty"`
 }
 
 // SarifInvocation records whether the run completed. A scan where a scanner
@@ -112,7 +115,11 @@ func (s SarifScore) Value() (float64, bool) {
 }
 
 type SarifResult struct {
-	RuleID              string             `json:"ruleId"`
+	RuleID string `json:"ruleId"`
+	// A result may name its rule by position in the driver's rule list, or through
+	// a rule reference, instead of (or as well as) by ruleId.
+	RuleIndex           *int               `json:"ruleIndex,omitempty"`
+	Rule                *SarifRuleRef      `json:"rule,omitempty"`
 	Level               string             `json:"level,omitempty"`
 	Message             SarifMessage       `json:"message"`
 	Locations           []SarifLocation    `json:"locations,omitempty"`
@@ -120,6 +127,12 @@ type SarifResult struct {
 	PartialFingerprints map[string]string  `json:"partialFingerprints,omitempty"`
 	Suppressions        []SarifSuppression `json:"suppressions,omitempty"`
 	Properties          map[string]any     `json:"properties,omitempty"`
+}
+
+// SarifRuleRef is a reportingDescriptorReference: a rule named by id or index.
+type SarifRuleRef struct {
+	ID    string `json:"id,omitempty"`
+	Index *int   `json:"index,omitempty"`
 }
 
 type SarifMessage struct {
@@ -132,11 +145,15 @@ type SarifLocation struct {
 
 type SarifPhysicalLocation struct {
 	ArtifactLocation SarifArtifactLocation `json:"artifactLocation"`
-	Region           SarifRegion           `json:"region"`
+	// omitzero: a finding with no line (a dependency advisory, a whole-file
+	// result) must be written with no region at all. An empty "region": {} is not
+	// valid SARIF, which requires a region to say where it starts.
+	Region SarifRegion `json:"region,omitzero"`
 }
 
 type SarifArtifactLocation struct {
-	URI string `json:"uri"`
+	URI       string `json:"uri"`
+	URIBaseID string `json:"uriBaseId,omitempty"`
 }
 
 type SarifRegion struct {
@@ -144,7 +161,7 @@ type SarifRegion struct {
 	StartColumn int          `json:"startColumn,omitempty"`
 	EndLine     int          `json:"endLine,omitempty"`
 	EndColumn   int          `json:"endColumn,omitempty"`
-	Snippet     SarifSnippet `json:"snippet,omitempty"`
+	Snippet     SarifSnippet `json:"snippet,omitzero"`
 }
 
 type SarifSnippet struct {

@@ -165,6 +165,8 @@ func run(argv []string) error {
 	if root.Err() != nil {
 		return errInterrupted
 	}
+	// The repository's own scanner configuration is named, never applied silently.
+	diags = append(diags, applyRepoConfigPolicy(o.noRepoConfig, repoConfigInEffect(cfg, reg, absTarget), &scan, os.Stderr)...)
 	// --timeout bounded the scanners. Every later phase gets its own clock, started
 	// when the phase starts: sharing the scanners' clock meant a long scan starved
 	// the AI review, and re-using it AFTER the AI review meant it had always already

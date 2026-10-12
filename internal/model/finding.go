@@ -141,6 +141,13 @@ type Scan struct {
 	// normalized. A scan with failures is incomplete, so "no findings" must never
 	// be presented as a clean result.
 	FailedTools []string `json:"failedTools,omitempty"`
+	// RepoConfig names the scanner configuration files found in the scanned
+	// repository that were in effect ("gitleaks: .gitleaks.toml"). Such a file can
+	// remove findings before Achilles sees them, so reports say when one was used.
+	RepoConfig []string `json:"repoConfig,omitempty"`
+	// RepoConfigChanged is the subset of RepoConfig that the diff under review
+	// (--diff) itself modifies.
+	RepoConfigChanged []string `json:"repoConfigChanged,omitempty"`
 	// Triage summarizes how much of the scan the AI review actually covered; nil
 	// when no triage was requested.
 	Triage *TriageStats `json:"triage,omitempty"`

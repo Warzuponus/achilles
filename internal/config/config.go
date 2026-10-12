@@ -61,6 +61,11 @@ type ToolConfig struct {
 	// if the target contains File, Arg is appended to the tool's argv (so the
 	// tool applies the repo's existing suppressions instead of re-reporting them).
 	LocalConfig []LocalConfigRule `yaml:"localConfig"`
+	// RepoConfig names the files this tool reads from the scanned repository ON
+	// ITS OWN, with no flag from Achilles (gitleaks loads <target>/.gitleaks.toml
+	// by itself). Achilles cannot withhold these, so it names them when present,
+	// and under --no-repo-config reports the tool as incomplete.
+	RepoConfig []string `yaml:"repoConfig"`
 }
 
 // LocalConfigRule maps a target-local config file to the argv flag that points a

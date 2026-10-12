@@ -41,6 +41,14 @@ func WriteHuman(w io.Writer, s model.Scan) {
 			"Install the missing tool(s) or see --diagnostics; this is NOT a clean scan.\n",
 			len(s.FailedTools), strings.Join(s.FailedTools, ", "))
 	}
+	if len(s.RepoConfigChanged) > 0 {
+		fmt.Fprintf(w, "\nWARNING: the change under review modifies scanner configuration (%s). "+
+			"It can hide findings in the same change; review it as part of this scan.\n", strings.Join(s.RepoConfigChanged, "; "))
+	}
+	if len(s.RepoConfig) > 0 {
+		fmt.Fprintf(w, "\nScanner configuration from the scanned repository was in effect (%s). "+
+			"It can remove findings before Achilles sees them.\n", strings.Join(s.RepoConfig, "; "))
+	}
 	if t := s.Triage; t != nil {
 		fmt.Fprintf(w, "\nAI review (%s): verdict on %d of %d finding(s)", t.Model, t.Triaged, t.Total)
 		if t.Failed+t.Skipped > 0 {

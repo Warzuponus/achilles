@@ -44,9 +44,13 @@ type htmlView struct {
 	HasAdvice  bool
 	HasThreats bool
 	Incomplete string // non-empty: the scan is partial; names the tools that failed
-	Coverage   string // one line on how much of the scan the AI review covered
-	CoverageOK bool   // false when the AI review was absent or partial
-	Summary    string // plain-language headline
+	// Scanner configuration found in the scanned repository: in effect, and the
+	// part of it that the change under review modifies.
+	RepoConfig        string
+	RepoConfigChanged string
+	Coverage          string // one line on how much of the scan the AI review covered
+	CoverageOK        bool   // false when the AI review was absent or partial
+	Summary           string // plain-language headline
 }
 
 // findingView is a finding prepared for display: secrets masked, code bounded.
@@ -245,6 +249,8 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 	if len(r.Scan.FailedTools) > 0 {
 		v.Incomplete = strings.Join(r.Scan.FailedTools, ", ")
 	}
+	v.RepoConfig = strings.Join(r.Scan.RepoConfig, "; ")
+	v.RepoConfigChanged = strings.Join(r.Scan.RepoConfigChanged, "; ")
 	v.Coverage, v.CoverageOK = coverageLine(r.Scan.Triage)
 	v.Summary = summaryLine(v)
 	return htmlTmpl.Execute(w, v)
@@ -369,6 +375,8 @@ const htmlDoc = `<!doctype html>
 </header>
 
 {{if .Incomplete}}<div class="alert warn"><strong>Incomplete scan.</strong> These tools failed to run or could not be read: {{.Incomplete}}. Missing results are not evidence of safety. Run <code>achilles doctor</code> to see what is missing.</div>{{end}}
+{{if .RepoConfigChanged}}<div class="alert warn"><strong>This change modifies scanner configuration.</strong> {{.RepoConfigChanged}}. It can hide findings in the same change; review it as part of this scan.</div>{{end}}
+{{if .RepoConfig}}<div class="alert">Scanner configuration from the scanned repository was in effect: {{.RepoConfig}}. It can remove findings before Achilles sees them.</div>{{end}}
 <div class="alert {{if .CoverageOK}}ok{{else}}warn{{end}}">{{.Coverage}}</div>
 
 <p class="lead" style="margin-top:20px">{{.Summary}}</p>

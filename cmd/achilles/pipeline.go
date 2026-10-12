@@ -74,6 +74,9 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 			fmt.Fprintf(os.Stderr, "achilles: skipping %s — %v\n", tc.ID, err)
 			continue
 		}
+		if o.noRepoConfig {
+			tc.LocalConfig = nil // do not hand the scanner the repository's own ignore/config files
+		}
 		toolRunner := runnerFor(tc, runner, os.Stderr)
 		sc, err := buildScanner(tc, toolRunner, opengrepRules)
 		if err != nil {
@@ -234,6 +237,12 @@ func filterFindings(o *options, ev vault.Store, runID, absTarget string, scan *m
 		before := len(scan.Findings)
 		scan.Findings = vcs.FilterFindings(scan.Findings, changed)
 		fmt.Fprintf(os.Stderr, "achilles: diff-aware — %d/%d finding(s) in %d changed file(s)\n", len(scan.Findings), before, len(changed))
+		// The one change a diff-scoped scan must not let pass quietly: the diff
+		// edits the file that tells a scanner what to ignore.
+		if scan.RepoConfigChanged = repoConfigChanged(scan.RepoConfig, changed); len(scan.RepoConfigChanged) > 0 {
+			fmt.Fprintf(os.Stderr, "achilles: WARNING: this change modifies scanner configuration (%s). It can hide findings in the same change; review that file as part of this scan.\n",
+				strings.Join(scan.RepoConfigChanged, "; "))
+		}
 	}
 	return nil
 }

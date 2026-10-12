@@ -88,6 +88,15 @@ First public release (`v0.1.0`) is pending.
   current directory.
 
 ### Security
+- **The scanned repository's own scanner configuration is no longer applied silently.**
+  Files such as `.gitleaks.toml`, `.trivyignore`, `.semgrepignore` and `osv-scanner.toml`
+  can remove findings before Achilles sees them, and a pull request can add a secret and
+  the allowlist entry hiding it together. Every such file in effect is now named on
+  stderr and in the human, Markdown and HTML reports; with `--diff`, a change that
+  modifies one gets a warning at the top of each report. New `--no-repo-config`
+  (`$ACHILLES_NO_REPO_CONFIG`) refuses them: files Achilles would pass are not passed, and
+  a scanner that reads one on its own is reported as incomplete, which fails
+  `--strict-tools`. It does not cover inline suppression comments; SECURITY.md says so.
 - **Pull-request comments treat scan text as untrusted.** The summary comment
   (`--pr-comment`, also the Markdown report) and inline review comments (`--pr-review`)
   posted scanner messages, rule ids, file names and model reasoning as they came. They are

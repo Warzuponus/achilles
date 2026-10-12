@@ -71,6 +71,7 @@ type options struct {
 	fixBase           string
 	repoFlag          string
 	strictTools       bool
+	noRepoConfig      bool
 	diagnostics       string
 	sbomOut           string
 	reviewOn          bool
@@ -167,6 +168,7 @@ func parseFlags(argv []string) (*options, error) {
 	fs.StringVar(&o.fixBase, "fix-base", "", "base branch for the auto-fix PR (with --fix-pr; default: the current branch)")
 	fs.StringVar(&o.repoFlag, "repo", os.Getenv("GITHUB_REPOSITORY"), "owner/name for GitHub integrations (default $GITHUB_REPOSITORY)")
 	fs.BoolVar(&o.strictTools, "strict-tools", os.Getenv("ACHILLES_STRICT_TOOLS") == "true", "fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan; recommended in containers and CI")
+	fs.BoolVar(&o.noRepoConfig, "no-repo-config", os.Getenv("ACHILLES_NO_REPO_CONFIG") == "true", "do not let the scanned repository configure the scanners: its ignore/config files (.trivyignore, .gitleaks.toml, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. For code you do not trust")
 	fs.StringVar(&o.diagnostics, "diagnostics", "", "write a diagnostics sidecar (tool/parse failures + LLM token usage) to this JSON file")
 	fs.StringVar(&o.sbomOut, "sbom", "", "generate a CycloneDX SBOM of the target (via Syft) and write it to this file")
 	fs.BoolVar(&o.reviewOn, "review", false, "run the holistic full-repo security review agent (needs --llm-model)")

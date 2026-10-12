@@ -19,15 +19,21 @@ import (
 // arguments `<out-file> <src-dir>`, it writes a SARIF report with one finding per
 // line containing "os.system(" under src, the way a real tool is driven by the
 // registry. This lets a test run the whole pipeline, on any OS, with no real
-// scanner installed.
+// scanner installed. A third argument, --honor-ignore, stands for a repository's
+// own ignore file being applied: the scanner then reports nothing.
 func TestMain(m *testing.M) {
-	if os.Getenv("ACHILLES_FAKE_SCANNER") != "" && len(os.Args) == 3 {
-		os.Exit(fakeScanner(os.Args[1], os.Args[2]))
+	if os.Getenv("ACHILLES_FAKE_SCANNER") != "" && len(os.Args) >= 3 && !strings.HasPrefix(os.Args[1], "-") {
+		os.Exit(fakeScanner(os.Args[1], os.Args[2], os.Args[3:]))
 	}
 	os.Exit(m.Run())
 }
 
-func fakeScanner(outFile, src string) int {
+func fakeScanner(outFile, src string, extra []string) int {
+	for _, a := range extra {
+		if a == "--honor-ignore" {
+			src = filepath.Join(src, "no-such-directory") // everything is ignored
+		}
+	}
 	if os.Getenv("ACHILLES_FAKE_SCANNER") == "cannot-typecheck" {
 		// What gosec does: complain on stderr, then report and exit 0 anyway.
 		fmt.Fprintln(os.Stderr, "[fakescan] Error building the SSA representation of the package p: package p has type errors, skipping SSA analysis, no ssa result")

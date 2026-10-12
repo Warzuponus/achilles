@@ -91,6 +91,31 @@ Filing findings as GitHub issues publishes vulnerability details to everyone who
 read the repository. Achilles refuses to do so in a public repository unless you pass
 `--allow-public-issues`.
 
+## Security model: the scanned repository can configure the scanners
+
+Scanners read ignore lists and configuration from the repository they scan:
+`.gitleaks.toml` and `.gitleaksignore`, `.trivyignore` and `trivy.yaml`,
+`.semgrepignore`, `osv-scanner.toml`, and inline comments such as `#nosec`,
+`nosemgrep` and `gitleaks:allow`. That is how a team records "we looked at this and
+it is fine". It also means a pull request can add a secret and the allowlist entry
+that hides it in the same change.
+
+What Achilles does about it:
+
+- Every such file that is present is named on stderr and in the reports, so a
+  suppression is never silent.
+- With `--diff`, a change that modifies one of those files gets a warning in the
+  output and at the top of every report.
+- `--no-repo-config` refuses them: files Achilles would pass to a scanner are not
+  passed, and a scanner that reads one on its own (most do) is reported as
+  **incomplete**, which fails a `--strict-tools` run. Its findings still count; its
+  silence is not treated as evidence.
+
+What it does not do: `--no-repo-config` does not neutralize inline suppression
+comments, and it cannot make a scanner ignore a file it loads by itself. If you gate
+code from authors you do not trust, review changes to those files and comments as
+part of the change, or scan a checkout from which they have been removed.
+
 ## Deploying safely
 
 See [docs/containers.md](docs/containers.md). In short: keep the War Room on

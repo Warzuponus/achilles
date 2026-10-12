@@ -185,6 +185,14 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 		fmt.Fprintf(w, "> **Incomplete scan:** %s failed to run, so missing results are not evidence of safety.\n\n",
 			strings.Join(s.FailedTools, ", "))
 	}
+	if len(s.RepoConfigChanged) > 0 {
+		fmt.Fprintf(w, "> **This change modifies scanner configuration:** %s. It can hide findings in the same change; review it as part of this scan.\n\n",
+			MarkdownText(strings.Join(s.RepoConfigChanged, "; ")))
+	}
+	if len(s.RepoConfig) > 0 {
+		fmt.Fprintf(w, "Scanner configuration from the scanned repository was in effect (%s). It can remove findings before Achilles sees them.\n\n",
+			MarkdownText(strings.Join(s.RepoConfig, "; ")))
+	}
 	if t := s.Triage; t != nil {
 		fmt.Fprintf(w, "AI review (`%s`) gave a verdict on %d of %d findings", t.Model, t.Triaged, t.Total)
 		if t.Failed+t.Skipped > 0 {

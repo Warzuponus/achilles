@@ -35,6 +35,7 @@ tools:
     bin: opengrep
     format: sarif
     rules: configs/rules
+    repoConfig: [.semgrepignore]   # read by opengrep from the scan root on its own
 
   - id: gosec
     license: Apache-2.0
@@ -76,6 +77,9 @@ tools:
     localConfig:                   # honor the repo's own Trivy ignore list
       - file: .trivyignore
         arg: "--ignorefile={src}/.trivyignore"
+    # Trivy also picks these up by itself when the scan is started from inside the
+    # repository (the usual case in CI), whatever Achilles passes.
+    repoConfig: [.trivyignore, .trivyignore.yaml, trivy.yaml]
 
   - id: gitleaks
     license: MIT
@@ -90,6 +94,8 @@ tools:
     localConfig:                   # honor the repo's own gitleaks config/allowlist
       - file: .gitleaks.toml
         arg: "--config={src}/.gitleaks.toml"
+    # gitleaks loads <target>/.gitleaks.toml and .gitleaksignore by itself.
+    repoConfig: [.gitleaks.toml, .gitleaksignore]
 
   - id: osv-scanner
     license: Apache-2.0
@@ -105,6 +111,7 @@ tools:
     # With no dependency manifest in the tree osv-scanner exits 128 and writes no
     # report. That is "nothing to check", not a failed scan.
     nothingToScan: ["No package sources found"]
+    repoConfig: [osv-scanner.toml]  # per-directory ignore list, read by osv-scanner on its own
 
   # --- `full` profile: heavy per-language tools (opt-in via --profile full) ---
 

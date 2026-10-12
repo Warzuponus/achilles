@@ -125,6 +125,7 @@ Full walkthrough: [LLM Triage & Agents](llm-and-agents.md).
 | `--sbom` | — | generate a CycloneDX SBOM (via Syft) to this file |
 | `--diagnostics` | — | write a diagnostics sidecar (tool/parse failures + LLM token usage) |
 | `--strict-tools` | `$ACHILLES_STRICT_TOOLS` | fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan. On in the container image — see [Running in containers](containers.md) |
+| `--no-repo-config` | `$ACHILLES_NO_REPO_CONFIG` | do not let the scanned repository configure the scanners. Its ignore and config files (`.trivyignore`, `.gitleaks.toml`, `.semgrepignore`, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. Without the flag such files are applied, and named in the output and reports. For code you do not trust; see [SECURITY.md](../SECURITY.md) for what it does not cover |
 
 ## GitHub integrations (outward-facing, opt-in)
 

@@ -74,3 +74,39 @@ func TestContext_NeverReadsOutsideTheScannedTree(t *testing.T) {
 		t.Errorf("no root: got %q, want the tool snippet", got)
 	}
 }
+
+// A file with many findings was read from disk once per Context call. It is read
+// once per run now, and a path refused once stays refused without retrying.
+func TestContext_ReadsEachFileOnce(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "app.py")
+	if err := os.WriteFile(path, []byte("import os\neval(x)\nprint(1)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	en := New(1)
+	f := model.Finding{CodeContext: "tool snippet", Location: model.Location{File: "app.py", Region: model.Region{StartLine: 2}}}
+	first := en.Context(f, root)
+	if !strings.Contains(first, "eval(x)") {
+		t.Fatalf("first read failed: %q", first)
+	}
+
+	// Remove the file: a second call that went back to disk would now fall back to
+	// the tool's snippet.
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if again := en.Context(f, root); again != first {
+		t.Errorf("the second call re-read the file:\n%q\nwant the cached\n%q", again, first)
+	}
+
+	// The cache is keyed by root as well as path: the same relative name under
+	// another root is another file.
+	other := t.TempDir()
+	if got := en.Context(f, other); got != "tool snippet" {
+		t.Errorf("a different root must not be served from the cache: %q", got)
+	}
+	// An Enricher built without New has no cache and still works.
+	if got := (&Enricher{Radius: 1}).Context(f, root); got != "tool snippet" {
+		t.Errorf("uncached enricher after the file is gone: %q", got)
+	}
+}

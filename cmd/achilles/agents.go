@@ -12,7 +12,6 @@ import (
 	"github.com/Warzuponus/achilles/internal/advisor"
 	"github.com/Warzuponus/achilles/internal/config"
 	xexec "github.com/Warzuponus/achilles/internal/exec"
-	"github.com/Warzuponus/achilles/internal/inventory"
 	"github.com/Warzuponus/achilles/internal/knowledge"
 	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/policy"
@@ -72,7 +71,7 @@ func runReview(ctx context.Context, ev vault.Store, runID, target string, scan m
 	}
 	router := llm.BuildRouter(factory(baseURL, llmModel), tasks, baseURL, factory)
 
-	inv, err := inventory.Scan(target)
+	inv, err := inventoryOf(target)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +102,7 @@ func runAdvisor(ctx context.Context, ev vault.Store, runID, target string, scan 
 	}
 	router := llm.BuildRouter(factory(baseURL, llmModel), tasks, baseURL, factory)
 
-	inv, err := inventory.Scan(target)
+	inv, err := inventoryOf(target)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +141,7 @@ func runThreatModel(ctx context.Context, ev vault.Store, runID, target string, s
 	}
 	router := llm.BuildRouter(factory(baseURL, llmModel), tasks, baseURL, factory)
 
-	inv, err := inventory.Scan(target)
+	inv, err := inventoryOf(target)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +177,7 @@ func runResearch(ctx context.Context, ev vault.Store, runID, target, repoDir str
 	if model == "" {
 		return fmt.Errorf("--research requires --llm-model (or ACHILLES_LLM_MODEL)")
 	}
-	inv, err := inventory.Scan(target)
+	inv, err := inventoryOf(target)
 	if err != nil {
 		return err
 	}

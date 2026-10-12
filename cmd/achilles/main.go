@@ -54,6 +54,7 @@ func (e *gateError) Error() string {
 var errInterrupted = errors.New("interrupted; stopped before the scan finished (nothing was reported or filed)")
 
 func run(argv []string) error {
+	resetInventory()
 	if handled, err := runSubcommand(argv, os.Stdout, os.Stderr); handled {
 		return err
 	}

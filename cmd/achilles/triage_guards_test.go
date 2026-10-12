@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -159,5 +161,33 @@ func TestRunnerFor_ToolWithoutAnImageRunsLocallyAndSaysSo(t *testing.T) {
 	got = runnerFor(config.ToolConfig{ID: "opengrep", Bin: "opengrep"}, xexec.LocalRunner{}, &warn)
 	if _, local := got.(xexec.LocalRunner); !local || warn.Len() != 0 {
 		t.Errorf("local runner: got %T, %q", got, warn.String())
+	}
+}
+
+// The target's inventory was computed by walking the whole tree in up to six
+// places per run. It is computed once and shared, and forgotten between runs.
+func TestInventoryOf_WalksOncePerRun(t *testing.T) {
+	resetInventory()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.py"), []byte("x = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	first, err := inventoryOf(dir)
+	if err != nil || len(first.Languages) == 0 {
+		t.Fatalf("inventory: %+v, %v", first, err)
+	}
+	// A file added mid-run is not seen: the first walk is the answer for the run.
+	if err := os.WriteFile(filepath.Join(dir, "b.go"), []byte("package b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	same, _ := inventoryOf(dir)
+	if len(same.Languages) != len(first.Languages) {
+		t.Errorf("the tree was walked again within one run: %v then %v", first.Languages, same.Languages)
+	}
+	// The next run starts fresh.
+	resetInventory()
+	next, _ := inventoryOf(dir)
+	if len(next.Languages) != len(first.Languages)+1 {
+		t.Errorf("a new run must walk the tree again: %v", next.Languages)
 	}
 }

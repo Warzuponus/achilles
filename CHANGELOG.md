@@ -63,6 +63,9 @@ First public release (`v0.1.0`) is pending.
   [Benchmarking Detection](docs/benchmarking.md).
 
 ### Changed
+- Less repeated work on large repositories: a source file is read once per run for code
+  context instead of once per finding and prompt, and the target's languages and
+  dependencies are worked out once instead of by up to six separate walks of the tree.
 - **Docs for a first-time reader.** The README loses its build-diary sections (phase
   status, an internal pipeline sketch, a partial package list) and gains a short case for
   using Achilles over the scanners alone, a stable/experimental split, the Go 1.27.2 and

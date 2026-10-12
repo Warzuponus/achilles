@@ -14,7 +14,6 @@ import (
 	"github.com/Warzuponus/achilles/internal/config"
 	"github.com/Warzuponus/achilles/internal/correlate"
 	xexec "github.com/Warzuponus/achilles/internal/exec"
-	"github.com/Warzuponus/achilles/internal/inventory"
 	"github.com/Warzuponus/achilles/internal/model"
 	"github.com/Warzuponus/achilles/internal/noise"
 	"github.com/Warzuponus/achilles/internal/normalize"
@@ -126,7 +125,7 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 	// when its language isn't present (language-agnostic tools declare "generic"
 	// and always run). Fail open — if detection errors, Languages stays empty and
 	// every tool runs.
-	if inv, ierr := inventory.Scan(absTarget); ierr == nil {
+	if inv, ierr := inventoryOf(absTarget); ierr == nil {
 		tgt.Languages = inv.Languages
 	}
 

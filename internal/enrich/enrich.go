@@ -39,6 +39,10 @@ type Enricher struct {
 	MaxEntryHints int
 	// IncludeBlame appends git-blame attribution to Context (best-effort).
 	IncludeBlame bool
+
+	// cache remembers files already read (see fileCache). New sets it; an Enricher
+	// built as a literal has none and reads from disk every time.
+	cache *fileCache
 }
 
 // New returns an enricher with the given minimum context radius (min 0) and the
@@ -53,6 +57,7 @@ func New(radius int) *Enricher {
 		MaxRefLines:   defaultMaxRefLines,
 		MaxCallSites:  defaultMaxCallSites,
 		MaxEntryHints: defaultMaxEntryHints,
+		cache:         newFileCache(),
 	}
 }
 
@@ -124,7 +129,9 @@ func (e *Enricher) GitBlame(f model.Finding, root string) (Blame, bool) {
 // tree root; the finding's file may be relative to it or absolute. If the file
 // cannot be read, it falls back to any snippet the tool already provided.
 func (e *Enricher) Context(f model.Finding, root string) string {
-	data, err := readWithin(root, f.Location.File)
+	data, err := e.cache.read(root+"\x00"+f.Location.File, func() ([]byte, error) {
+		return readWithin(root, f.Location.File)
+	})
 	if err != nil {
 		return f.CodeContext // fall back to the tool's snippet
 	}

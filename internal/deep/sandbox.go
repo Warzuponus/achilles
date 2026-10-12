@@ -114,6 +114,47 @@ type Result struct {
 	Text   string
 	Paths  []string
 	Denied bool // the request was refused by the sandbox
+
+	// Lines are the source lines the text shows, in the order they appear, one per
+	// line of Text after the first header lines. Evidence the model cites has to
+	// point at one of these: citing a file is not enough, or a model could read
+	// one line of auth.go and then cite auth.go:999 as the sanitizer.
+	Lines  []Shown
+	header int // lines of Text before the first entry of Lines
+}
+
+// Shown is one source line that was put in front of the model.
+type Shown struct {
+	Path string
+	Line int
+}
+
+// shownIn returns the entries of Lines that are still in text once text has been
+// cut down from r.Text (by a byte budget): only lines the model actually received
+// count as shown. A line cut off partway is not counted.
+func (r Result) shownIn(text string) []Shown {
+	if len(r.Lines) == 0 {
+		return nil
+	}
+	if text == r.Text {
+		return r.Lines
+	}
+	if !strings.HasPrefix(r.Text, text) {
+		// Not a prefix: the cut appended a notice. Compare up to the common part.
+		n := 0
+		for n < len(text) && n < len(r.Text) && text[n] == r.Text[n] {
+			n++
+		}
+		text = text[:n]
+	}
+	complete := strings.Count(text, "\n") - r.header
+	if complete <= 0 {
+		return nil
+	}
+	if complete > len(r.Lines) {
+		complete = len(r.Lines)
+	}
+	return r.Lines[:complete]
 }
 
 // Sandbox runs the read-only tools against one directory tree. It is immutable
@@ -463,6 +504,7 @@ func (s *Sandbox) ReadFile(p string, start, end int) Result {
 		b              strings.Builder
 		lineNo, last   int
 		cutBytes, more bool
+		shown          []Shown
 	)
 	for sc.Scan() {
 		lineNo++
@@ -480,6 +522,7 @@ func (s *Sandbox) ReadFile(p string, start, end int) Result {
 			break
 		}
 		b.WriteString(entry)
+		shown = append(shown, Shown{Path: rel, Line: lineNo})
 		last = lineNo
 	}
 	if last == 0 && !cutBytes && !more {
@@ -499,7 +542,7 @@ func (s *Sandbox) ReadFile(p string, start, end int) Result {
 	if fi.Size() > s.lim.FileMaxBytes {
 		fmt.Fprintf(&out, "[file is larger than %d bytes; only the beginning is readable]\n", s.lim.FileMaxBytes)
 	}
-	return Result{Text: out.String(), Paths: []string{rel}}
+	return Result{Text: out.String(), Paths: []string{rel}, Lines: shown, header: 1}
 }
 
 // ---- list_dir --------------------------------------------------------------
@@ -654,6 +697,7 @@ func (s *Sandbox) search(ctx context.Context, re *regexp.Regexp, glob, subdir st
 		stopReason string
 	)
 	seenPath := map[string]bool{}
+	var shown []Shown
 	// Files are opened through os.Root, so a path swapped for a symlink during the
 	// walk cannot lead a read outside the scan root.
 	root, rerr := os.OpenRoot(s.root)
@@ -731,6 +775,7 @@ func (s *Sandbox) search(ctx context.Context, re *regexp.Regexp, glob, subdir st
 			}
 			matches++
 			fmt.Fprintf(&out, "%s:%d: %s\n", rel, lineNo, s.capLine(strings.TrimSpace(red)))
+			shown = append(shown, Shown{Path: rel, Line: lineNo})
 			if !seenPath[rel] {
 				seenPath[rel] = true
 				paths = append(paths, rel)
@@ -755,5 +800,5 @@ func (s *Sandbox) search(ctx context.Context, re *regexp.Regexp, glob, subdir st
 	if stopReason != "" {
 		text += "[" + stopReason + "]\n"
 	}
-	return Result{Text: text, Paths: paths}
+	return Result{Text: text, Paths: paths, Lines: shown}
 }

@@ -12,6 +12,12 @@ type Remediation struct {
 	// Verification is the result of re-scanning the patch (--verify-fixes); nil when
 	// verification did not run. See docs/verifying-fixes.md for what it proves.
 	Verification *FixVerification `json:"verification,omitempty"`
+
+	// ReusedFrom is the run this proposal was first made in, when it was taken from
+	// the cache instead of asked for again: the same finding, code, position, fix
+	// hint, prompt and model. Empty for a proposal made in this run. A model can
+	// never set it.
+	ReusedFrom string `json:"reusedFrom,omitempty"`
 }
 
 // FixVerificationStatus is the outcome of re-scanning a proposed patch.

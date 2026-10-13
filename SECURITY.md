@@ -138,8 +138,10 @@ change them with the code.
   vault it is named in the output and the reports, and `--no-repo-config` turns both
   off for the run. Keeping the vault outside the repository (`--vault`, or the
   PostgreSQL backend) avoids the question.
-- Cached verdicts are not affected: each is signed with a key kept in the Achilles
-  home directory, so an entry that arrives with a repository is ignored.
+- Cached verdicts and cached fix suggestions are not affected: each is signed with a key
+  kept in the Achilles home directory, so an entry that arrives with a repository is
+  ignored. For fixes this is what stops a planted entry from being shown as a suggested
+  patch, or applied to a branch by `--fix-pr`.
 
 What it does not do: `--no-repo-config` does not neutralize inline suppression
 comments, and it cannot make a scanner ignore a file it loads by itself. If you gate

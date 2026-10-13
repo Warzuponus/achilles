@@ -7,6 +7,12 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Fix suggestions are cached too.** With `--remediate`, a suggestion made for the same
+  finding, code, position, fix hint, prompt and model is reused instead of asked for
+  again, under the same `--verdict-cache-days` limit and the same signing key as cached
+  verdicts. A moved line means a new request, since a patch is written against lines.
+  The re-scan that verifies a patch still runs in every scan. Reused suggestions are
+  marked (`reusedFrom` in the JSON report) and counted on stderr.
 - **Credentials in the git history.** `--secrets-history` scans the commits as well as the
   files, so a credential that was committed and later deleted is reported: it is in no
   file, but it is in every clone. With `--diff` only the commits since that ref are read,

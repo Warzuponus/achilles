@@ -192,6 +192,8 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		eng.SetVerdictCache(
 			triage.CacheScope(o.baseURL, scopeOf("triage", o.triageModel), scopeOf("judge", o.triageModel)),
 			o.cacheMaxAge, o.cacheSecret, nil)
+		// Fix proposals are cached the same way, under the model that writes them.
+		eng.SetRemediationCacheScope(strings.TrimRight(o.baseURL, "/") + "|remediation=" + scopeOf("remediation", o.triageModel))
 	}
 
 	// Learning layer (DESIGN.md §8): calibration from accumulated feedback. Opt-in:
@@ -439,6 +441,15 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		if f.Verdict != nil && f.Provenance != nil && f.Provenance.ReusedFrom != "" {
 			stats.Reused++
 		}
+	}
+	fixesReused := 0
+	for _, f := range scan.Findings {
+		if f.Remediation != nil && f.Remediation.ReusedFrom != "" {
+			fixesReused++
+		}
+	}
+	if fixesReused > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: %d fix suggestion(s) reused from earlier runs: the same finding, code and position, with the same prompt and model\n", fixesReused)
 	}
 	if stats.Reused > 0 {
 		fmt.Fprintf(os.Stderr, "achilles: %d verdict(s) reused from earlier runs: the same code was reviewed with the same prompt and models (--verdict-cache-days 0 to review everything afresh)\n", stats.Reused)

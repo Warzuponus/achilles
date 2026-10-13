@@ -404,6 +404,13 @@ func (e *Engine) Remediate(ctx context.Context, runID string, f *model.Finding) 
 		return nil
 	}
 	pf, codeContext := e.promptView(*f)
+	cacheKey := ""
+	if e.cachesRemediations() {
+		cacheKey = e.remediationKey(pf, codeContext)
+		if e.remediationFromCache(runID, f, cacheKey) {
+			return nil
+		}
+	}
 	resp, err := e.completeValidated(ctx, "remediation", remediationMessages(pf, codeContext), "remediation", remediationSchema, &remediationCheck{})
 	if err != nil {
 		return fmt.Errorf("remediation llm: %w", err)
@@ -419,9 +426,13 @@ func (e *Engine) Remediate(ctx context.Context, runID string, f *model.Finding) 
 	// Verification is the pipeline's own record of the re-scan. A reply that
 	// carries one is a model declaring its own patch verified; never keep it.
 	r.Verification = nil
+	r.ReusedFrom = "" // likewise the pipeline's to say, not the model's
 	r.Confidence = model.NormalizeConfidence(r.Confidence)
 	f.Remediation = &r
 	e.record(runID, vault.KindRemediation, "remediation", f.Fingerprint, r)
+	if cacheKey != "" {
+		e.rememberRemediation(runID, *f, cacheKey)
+	}
 	return nil
 }
 

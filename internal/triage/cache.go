@@ -54,6 +54,9 @@ type verdictCache struct {
 	maxAge time.Duration
 	secret []byte
 	now    func() time.Time
+	// remediationScope is the scope for cached fix proposals; empty leaves that
+	// cache off (see cache_remediation.go).
+	remediationScope string
 }
 
 // SetVerdictCache turns the verdict cache on. scope identifies what produces the

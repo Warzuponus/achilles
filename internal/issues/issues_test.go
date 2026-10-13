@@ -913,3 +913,24 @@ func TestBody_FixVerification(t *testing.T) {
 		}
 	})
 }
+
+// A finding made in the git history links to the file in the commit it was found
+// in: at the scanned commit the line, or the whole file, may be gone.
+func TestBody_HistoryFindingLinksToItsOwnCommit(t *testing.T) {
+	f := fnd("sqli", "/work/proj/old/config.go", 7, model.SeverityHigh)
+	f.Commit = "689bd12734c6a21c4431adae399f29b9d181649b"
+	opts := baseOpts()
+	opts.CommitSHA, opts.ServerURL = "abc123def456", "https://github.com"
+	_, body := renderOne(t, f, opts)
+	if !strings.Contains(body, "/acme/app/blob/689bd12734c6a21c4431adae399f29b9d181649b/old/config.go#L7") {
+		t.Errorf("the link must use the finding's commit:\n%s", body)
+	}
+	if strings.Contains(body, "/blob/abc123def456/old/config.go") {
+		t.Errorf("the link points at the scanned commit, where the line may not exist:\n%s", body)
+	}
+	// Without a scanned commit there are no links at all, as before.
+	_, plain := renderOne(t, f, baseOpts())
+	if strings.Contains(plain, "/blob/") {
+		t.Errorf("a link was made without a scanned commit:\n%s", plain)
+	}
+}

@@ -74,7 +74,7 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 		if tc.ID == "syft" {
 			continue // SBOM generator, not a findings scanner — see the --sbom step
 		}
-		if !tc.RunsInProfile(o.profile) {
+		if !tc.RunsInProfile(o.profile) && !o.optedIn(tc.OptIn) {
 			continue
 		}
 		if err := gate.Allow(tc.ToLicense()); err != nil {
@@ -83,6 +83,10 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 		}
 		if o.noRepoConfig {
 			tc.LocalConfig = nil // do not hand the scanner the repository's own ignore/config files
+		}
+		if o.diffRef != "" && tc.DiffArg != "" {
+			// A tool that reads commits is limited to the ones under review.
+			tc.Argv = append(append([]string(nil), tc.Argv...), strings.ReplaceAll(tc.DiffArg, "{diff}", o.diffRef))
 		}
 		toolRunner := runnerFor(tc, runner, os.Stderr)
 		sc, err := buildScanner(tc, toolRunner, opengrepRules)
@@ -241,9 +245,25 @@ func filterFindings(o *options, ev vault.Store, runID, absTarget string, scan *m
 		if err != nil {
 			return fmt.Errorf("git diff: %w", err)
 		}
-		before := len(scan.Findings)
-		scan.Findings = vcs.FilterFindings(scan.Findings, changed)
-		fmt.Fprintf(os.Stderr, "achilles: diff-aware — %d/%d finding(s) in %d changed file(s)\n", len(scan.Findings), before, len(changed))
+		// A finding made in a commit is not filtered by the net diff. The history
+		// scan was already limited to the commits under review, and the case it
+		// exists for is a file added in one of them and deleted in a later one,
+		// which the net diff does not contain at all.
+		var inFiles, inCommits []model.Finding
+		for _, f := range scan.Findings {
+			if f.Commit != "" {
+				inCommits = append(inCommits, f)
+			} else {
+				inFiles = append(inFiles, f)
+			}
+		}
+		before := len(inFiles)
+		inFiles = vcs.FilterFindings(inFiles, changed)
+		fmt.Fprintf(os.Stderr, "achilles: diff-aware — %d/%d finding(s) in %d changed file(s)\n", len(inFiles), before, len(changed))
+		if len(inCommits) > 0 {
+			fmt.Fprintf(os.Stderr, "achilles: diff-aware — %d credential(s) in the commits since %s, kept whatever the net diff shows\n", len(inCommits), o.diffRef)
+		}
+		scan.Findings = append(inFiles, inCommits...)
 		// The one change a diff-scoped scan must not let pass quietly: the diff
 		// edits the file that tells a scanner what to ignore.
 		if scan.RepoConfigChanged = repoConfigChanged(scan.RepoConfig, changed); len(scan.RepoConfigChanged) > 0 {

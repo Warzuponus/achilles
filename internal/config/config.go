@@ -26,6 +26,10 @@ type ToolConfig struct {
 	// Profiles are the scan profiles (besides the baseline) this tool runs in,
 	// e.g. [full]. Selected via `--profile`.
 	Profiles []string `yaml:"profiles"`
+	// OptIn names a feature that turns this tool on, for a pass that is neither part
+	// of the baseline nor of a profile: "secrets-history" (the --secrets-history
+	// flag) runs the tool over the git history. Such a tool runs only when asked for.
+	OptIn string `yaml:"optIn"`
 	// Bespoke marks a tool that has a hand-written adapter rather than the
 	// generic config-driven runner (e.g. opengrep).
 	Bespoke   bool     `yaml:"bespoke"`
@@ -41,6 +45,10 @@ type ToolConfig struct {
 	Format     string   `yaml:"format"`
 	Argv       []string `yaml:"argv"`
 	OutputFile string   `yaml:"outputFile"`
+	// DiffArg is appended to Argv on a diff-aware scan (--diff REF), with {diff}
+	// replaced by REF. For a tool that reads commits rather than files, it is how
+	// the scan is limited to the commits under review.
+	DiffArg string `yaml:"diffArg"`
 	// NothingToScan lists phrases a tool prints when it exits without writing a
 	// report because the target has nothing it applies to (osv-scanner on a tree
 	// with no dependency manifests). Seeing one means "no results", not "the tool
@@ -163,7 +171,7 @@ func (c Config) validate() error {
 		seen[t.ID] = true
 		// Any tool that can actually run (baseline or in some profile) and isn't
 		// a bespoke adapter must define how to invoke it.
-		if !t.Bespoke && (t.Enabled || len(t.Profiles) > 0) && len(t.Argv) == 0 {
+		if !t.Bespoke && (t.Enabled || len(t.Profiles) > 0 || t.OptIn != "") && len(t.Argv) == 0 {
 			return fmt.Errorf("tool %q: runnable generic tool needs an argv", t.ID)
 		}
 	}

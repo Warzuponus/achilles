@@ -161,6 +161,41 @@ changed files, at/above your severity floor:
 achilles --diff origin/main --baseline .achilles/baseline.json --fail-on high .
 ```
 
+### Credentials in the git history
+
+A scan reads the files as they are now. A credential that was committed and deleted a
+commit later is in none of them, so it is not reported, but it is in every clone and
+fork of the repository and has to be treated as leaked. `--secrets-history` scans the
+commits as well:
+
+```bash
+achilles --secrets-history --fail-on high .             # every commit on every fetched branch
+achilles --secrets-history --diff origin/main --fail-on high .   # only the commits since main
+```
+
+- A finding from the history names the commit that added the credential and says what
+  deleting the line does not fix: the credential must be revoked and replaced. Its
+  location is the file and line in that commit, which may no longer exist.
+- A credential that is still in a file is reported once, as the finding in the file. One
+  that appears in several commits is reported once, for the earliest.
+- With `--diff`, only the commits since that ref are read, and a finding in them is kept
+  even when the net diff no longer contains the file. That is the case this exists for
+  on a pull request: a secret added in one commit and removed in the next.
+- **It needs the whole history.** CI checkouts are shallow by default, and a shallow
+  clone holds only the newest commits. Achilles then reports the history scan as
+  incomplete instead of clean; fetch everything (`fetch-depth: 0` for
+  `actions/checkout`, `GIT_DEPTH: "0"` in GitLab CI). Scan the repository root: the
+  history covers the whole repository whatever directory is given.
+- If git cannot read the checkout at all (not a repository, or one owned by another
+  user, which is common for a directory mounted into a container), the history scan is
+  reported as a failed tool. Inside a container, mark the mount as safe first:
+  `git config --global --add safe.directory /src`.
+- The repository's own `.gitleaks.toml` and `.gitleaksignore` apply, and are named, as
+  for the scan of the files.
+
+It is off by default because it reads every commit. A repository can turn it on for
+itself with `secrets-history: true` in `.achilles.yaml`.
+
 ### `--pr-mini`: baseline autopilot
 
 If you don't want to manage a baseline file by hand, `--pr-mini` does it: if the

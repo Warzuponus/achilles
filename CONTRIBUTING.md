@@ -17,6 +17,8 @@ Optional, for the pieces that need infrastructure (they skip themselves when abs
   `ACHILLES_TEST_POSTGRES_DSN` (the command is at the top of
   `internal/vault/postgres_test.go`). CI runs them against a service container.
 - **The container quickstart:** `deploy/compose/smoke.sh` (needs Docker).
+- **The history scan against the real gitleaks:** `achilles tools install gitleaks`,
+  then `go test -tags integration ./cmd/achilles -run History`.
 
 **What CI runs, and when.** A pull request gets the Linux build and tests (with the
 race detector), the linter, `govulncheck`, the license check, the self-scan and the

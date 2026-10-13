@@ -158,6 +158,10 @@ func run(argv []string) error {
 	opengrepRules, shadowRules, cleanupRules := provisionGeneratedRules(o, cfg)
 	defer cleanupRules()
 
+	// Decided before the registry is built: a history scan that cannot work is not
+	// run, and is reported as a failed tool instead.
+	historyDiags := planHistoryScan(o, cfg, absTarget, os.Stderr)
+
 	reg, shadow, err := buildRegistry(o, cfg, gate, runner, opengrepRules, shadowRules)
 	if err != nil {
 		return err
@@ -179,6 +183,8 @@ func run(argv []string) error {
 	if root.Err() != nil {
 		return errInterrupted
 	}
+	diags = append(diags, historyDiags...)
+	collapseHistory(&scan, os.Stderr)
 	// The repository's own scanner configuration is named, never applied silently.
 	diags = append(diags, applyRepoConfigPolicy(o.noRepoConfig, repoConfigInEffect(cfg, reg, absTarget), &scan, os.Stderr)...)
 	if s := o.repoSettings; s != nil && len(s.Applied) > 0 {

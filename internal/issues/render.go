@@ -383,7 +383,13 @@ func (r *renderer) link(f model.Finding) string {
 	for i, s := range segs {
 		segs[i] = url.PathEscape(s)
 	}
-	u := fmt.Sprintf("%s/%s/blob/%s/%s", r.server, r.repo, r.sha, strings.Join(segs, "/"))
+	// A finding made in the git history links to the file as it was in that commit:
+	// at the scanned commit the line may not exist any more.
+	sha := r.sha
+	if f.Commit != "" {
+		sha = sanitizeKey(f.Commit)
+	}
+	u := fmt.Sprintf("%s/%s/blob/%s/%s", r.server, r.repo, sha, strings.Join(segs, "/"))
 	if line > 0 {
 		u += fmt.Sprintf("#L%d", line)
 		if end := f.Location.Region.EndLine; end > line {

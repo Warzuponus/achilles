@@ -42,7 +42,7 @@ code is scanned:
 
 | Setting | Notes |
 |---------|-------|
-| `profile`, `timeout` | which scanners run, and how long they get |
+| `profile`, `timeout`, `secrets-history` | which scanners run, how long they get, and whether the git history is scanned for credentials too |
 | `exclude`, `no-default-excludes` | what counts as noise in this repository |
 | `fail-on` | the gate, when the command line sets none |
 | `baseline` | a path inside the repository, relative to its root |
@@ -96,6 +96,7 @@ you set there wins over the repository's file.
 | `--exclude` | — | extra noise patterns, comma-separated (path segment like `tests`, or glob like `*.gen.go`) |
 | `--no-default-excludes` | `false` | disable the built-in vendored/generated/minified filter |
 | `--no-correlate` | `false` | disable cross-tool correlation (triage every duplicate report separately) |
+| `--secrets-history` | `false` | also scan the git history for credentials: one that was committed and later deleted is in no file, but is still leaked. With `--diff`, only the commits since that ref. Needs a full clone and the repository root as the target; a shallow clone or a checkout git cannot read is reported as incomplete or failed, never as clean. See [Reports & Gating](reports-and-gating.md#credentials-in-the-git-history) |
 | `--dry-run` | `false` | scan, print the LLM cost estimate, stop before any model call or outward action |
 | `--max-cost` | `0` | cap on LLM spend in USD (needs `--price-config`): refuse to start if the per-finding estimate exceeds it, and stop making model calls once the spend counted during the run reaches it |
 | `--price-config` | — | YAML per-model token prices (see `configs/prices.example.yaml`) |

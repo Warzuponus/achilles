@@ -102,6 +102,32 @@ tools:
     # gitleaks loads <target>/.gitleaks.toml and .gitleaksignore by itself.
     repoConfig: [.gitleaks.toml, .gitleaksignore]
 
+  # The same gitleaks, over the commits instead of the files (--secrets-history). A
+  # credential that was committed and deleted a commit later is in no file, so the
+  # entry above cannot see it, but it is in every clone.
+  - id: gitleaks-history
+    license: MIT
+    commercialSafe: true
+    optIn: secrets-history         # runs only when asked for
+    languages: [generic]
+    image: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+    bin: gitleaks
+    format: sarif
+    argv: ["git", "--exit-code", "0", "--report-format", "sarif", "--report-path", "{out}/results.sarif", "{src}"]
+    # With --diff REF only the commits under review are read.
+    diffArg: "--log-opts={diff}..HEAD"
+    outputFile: "{out}/results.sarif"
+    successExitCodes: [0]
+    # When git itself fails (a checkout git refuses to read, a range that does not
+    # resolve, a damaged object) gitleaks logs this, exits 0 and reports no leaks.
+    # It also logs it for a harmless git warning; an unneeded "incomplete" is the
+    # cheaper mistake.
+    incompleteWhen: ["stderr is not empty"]
+    localConfig:
+      - file: .gitleaks.toml
+        arg: "--config={src}/.gitleaks.toml"
+    repoConfig: [.gitleaks.toml, .gitleaksignore]
+
   - id: osv-scanner
     license: Apache-2.0
     commercialSafe: true

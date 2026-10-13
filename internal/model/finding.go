@@ -107,6 +107,13 @@ type Finding struct {
 	// IsDependencyAdvisory consult it first.
 	Category string `json:"category,omitempty"`
 
+	// Commit is set on a finding made in the git history rather than in the files
+	// as they are now (--secrets-history): the commit that added the reported line.
+	// Location is then that commit's file and line, which may no longer exist.
+	// CommitDate is when it was committed, as the scanner gave it.
+	Commit     string `json:"commit,omitempty"`
+	CommitDate string `json:"commitDate,omitempty"`
+
 	// Shadow marks a finding produced by a generated rule still inside its
 	// shadow window (§9.4 rule flywheel): it is reported for observation but
 	// does NOT affect the --fail-on gate, issue filing, or a written baseline.

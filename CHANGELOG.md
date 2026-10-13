@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Credentials in the git history.** `--secrets-history` scans the commits as well as the
+  files, so a credential that was committed and later deleted is reported: it is in no
+  file, but it is in every clone. With `--diff` only the commits since that ref are read,
+  and a finding in them is kept even when the net diff no longer contains the file (a
+  secret added in one commit of a pull request and removed in the next). A credential
+  still in a file is reported once, as the finding in the file; repeats across commits
+  are folded into the earliest. A shallow clone, a subdirectory target, a checkout git
+  cannot read or a `--diff` ref that does not resolve makes the history scan incomplete
+  or failed, never clean: gitleaks itself exits 0 with an empty report in those cases.
+  A repository can turn it on for itself with `secrets-history: true` in `.achilles.yaml`.
+
 ## [0.1.0] - 2026-10-12
 
 First public release.

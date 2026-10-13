@@ -213,6 +213,8 @@ func run(argv []string) error {
 	if err := applyBaseline(o, ev, runID, &scan); err != nil {
 		return err
 	}
+	// Comments in the code that suppress a finding: honoured, reported, refusable.
+	applySuppressions(o, ev, runID, absTarget, &scan, os.Stderr)
 	clusters := correlateFindings(o, ev, runID, &scan)
 
 	llmUsage, err := triageScan(llmCtx, o, ev, runID, &scan, clusters, tasks)

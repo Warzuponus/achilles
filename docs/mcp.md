@@ -47,7 +47,7 @@ the server can read what the user who started the client can read.
 | Tool | What it returns |
 |------|-----------------|
 | `list_scans` | the scans in the vault, newest first: when, what was scanned, how many findings, and which tools failed or could not analyze everything |
-| `list_findings` | the findings of one scan (default: the newest), most severe first, each with its verdict if it was reviewed. Filters: `min_severity`, `status` (`open`, `confirmed`, `dismissed`, `unreviewed`), `limit`, `offset` |
+| `list_findings` | the findings of one scan (default: the newest), most severe first, each with its verdict if it was reviewed and, if an `achilles:ignore` comment suppresses it, the reason given. Filters: `min_severity`, `status` (`open`, `confirmed`, `dismissed`, `suppressed`, `unreviewed`), `limit`, `offset` |
 | `get_finding` | one finding in full, by fingerprint: the scanner's message, the code around it, the verdict and its reasoning, the proposed fix and whether re-scanning verified it, recorded feedback, and how many scans reported it |
 | `rule_health` | per rule, how analysts have labeled its findings, and whether `--calibrate` would rule the rule out |
 

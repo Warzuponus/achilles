@@ -78,6 +78,10 @@ func newRig(t *testing.T) *rig {
 		Exploitability: model.ExploitNotReachable, Reasoning: "the file holds public data"})
 	put(t, store, "run-new", vault.KindRemediation, "remediation", "fp-cmd", model.Remediation{Summary: "Pass the arguments as a list",
 		Diff: "--- a/cmd/run.go\n+++ b/cmd/run.go\n@@ -41,1 +41,1 @@\n-old\n+new\n", Confidence: 0.9})
+	// fp-sql has an achilles:ignore comment beside it in the scanned code.
+	put(t, store, "run-new", vault.KindScanMeta, "suppress", "", map[string]any{"suppressed": []map[string]any{
+		{"fingerprint": "fp-sql", "ruleId": "go.sqli", "file": "db/query.go", "line": 11, "reason": "parameters are bound", "new": true},
+	}})
 	put(t, store, "run-new", vault.KindScanMeta, "diagnostics", "", map[string]any{"parseFailures": []map[string]string{
 		{"tool": "opengrep", "stage": "partial", "error": "timed out"}, {"tool": "opengrep", "stage": "partial", "error": "again"},
 	}})
@@ -297,6 +301,10 @@ func TestListFindings(t *testing.T) {
 	if _, reviewed := byFP["fp-sql"]["verdict"]; reviewed {
 		t.Errorf("fp-sql has no verdict: %v", byFP["fp-sql"])
 	}
+	// A finding the code itself suppresses says so, with the reason the comment gives.
+	if byFP["fp-sql"]["suppressedInCodeBecause"] != "parameters are bound" || byFP["fp-cmd"]["suppressedInCodeBecause"] != nil {
+		t.Errorf("suppression: fp-sql=%v fp-cmd=%v", byFP["fp-sql"]["suppressedInCodeBecause"], byFP["fp-cmd"]["suppressedInCodeBecause"])
+	}
 	// The credential is listed; its matched text is not.
 	if strings.Contains(text, leakedKey) {
 		t.Fatalf("the list carries the credential:\n%s", text)
@@ -312,8 +320,9 @@ func TestListFindings(t *testing.T) {
 	}
 	for args, want := range map[string]int{
 		`{"min_severity":"high"}`: 3, `{"min_severity":"critical"}`: 1,
-		`{"status":"open"}`: 3, `{"status":"dismissed"}`: 1, `{"status":"confirmed"}`: 1, `{"status":"unreviewed"}`: 2,
-		`{"run_id":"run-old"}`: 1, `{"limit":2}`: 2, `{"limit":2,"offset":3}`: 1, `{"offset":10}`: 0,
+		`{"status":"open"}`: 2, `{"status":"dismissed"}`: 1, `{"status":"confirmed"}`: 1, `{"status":"unreviewed"}`: 2,
+		`{"status":"suppressed"}`: 1,
+		`{"run_id":"run-old"}`:    1, `{"limit":2}`: 2, `{"limit":2,"offset":3}`: 1, `{"offset":10}`: 0,
 	} {
 		if got := count(args); got != want {
 			t.Errorf("%s: %d finding(s), want %d", args, got, want)

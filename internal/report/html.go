@@ -39,6 +39,7 @@ type htmlView struct {
 	Counts     []severityCount // ordered, only non-zero
 	Findings   []findingView   // actionable findings: severity, then AI-confirmed first
 	Dismissed  []findingView   // ruled out by the AI review; listed so the call is auditable
+	Suppressed []findingView   // suppressed by a comment in the scanned code; listed with the reason
 	Confirmed  int             // actionable findings the AI review confirmed
 	HasReview  bool
 	HasAdvice  bool
@@ -218,6 +219,12 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 	for _, f := range r.Scan.Dismissed {
 		dismissed = append(dismissed, toView(f))
 	}
+	var suppressed []findingView
+	for _, f := range r.Scan.Suppressed {
+		if f.Suppression != nil {
+			suppressed = append(suppressed, toView(f))
+		}
+	}
 	sort.SliceStable(findings, func(i, j int) bool {
 		a, b := findings[i], findings[j]
 		if severityRank[a.Severity] != severityRank[b.Severity] {
@@ -241,6 +248,7 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 		Counts:     ordered,
 		Findings:   findings,
 		Dismissed:  dismissed,
+		Suppressed: suppressed,
 		Confirmed:  confirmed,
 		HasReview:  r.Review != nil && (r.Review.Summary != "" || len(r.Review.Risks) > 0),
 		HasAdvice:  r.Advice != nil && len(r.Advice.Upgrades) > 0,
@@ -290,6 +298,9 @@ func summaryLine(v htmlView) string {
 	}
 	if n := len(v.Dismissed); n > 0 {
 		s += fmt.Sprintf("; %d more ruled out as false positives (listed at the end)", n)
+	}
+	if n := len(v.Suppressed); n > 0 {
+		s += fmt.Sprintf("; %d suppressed by comments in the code (listed at the end)", n)
 	}
 	return s + "."
 }
@@ -391,6 +402,7 @@ const htmlDoc = `<!doctype html>
   <div class="card"><div class="n">{{.Total}}</div><div class="l">Findings</div></div>
   {{range .Counts}}<div class="card"><div class="n">{{.Count}}</div><div class="l"><span class="badge b-{{sev .Severity}}">{{sev .Severity}}</span></div></div>{{end}}
   {{if .Dismissed}}<div class="card"><div class="n">{{len .Dismissed}}</div><div class="l">Dismissed by AI</div></div>{{end}}
+  {{if .Suppressed}}<div class="card"><div class="n">{{len .Suppressed}}</div><div class="l">Suppressed in code</div></div>{{end}}
 </div>
 
 {{if .HasReview}}
@@ -477,6 +489,22 @@ const htmlDoc = `<!doctype html>
   {{end}}
   {{else}}<div class="empty">{{if .Incomplete}}No findings from the tools that ran, but the scan is incomplete.{{else}}No findings. ✅{{end}}</div>{{end}}
 </section>
+
+{{if .Suppressed}}
+<section>
+  <h2>Suppressed by comments in the code <span class="tag">{{len .Suppressed}}</span></h2>
+  <p class="lead">Each of these has an <code>achilles:ignore</code> comment beside it in the scanned code. They did not gate the build or open issues. The comment is the repository's own word about its finding: read the reason, especially where the change under review added it. Re-run with <code>--no-repo-config</code> to treat them as findings.</p>
+  <div class="tbl-scroll"><table>
+    <tr><th>Rule</th><th>Where</th><th>Reason given</th><th></th></tr>
+    {{range .Suppressed}}
+    <tr><td><span class="badge b-{{sev .Severity}}">{{sev .Severity}}</span> <span class="rule">{{.RuleID}}</span></td>
+      <td>{{.Location.File}}{{if .Location.Region.StartLine}}:{{.Location.Region.StartLine}}{{end}}</td>
+      <td>{{.Suppression.Reason}}</td>
+      <td>{{if .Suppression.New}}<strong>added by this change</strong>{{end}}</td></tr>
+    {{end}}
+  </table></div>
+</section>
+{{end}}
 
 {{if .Dismissed}}
 <section>

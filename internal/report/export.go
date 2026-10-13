@@ -30,18 +30,23 @@ func sarifLevel(s model.Severity) string {
 func WriteSARIFReport(w io.Writer, s model.Scan) error {
 	// Results must be a non-nil array: SARIF requires `results` to be an array,
 	// and GitHub code scanning rejects `"results": null` (which a nil slice emits).
-	rules, ruleIndex := sarifRules(s.Findings, s.Dismissed)
+	rules, ruleIndex := sarifRules(s.Findings, s.Dismissed, s.Suppressed)
 	run := model.SarifRun{
 		Tool:    model.SarifTool{Driver: model.SarifDriver{Name: "achilles", Rules: rules}},
 		Results: []model.SarifResult{},
 	}
-	all := append(append([]model.Finding{}, s.Findings...), s.Dismissed...)
+	all := append(append(append([]model.Finding{}, s.Findings...), s.Dismissed...), s.Suppressed...)
 	hashes := lineHashes(all)
 	for i, f := range all {
 		// Findings the AI review ruled out are still emitted, marked suppressed, so
 		// code scanning shows them as dismissed (with the reason) and does not
 		// re-open them as new alerts on the next run.
-		r := sarifResult(f, i >= len(s.Findings))
+		// Findings suppressed by a comment in the code are emitted too, with the
+		// suppression kind SARIF has for exactly that ("inSource").
+		r := sarifResult(f, i >= len(s.Findings) && f.Suppression == nil)
+		if sup := f.Suppression; sup != nil {
+			r.Suppressions = []model.SarifSuppression{{Kind: "inSource", Status: "accepted", Justification: redact.Secrets(sup.Reason)}}
+		}
 		if idx, ok := ruleIndex[f.RuleID]; ok {
 			r.RuleIndex = &idx
 		}
@@ -285,6 +290,34 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 			fmt.Fprintf(w, "| %s | `%s` | %s | %s | %s |\n",
 				f.Severity, markdownCode(f.RuleID), MarkdownText(loc), verdict, FindingMessage(f))
 		}
+	}
+	if len(s.Suppressed) > 0 {
+		added := 0
+		for _, f := range s.Suppressed {
+			if f.Suppression != nil && f.Suppression.New {
+				added++
+			}
+		}
+		note := ""
+		if added > 0 {
+			note = fmt.Sprintf(", **%d of them added by this change**", added)
+		}
+		fmt.Fprintf(w, "\n<details><summary>%d finding(s) suppressed by comments in the code%s</summary>\n\n", len(s.Suppressed), note)
+		fmt.Fprintln(w, "| Rule | Location | Reason given | |")
+		fmt.Fprintln(w, "|------|----------|--------------|---|")
+		for _, f := range s.Suppressed {
+			sup := f.Suppression
+			if sup == nil {
+				continue
+			}
+			loc := fmt.Sprintf("%s:%d", f.Location.File, f.Location.Region.StartLine)
+			flag := ""
+			if sup.New {
+				flag = "added by this change"
+			}
+			fmt.Fprintf(w, "| `%s` | %s | %s | %s |\n", markdownCode(f.RuleID), MarkdownText(loc), MarkdownText(sup.Reason), flag)
+		}
+		fmt.Fprint(w, "\n</details>\n")
 	}
 	if len(s.Dismissed) > 0 {
 		fmt.Fprintf(w, "\n<details><summary>%d finding(s) ruled out by the AI review</summary>\n\n", len(s.Dismissed))

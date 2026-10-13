@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Warzuponus/achilles/internal/model"
+	"github.com/Warzuponus/achilles/internal/redact"
 )
 
 var severityOrder = []model.Severity{
@@ -71,8 +72,27 @@ func WriteHuman(w io.Writer, s model.Scan) {
 	if n := len(s.Dismissed); n > 0 {
 		fmt.Fprintf(w, "%d more finding(s) ruled out as false positives by the AI review (not counted above; see the HTML/Markdown report, or --keep-dismissed to include them)\n", n)
 	}
+	if n := len(s.Suppressed); n > 0 {
+		fmt.Fprintf(w, "\n%d more finding(s) suppressed by comments in the scanned code (achilles:ignore; not counted above; --no-repo-config to refuse them):\n", n)
+		for _, f := range s.Suppressed {
+			sup := f.Suppression
+			if sup == nil {
+				continue
+			}
+			added := ""
+			if sup.New {
+				added = "  [ADDED BY THE CHANGE UNDER REVIEW]"
+			}
+			fmt.Fprintf(w, "  [%s] %s at %s:%d — %s%s\n", f.Severity, f.RuleID, f.Location.File, f.Location.Region.StartLine,
+				redact.Secrets(sup.Reason), added)
+		}
+	}
 	if len(s.Findings) == 0 {
-		if len(s.FailedTools) == 0 {
+		switch {
+		case len(s.FailedTools) > 0:
+		case len(s.Suppressed) > 0:
+			fmt.Fprintf(w, "\nNo findings besides the %d suppressed in the code.\n", len(s.Suppressed))
+		default:
 			fmt.Fprintln(w, "\nNo findings. Clean scan.")
 		}
 		return

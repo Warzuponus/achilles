@@ -7,6 +7,14 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Inline suppressions.** A comment `achilles:ignore RULE -- reason` on a finding's line,
+  or alone on the line above, suppresses that finding: it does not gate, is not sent to
+  the model and files no issue. It is never hidden: every report lists suppressed
+  findings with their reasons (SARIF as `inSource` suppressions), a suppression the
+  change under review adds is flagged under `--diff`, and `--no-repo-config` honours
+  none. A comment with no rule or no reason is not honoured, and credential findings,
+  dependency advisories and history findings cannot be suppressed this way. The MCP
+  server reports the reason too (`status: suppressed`).
 - **MCP server.** `achilles mcp` serves the Evidence Vault to an assistant that speaks the
   Model Context Protocol, over stdio: `list_scans`, `list_findings`, `get_finding` and
   `rule_health`. It is read-only by construction (no tool writes, and its handle on the

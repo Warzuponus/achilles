@@ -64,8 +64,8 @@ func (s *Server) toolset() []tool {
 			schema: object(map[string]any{
 				"run_id":       map[string]any{"type": "string", "description": "The scan to read (from list_scans). Default: the newest scan."},
 				"min_severity": map[string]any{"type": "string", "enum": []string{"critical", "high", "medium", "low", "info"}, "description": "Only findings at or above this severity."},
-				"status": map[string]any{"type": "string", "enum": []string{"any", "open", "confirmed", "dismissed", "unreviewed"},
-					"description": "any (default); open: not dismissed by the AI review; confirmed: reviewed and judged a true positive with high confidence; dismissed: ruled out by the AI review; unreviewed: no verdict."},
+				"status": map[string]any{"type": "string", "enum": []string{"any", "open", "confirmed", "dismissed", "suppressed", "unreviewed"},
+					"description": "any (default); open: neither dismissed by the AI review nor suppressed in the code; confirmed: reviewed and judged a true positive with high confidence; dismissed: ruled out by the AI review; suppressed: has an achilles:ignore comment beside it in the code; unreviewed: no verdict."},
 				"limit":  map[string]any{"type": "integer", "minimum": 1, "maximum": maxFindings, "description": "How many findings to return (default 50)."},
 				"offset": map[string]any{"type": "integer", "minimum": 0, "description": "Skip this many, to page through a long list."},
 			}),
@@ -197,8 +197,27 @@ func (s *Server) runFindings(runID string) []model.Finding {
 	var findings []model.Finding
 	verdicts := map[string]model.Verdict{}
 	fixes := map[string]model.Remediation{}
+	suppressions := map[string]model.Suppression{} // fingerprint and file -> the comment that suppressed it
 	for _, r := range s.store.ByRun(runID) {
 		switch r.Kind {
+		case vault.KindScanMeta:
+			if r.Source != "suppress" {
+				continue
+			}
+			var doc struct {
+				Suppressed []struct {
+					Fingerprint string `json:"fingerprint"`
+					File        string `json:"file"`
+					Line        int    `json:"line"`
+					Reason      string `json:"reason"`
+					New         bool   `json:"new"`
+				} `json:"suppressed"`
+			}
+			if json.Unmarshal(r.Payload, &doc) == nil {
+				for _, e := range doc.Suppressed {
+					suppressions[e.Fingerprint+"\x00"+e.File] = model.Suppression{File: e.File, Line: e.Line, Reason: server.Redact(e.Reason), New: e.New}
+				}
+			}
 		case vault.KindFinding:
 			var f model.Finding
 			if json.Unmarshal(r.Payload, &f) == nil {
@@ -225,6 +244,9 @@ func (s *Server) runFindings(runID string) []model.Finding {
 		if rem, ok := fixes[f.Fingerprint]; ok && !f.IsSecret() {
 			f.Remediation = &rem
 		}
+		if sup, ok := suppressions[f.Fingerprint+"\x00"+f.Location.File]; ok {
+			f.Suppression = &sup
+		}
 		server.RedactFinding(f)
 	}
 	return findings
@@ -249,7 +271,10 @@ type findingBrief struct {
 	Message     string        `json:"message"`
 	ReportOnly  bool          `json:"reportOnly,omitempty"` // from a generated rule still under observation
 	Verdict     *verdictBrief `json:"verdict,omitempty"`
-	HasFix      bool          `json:"hasFix"`
+	// SuppressedBecause is the reason given by an achilles:ignore comment beside
+	// the finding, when there is one.
+	SuppressedBecause string `json:"suppressedInCodeBecause,omitempty"`
+	HasFix            bool   `json:"hasFix"`
 }
 
 func (s *Server) listFindings(_ context.Context, args json.RawMessage) (any, error) {
@@ -319,6 +344,9 @@ func (s *Server) listFindings(_ context.Context, args json.RawMessage) (any, err
 			b.Verdict = &verdictBrief{Classification: string(v.Classification), Confidence: v.Confidence,
 				Exploitability: string(v.Exploitability), Dismissed: f.Dismissed()}
 		}
+		if f.Suppression != nil {
+			b.SuppressedBecause = clip(f.Suppression.Reason, maxBriefMessage)
+		}
 		page = append(page, b)
 	}
 	out["findings"] = page
@@ -333,7 +361,9 @@ func statusFilter(status string) (func(model.Finding) bool, error) {
 	case "", "any":
 		return func(model.Finding) bool { return true }, nil
 	case "open":
-		return func(f model.Finding) bool { return !f.Dismissed() }, nil
+		return func(f model.Finding) bool { return !f.Dismissed() && f.Suppression == nil }, nil
+	case "suppressed":
+		return func(f model.Finding) bool { return f.Suppression != nil }, nil
 	case "dismissed":
 		return func(f model.Finding) bool { return f.Dismissed() }, nil
 	case "confirmed":
@@ -341,7 +371,7 @@ func statusFilter(status string) (func(model.Finding) bool, error) {
 	case "unreviewed":
 		return func(f model.Finding) bool { return f.Verdict == nil }, nil
 	}
-	return nil, errors.New("status must be one of any, open, confirmed, dismissed, unreviewed")
+	return nil, errors.New("status must be one of any, open, confirmed, dismissed, suppressed, unreviewed")
 }
 
 // scanFor resolves a run id to a scan; an empty id means the newest scan.

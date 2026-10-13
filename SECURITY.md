@@ -143,10 +143,18 @@ change them with the code.
   ignored. For fixes this is what stops a planted entry from being shown as a suggested
   patch, or applied to a branch by `--fix-pr`.
 
-What it does not do: `--no-repo-config` does not neutralize inline suppression
-comments, and it cannot make a scanner ignore a file it loads by itself. If you gate
-code from authors you do not trust, review changes to those files and comments as
-part of the change, or scan a checkout from which they have been removed.
+Achilles' own inline suppression, `achilles:ignore RULE -- reason`, follows the same
+rules. A suppressed finding is moved to its own list in every report with the reason
+given, a suppression that the change under review adds is flagged, a comment with no
+rule or no reason is not honoured, credential findings cannot be suppressed this way,
+and `--no-repo-config` honours none of them.
+
+What it does not do: `--no-repo-config` does not neutralize the scanners' own inline
+suppression comments (`#nosec`, `nosemgrep`, `gitleaks:allow`), and it cannot make a
+scanner ignore a file it loads by itself. Those take effect inside the scanner, before
+Achilles sees a finding. If you gate code from authors you do not trust, review
+changes to those files and comments as part of the change, or scan a checkout from
+which they have been removed.
 
 ## Deploying safely
 

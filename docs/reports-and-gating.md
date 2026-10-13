@@ -161,6 +161,48 @@ changed files, at/above your severity floor:
 achilles --diff origin/main --baseline .achilles/baseline.json --fail-on high .
 ```
 
+### Suppressing one finding in the code
+
+When a finding has been looked at and is fine where it is, say so beside it:
+
+```python
+subprocess.run(cmd, shell=True)  # achilles:ignore B602 -- cmd comes from a fixed table in build.py
+```
+
+```go
+// achilles:ignore gosec:G204 -- bin is checked against an allowlist in resolveTool
+out, err := exec.Command(bin, args...).Output()
+```
+
+The comment names the rule (or several, separated by commas) and gives a reason after
+` -- `. It applies to a finding on its own line, or on the line directly below when
+the comment stands alone. A rule can be written as its id (`G204`), with its tool
+(`gosec:G204`), or as the last part of a long dotted id (`dangerous-system-call`).
+
+What happens to a suppressed finding:
+
+- It does not gate, is not sent to the model, and files no issue. An open issue for
+  it is closed with a comment that quotes the reason and says it was not fixed.
+- It is **not hidden**. Every report lists suppressed findings with their reasons, the
+  scan prints how many there were, and SARIF marks them as suppressed in source.
+- With `--diff`, a suppression on a line the change itself added or edited is flagged
+  on stderr and at the top of every report, the same way a change to a scanner's
+  ignore file is. The change is suppressing a finding in itself; read the reason.
+- With `--no-repo-config` no suppression comment is honoured.
+
+What a comment cannot do:
+
+- Suppress without saying why, or without naming the rule. Such a comment is not
+  honoured, and the scan says where it is. There is no "ignore everything here".
+- Suppress a credential finding, a dependency advisory, or a finding from the git
+  history. Use the scanner's own allowlist for a test fixture that looks like a
+  secret; an advisory is resolved by upgrading.
+- Suppress a different rule that fires on the same line. Each rule is named.
+
+Scanners have their own inline comments too (`#nosec`, `nosemgrep`, `gitleaks:allow`).
+Those remove the finding before Achilles sees it, so they are not reported; prefer
+`achilles:ignore` where you want the suppression to stay visible.
+
 ### Credentials in the git history
 
 A scan reads the files as they are now. A credential that was committed and deleted a

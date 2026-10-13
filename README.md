@@ -105,7 +105,7 @@ their flags or behavior may change): `--fix-pr`, `--deep-verify`, `--llm-samples
 `--calibrate` and `--feedback`, `--rag`, `--threat-model`, `--sbom`, the research
 agents (`--research`, `--mine-rules`), the `anthropic` provider preset, the War Room
 (`achillesd`), the fleet dispatcher (`achilles-fleet`), `--profile full` with its
-per-language tool images, and the GitLab report outputs (`--gitlab-sast`,
+per-language tool images, the MCP server (`achilles mcp`), and the GitLab report outputs (`--gitlab-sast`,
 `--gitlab-secret-detection`, `--gitlab-code-quality`: checked against GitLab's published
 report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/README.md) cover each of them.
 

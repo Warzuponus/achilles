@@ -7,6 +7,12 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **MCP server.** `achilles mcp` serves the Evidence Vault to an assistant that speaks the
+  Model Context Protocol, over stdio: `list_scans`, `list_findings`, `get_finding` and
+  `rule_health`. It is read-only by construction (no tool writes, and its handle on the
+  vault refuses writes), serves credential findings without their matched text, marks
+  every result's text as data copied from scanned code, and bounds the size of its
+  answers. No new dependency. See `docs/mcp.md`.
 - **Fix suggestions are cached too.** With `--remediate`, a suggestion made for the same
   finding, code, position, fix hint, prompt and model is reused instead of asked for
   again, under the same `--verdict-cache-days` limit and the same signing key as cached

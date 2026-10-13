@@ -8,8 +8,8 @@ Every `achilles` flag, grouped by task. (For `achilles-fleet`, see [Fleet](fleet
 
 ## Subcommands
 
-These run instead of a scan. (A scan target literally named `version`, `doctor` or
-`tools` must be written `./version` etc.)
+These run instead of a scan. (A scan target literally named `version`, `doctor`,
+`tools` or `mcp` must be written `./version` etc.)
 
 | Command | What it does |
 |---------|--------------|
@@ -18,6 +18,7 @@ These run instead of a scan. (A scan target literally named `version`, `doctor` 
 | `achilles tools list` | pinned versions, whether upstream publishes a download for this platform, and what is installed |
 | `achilles tools install [--force] [name...]` | download, sha256-verify (fail closed) and install pinned scanners into `$ACHILLES_HOME/bin` (default `~/.achilles/bin`). Names: `opengrep gosec osv-scanner trivy gitleaks rules`. No names = all five plus the community rules. Skips tools already at the pinned version unless `--force`. |
 | `achilles tools doctor` | same as `achilles doctor` |
+| `achilles mcp [--vault PATH]` | serve the Evidence Vault, read-only, to an MCP client over stdin/stdout (started by the client, not by hand). Tools: `list_scans`, `list_findings`, `get_finding`, `rule_health`. See [MCP Server](mcp.md) |
 
 ## Settings files
 

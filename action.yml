@@ -96,6 +96,12 @@ inputs:
     required: false
     default: ${{ github.token }}
 
+  # --- extra scanners ---
+  with:
+    description: "Opt-in scanners to install and run as well, comma-separated: zizmor (GitHub Actions workflows and composite actions; offline)."
+    required: false
+    default: ""
+
   # --- gating and outputs ---
   fail-on:
     description: "Fail the job if a finding at or above this severity remains: critical | high | medium | low. Empty never fails on findings."
@@ -199,10 +205,22 @@ runs:
 
     - name: Install scanners
       shell: bash
+      env:
+        INPUT_WITH: ${{ inputs.with }}
       run: |
         set -euo pipefail
         # Hash-pinned downloads; fails closed on a checksum mismatch.
         achilles tools install
+        # Opt-in scanners are installed by name. The input reaches the script through
+        # the environment and each name is checked before it is used.
+        IFS=', ' read -r -a opt_in <<< "$INPUT_WITH" || true
+        for name in ${opt_in[@]+"${opt_in[@]}"}; do
+          case "$name" in
+            secrets-history) ;; # a second pass of gitleaks, which is already installed
+            *[!a-z0-9-]*) echo "::error::with: '$name' is not a scanner name"; exit 2 ;;
+            *) achilles tools install "$name" ;;
+          esac
+        done
         achilles doctor || true
 
     - name: Run Achilles
@@ -226,6 +244,7 @@ runs:
         INPUT_ISSUES_MAX: ${{ inputs.issues-max }}
         INPUT_ALLOW_PUBLIC: ${{ inputs.allow-public-issues }}
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_WITH: ${{ inputs.with }}
         INPUT_ARGS: ${{ inputs.args }}
         ACHILLES_LLM_API_KEY: ${{ inputs.llm-api-key }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
@@ -250,6 +269,7 @@ runs:
           [ "$INPUT_ALLOW_PUBLIC" = "true" ] && flags+=(--allow-public-issues)
         fi
         [ -n "$INPUT_FAIL_ON" ] && flags+=(--fail-on "$INPUT_FAIL_ON")
+        [ -n "$INPUT_WITH" ] && flags+=(--with "$INPUT_WITH")
         # shellcheck disable=SC2162
         read -r -d '' -a extra <<< "$INPUT_ARGS" || true
         # Flags go before the target so this also works with releases that only

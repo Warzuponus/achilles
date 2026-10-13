@@ -118,8 +118,16 @@ func runToolsInstall(args []string, stdout, stderr io.Writer) error {
 
 	var selected []toolchain.Tool
 	wantRules := fs.NArg() == 0
+	var optional []string
 	if fs.NArg() == 0 {
-		selected = toolchain.Tools()
+		// No names: what the default scan needs. An opt-in scanner is installed by name.
+		for _, t := range toolchain.Tools() {
+			if t.Default {
+				selected = append(selected, t)
+			} else {
+				optional = append(optional, t.Name)
+			}
+		}
 	} else {
 		for _, name := range fs.Args() {
 			if name == "rules" {
@@ -174,6 +182,9 @@ func runToolsInstall(args []string, stdout, stderr io.Writer) error {
 	}
 	if len(failed) > 0 {
 		return fmt.Errorf("tools install: failed: %s", strings.Join(failed, ", "))
+	}
+	if len(optional) > 0 {
+		fmt.Fprintf(stdout, "\nOpt-in scanners are installed by name: achilles tools install %s\n", strings.Join(optional, " "))
 	}
 	fmt.Fprintln(stdout, "\nNext: achilles doctor")
 	return nil

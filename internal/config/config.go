@@ -26,9 +26,10 @@ type ToolConfig struct {
 	// Profiles are the scan profiles (besides the baseline) this tool runs in,
 	// e.g. [full]. Selected via `--profile`.
 	Profiles []string `yaml:"profiles"`
-	// OptIn names a feature that turns this tool on, for a pass that is neither part
-	// of the baseline nor of a profile: "secrets-history" (the --secrets-history
-	// flag) runs the tool over the git history. Such a tool runs only when asked for.
+	// OptIn names what turns this tool on, for a tool that is neither part of the
+	// baseline nor of a profile: it runs only when asked for by that name with
+	// `--with NAME` ("zizmor"), or by the flag made for it ("secrets-history" is
+	// --secrets-history).
 	OptIn string `yaml:"optIn"`
 	// Bespoke marks a tool that has a hand-written adapter rather than the
 	// generic config-driven runner (e.g. opengrep).
@@ -75,6 +76,11 @@ type ToolConfig struct {
 	// if the target contains File, Arg is appended to the tool's argv (so the
 	// tool applies the repo's existing suppressions instead of re-reporting them).
 	LocalConfig []LocalConfigRule `yaml:"localConfig"`
+	// NoRepoConfigArgs are appended to Argv under --no-repo-config, for a tool that
+	// has a switch to ignore the configuration it would otherwise load from the
+	// scanned repository by itself (zizmor's --no-config). With them the files in
+	// RepoConfig are not in effect, so the tool's result is not marked incomplete.
+	NoRepoConfigArgs []string `yaml:"noRepoConfigArgs"`
 	// RepoConfig names the files this tool reads from the scanned repository ON
 	// ITS OWN, with no flag from Achilles (gitleaks loads <target>/.gitleaks.toml
 	// by itself). Achilles cannot withhold these, so it names them when present,

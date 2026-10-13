@@ -51,6 +51,7 @@ const maxSettingsBytes = 1 << 20
 var repoSettingKeys = map[string]bool{
 	"profile":             true, // which set of scanners
 	"secrets-history":     true, // a repository may ask for its commits to be scanned too
+	"with":                true, // ... or for an opt-in scanner the operator has installed
 	"exclude":             true, // paths that are noise in this repository
 	"no-default-excludes": true,
 	"fail-on":             true, // the gate, when the operator did not set one

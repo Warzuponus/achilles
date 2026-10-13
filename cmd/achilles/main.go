@@ -158,6 +158,9 @@ func run(argv []string) error {
 	opengrepRules, shadowRules, cleanupRules := provisionGeneratedRules(o, cfg)
 	defer cleanupRules()
 
+	if err := checkWith(o, cfg); err != nil {
+		return err
+	}
 	// Decided before the registry is built: a history scan that cannot work is not
 	// run, and is reported as a failed tool instead.
 	historyDiags := planHistoryScan(o, cfg, absTarget, os.Stderr)

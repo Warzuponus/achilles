@@ -64,6 +64,10 @@ func gh(repo, tag, file string) string {
 //	osv-scanner  osv-scanner_SHA256SUMS         (published by upstream)
 //	trivy        trivy_0.72.0_checksums.txt     (published by upstream)
 //	gitleaks     gitleaks_8.30.1_checksums.txt  (published by upstream)
+//	zizmor       the sha256 digest GitHub publishes for each asset of release
+//	             v1.30.1 (the release API's `digest` field); upstream ships no
+//	             checksums file. Each of the five was also computed from the downloaded
+//	             archive and agrees, 2026-10-12.
 //	opengrep     NO upstream checksums: sha256sum of each downloaded release asset
 //	             (trust on first use, 2026-10-05). The linux digests agree with the
 //	             ones pinned independently in deployments/achilles/Dockerfile.
@@ -135,6 +139,20 @@ var manifest = []Tool{
 			"darwin/amd64":  {gh("gitleaks/gitleaks", "v8.30.1", "gitleaks_8.30.1_darwin_x64.tar.gz"), TarGz, "gitleaks", "dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709"},
 			"darwin/arm64":  {gh("gitleaks/gitleaks", "v8.30.1", "gitleaks_8.30.1_darwin_arm64.tar.gz"), TarGz, "gitleaks", "b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5"},
 			"windows/amd64": {gh("gitleaks/gitleaks", "v8.30.1", "gitleaks_8.30.1_windows_x64.zip"), Zip, "gitleaks.exe", "d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e"},
+		},
+	},
+	{
+		// Opt-in (`--with zizmor`): not Default, so `achilles doctor` does not ask
+		// for it and it is not in the container image.
+		Name: "zizmor", Bin: "zizmor", Version: "1.30.1",
+		VersionArgs: []string{"--version"},
+		Manual:      "download a release from https://github.com/zizmorcore/zizmor/releases, or `cargo install zizmor`",
+		Assets: map[string]Asset{
+			"linux/amd64":   {gh("zizmorcore/zizmor", "v1.30.1", "zizmor-x86_64-unknown-linux-gnu.tar.gz"), TarGz, "zizmor", "e65324f4430c2717591937edcec90ccbefaf14c174f8ec9415e03ca875b46e1a"},
+			"linux/arm64":   {gh("zizmorcore/zizmor", "v1.30.1", "zizmor-aarch64-unknown-linux-gnu.tar.gz"), TarGz, "zizmor", "7ff1dce33bdd18fd2a4affe63bdd47efcccca97b2cec1c1863ec26e9e2647540"},
+			"darwin/amd64":  {gh("zizmorcore/zizmor", "v1.30.1", "zizmor-x86_64-apple-darwin.tar.gz"), TarGz, "zizmor", "10e6b18b11ea07e515a16f0f0518c7b07527bc9977c1fd5698181ce7f3554202"},
+			"darwin/arm64":  {gh("zizmorcore/zizmor", "v1.30.1", "zizmor-aarch64-apple-darwin.tar.gz"), TarGz, "zizmor", "e28d22b087f9ebb8d99da6e740d348c930f559961c7c3f12badda54f882195a2"},
+			"windows/amd64": {gh("zizmorcore/zizmor", "v1.30.1", "zizmor-x86_64-pc-windows-msvc.zip"), Zip, "zizmor.exe", "b183b1e996eddfab9659f1e9b46e059f1ef1cf984a1f14e5da09f7876a4b3a1c"},
 		},
 	},
 }

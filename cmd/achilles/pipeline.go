@@ -83,6 +83,8 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 		}
 		if o.noRepoConfig {
 			tc.LocalConfig = nil // do not hand the scanner the repository's own ignore/config files
+			// ... and tell it not to go and load them itself, when it has a switch for that.
+			tc.Argv = append(append([]string(nil), tc.Argv...), tc.NoRepoConfigArgs...)
 		}
 		if o.diffRef != "" && tc.DiffArg != "" {
 			// A tool that reads commits is limited to the ones under review.

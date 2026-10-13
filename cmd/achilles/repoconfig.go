@@ -54,7 +54,10 @@ func repoConfigInEffect(cfg *config.Config, reg *scanner.Registry, target string
 		}
 		for _, f := range files {
 			if _, err := os.Lstat(filepath.Join(target, f)); err == nil {
-				uses = append(uses, repoConfigUse{Tool: tc.ID, File: f, SelfRead: selfRead[f]})
+				// A tool that can be told to ignore its own configuration
+				// (noRepoConfigArgs) is treated like one Achilles passes the file to:
+				// under --no-repo-config the file is simply not in effect.
+				uses = append(uses, repoConfigUse{Tool: tc.ID, File: f, SelfRead: selfRead[f] && len(tc.NoRepoConfigArgs) == 0})
 			}
 		}
 	}

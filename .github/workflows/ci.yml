@@ -81,6 +81,10 @@ jobs:
           go-version: "1.27.1"
           target: examples/quickstart
           upload-report: "false"
+          # An opt-in scanner too: installs it by its pinned checksum and runs it.
+          # The sample has no workflows, which zizmor must report as nothing to
+          # scan, not as a failure (--strict-tools would fail the job).
+          with: zizmor
           args: --strict-tools
 
   # Known vulnerabilities in the Go standard library and in dependencies, limited to

@@ -7,6 +7,15 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **`--with zizmor`: GitHub Actions workflows.** An opt-in scanner,
+  [zizmor](https://docs.zizmor.sh), audits workflows and composite actions (template
+  injection, credential persistence, cache poisoning, unpinned actions). It is not
+  part of the default set or the container image: install it with `achilles tools
+  install zizmor` (pinned by sha256 like the others) and name it with `--with`, or with
+  the GitHub Action's new `with` input, which installs it too. It always runs offline.
+  The repository's `zizmor.yml` is honoured and named, and `--no-repo-config` makes
+  zizmor ignore it. `achilles tools install` with no names installs the five default
+  scanners as before.
 - **Inline suppressions.** A comment `achilles:ignore RULE -- reason` on a finding's line,
   or alone on the line above, suppresses that finding: it does not gate, is not sent to
   the model and files no issue. It is never hidden: every report lists suppressed
@@ -37,6 +46,12 @@ All notable changes to this project are recorded here. The format follows
   cannot read or a `--diff` ref that does not resolve makes the history scan incomplete
   or failed, never clean: gitleaks itself exits 0 with an empty report in those cases.
   A repository can turn it on for itself with `secrets-history: true` in `.achilles.yaml`.
+
+### Fixed
+- A scanner that says there is nothing for it to scan (osv-scanner on a tree with no
+  dependency manifests, exit code 128) was reported as incomplete because of that exit
+  code, which failed the scan under `--strict-tools`. It is a finished run with no
+  results.
 
 ## [0.1.0] - 2026-10-12
 

@@ -16,7 +16,7 @@ These run instead of a scan. (A scan target literally named `version`, `doctor`,
 | `achilles version` | same as `--version` |
 | `achilles doctor` | per default-profile scanner: where it was found (`~/.achilles/bin` first, then `PATH`), its version vs the pinned one, `ok`/`missing`/`outdated`/`no-asset`, and the exact fix command; also whether `go` (needed by gosec) and Docker are available, whether an LLM key is set (`set`/`not set` only — the key is never printed) and the resolved base URL, and whether the community rules are installed. Exits non-zero (2) if a required scanner is missing. |
 | `achilles tools list` | pinned versions, whether upstream publishes a download for this platform, and what is installed |
-| `achilles tools install [--force] [name...]` | download, sha256-verify (fail closed) and install pinned scanners into `$ACHILLES_HOME/bin` (default `~/.achilles/bin`). Names: `opengrep gosec osv-scanner trivy gitleaks rules`. No names = all five plus the community rules. Skips tools already at the pinned version unless `--force`. |
+| `achilles tools install [--force] [name...]` | download, sha256-verify (fail closed) and install pinned scanners into `$ACHILLES_HOME/bin` (default `~/.achilles/bin`). Names: `opengrep gosec osv-scanner trivy gitleaks rules`, and the opt-in `zizmor`. No names = the five default scanners plus the community rules; an opt-in scanner is installed by name. Skips tools already at the pinned version unless `--force`. |
 | `achilles tools doctor` | same as `achilles doctor` |
 | `achilles mcp [--vault PATH]` | serve the Evidence Vault, read-only, to an MCP client over stdin/stdout (started by the client, not by hand). Tools: `list_scans`, `list_findings`, `get_finding`, `rule_health`. See [MCP Server](mcp.md) |
 
@@ -43,7 +43,7 @@ code is scanned:
 
 | Setting | Notes |
 |---------|-------|
-| `profile`, `timeout`, `secrets-history` | which scanners run, how long they get, and whether the git history is scanned for credentials too |
+| `profile`, `with`, `timeout`, `secrets-history` | which scanners run (including opt-in ones the operator has installed), how long they get, and whether the git history is scanned for credentials too |
 | `exclude`, `no-default-excludes` | what counts as noise in this repository |
 | `fail-on` | the gate, when the command line sets none |
 | `baseline` | a path inside the repository, relative to its root |
@@ -97,6 +97,7 @@ you set there wins over the repository's file.
 | `--exclude` | — | extra noise patterns, comma-separated (path segment like `tests`, or glob like `*.gen.go`) |
 | `--no-default-excludes` | `false` | disable the built-in vendored/generated/minified filter |
 | `--no-correlate` | `false` | disable cross-tool correlation (triage every duplicate report separately) |
+| `--with` | — | comma-separated opt-in scanners to run as well as the profile's. `zizmor`: GitHub Actions workflows and composite actions, always offline (no token is used and no request is made, so its online audits do not run); install it with `achilles tools install zizmor`. A name the registry does not offer is an error. In the GitHub Action, use the `with` input, which also installs the scanner |
 | `--secrets-history` | `false` | also scan the git history for credentials: one that was committed and later deleted is in no file, but is still leaked. With `--diff`, only the commits since that ref. Needs a full clone and the repository root as the target; a shallow clone or a checkout git cannot read is reported as incomplete or failed, never as clean. See [Reports & Gating](reports-and-gating.md#credentials-in-the-git-history) |
 | `--dry-run` | `false` | scan, print the LLM cost estimate, stop before any model call or outward action |
 | `--max-cost` | `0` | cap on LLM spend in USD (needs `--price-config`): refuse to start if the per-finding estimate exceeds it, and stop making model calls once the spend counted during the run reaches it |

@@ -97,8 +97,8 @@ read the repository. Achilles refuses to do so in a public repository unless you
 
 Scanners read ignore lists and configuration from the repository they scan:
 `.gitleaks.toml` and `.gitleaksignore`, `.trivyignore` and `trivy.yaml`,
-`.semgrepignore`, `osv-scanner.toml`, and inline comments such as `#nosec`,
-`nosemgrep` and `gitleaks:allow`. That is how a team records "we looked at this and
+`.semgrepignore`, `osv-scanner.toml`, `zizmor.yml`, and inline comments such as
+`#nosec`, `nosemgrep` and `gitleaks:allow`. That is how a team records "we looked at this and
 it is fine". It also means a pull request can add a secret and the allowlist entry
 that hides it in the same change.
 
@@ -111,7 +111,9 @@ What Achilles does about it:
 - `--no-repo-config` refuses them: files Achilles would pass to a scanner are not
   passed, and a scanner that reads one on its own (most do) is reported as
   **incomplete**, which fails a `--strict-tools` run. Its findings still count; its
-  silence is not treated as evidence.
+  silence is not treated as evidence. A scanner that has a switch for ignoring its
+  own configuration (zizmor's `--no-config`) is given it instead, and its result is
+  then complete.
 
 The repository's own Achilles settings file, `.achilles.yaml`, is held to the same
 rules and to a tighter one. It can set only the flags that shape the scan of that

@@ -108,6 +108,11 @@ achilles --html-report report.html /path/to/code   # open report.html in a brows
 - **`--profile default|full`** — `default` is the five baseline tools above.
   `full` adds the heavy per-language analyzers (JVM/PHP/.NET/C++), which need
   their prebuilt images + language prerequisites (see `deployments/<tool>/`).
+- **`--with zizmor`** — run an opt-in scanner as well. [zizmor](https://docs.zizmor.sh)
+  audits GitHub Actions workflows and composite actions (template injection,
+  credential persistence, cache poisoning, unpinned actions). It is not one of the
+  five, so install it by name first: `achilles tools install zizmor`. Achilles
+  always runs it offline.
 - **`--mode oss|commercial`** — the license gate. `commercial` (the strict one)
   refuses any tool not marked `commercialSafe`, so you can safely run on customer
   code. `oss` allows everything. Default is `oss`.

@@ -128,6 +128,30 @@ tools:
         arg: "--config={src}/.gitleaks.toml"
     repoConfig: [.gitleaks.toml, .gitleaksignore]
 
+  # zizmor — static analysis of GitHub Actions workflows and composite actions:
+  # template injection, credential persistence, cache poisoning, unpinned actions and
+  # more (MIT). Opt-in (`--with zizmor`); install it with `achilles tools install
+  # zizmor`. It is always run offline: it is given no token and makes no request, so
+  # its online audits (which query the GitHub API) do not run.
+  - id: zizmor
+    license: MIT
+    commercialSafe: true
+    optIn: zizmor
+    languages: [generic]           # workflows are not a language the detector knows
+    image: ghcr.io/zizmorcore/zizmor:1.30.1@sha256:a2eb396d886c053073405c7a980f2139ba2248ec172243cfa3841e57196e8101
+    bin: zizmor
+    format: sarif
+    argv: ["--offline", "--no-progress", "--format", "sarif", "{src}"]
+    outputFile: "{stdout}"         # zizmor has no option to write the report to a file
+    successExitCodes: [0]          # with --format sarif findings do not change the exit code
+    # A repository with no workflows: exit 3, nothing printed.
+    nothingToScan: ["no inputs collected"]
+    # A workflow it cannot parse is skipped with a warning; the rest are audited.
+    incompleteWhen: ["failed to parse input"]
+    # zizmor loads zizmor.yml or .github/zizmor.yml by itself; --no-config stops it.
+    noRepoConfigArgs: ["--no-config"]
+    repoConfig: [zizmor.yml, .github/zizmor.yml]
+
   - id: osv-scanner
     license: Apache-2.0
     commercialSafe: true

@@ -97,7 +97,7 @@ func TestSettings_CommandLineThenSettingsFileThenRepository(t *testing.T) {
 // whatever it is: a flag added later is refused until someone decides otherwise.
 func TestRepoSettings_OnlyScanShapingKeys(t *testing.T) {
 	want := []string{"baseline", "exclude", "fail-on", "issues-group", "issues-max", "issues-min-severity",
-		"keep-dismissed", "llm-no-code", "no-default-excludes", "profile", "secrets-history", "timeout"}
+		"keep-dismissed", "llm-no-code", "no-default-excludes", "profile", "secrets-history", "timeout", "with"}
 	if got := sortedKeys(repoSettingKeys); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("the repository may set %v\nthis test expects %v\nWidening the list lets a pull request set that flag: decide that deliberately, then update this test and docs/cli-reference.md", got, want)
 	}

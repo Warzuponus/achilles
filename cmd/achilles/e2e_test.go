@@ -81,6 +81,19 @@ func fakeScanner(outFile, src string, extra []string) int {
 	doc, _ := json.Marshal(map[string]any{"version": "2.1.0", "runs": []any{map[string]any{
 		"tool": map[string]any{"driver": map[string]any{"name": "fakescan"}}, "results": results,
 	}}})
+	// "--record-args" notes what the tool was run with, for a test to read.
+	for _, a := range extra {
+		if a == "--record-args" {
+			if out := os.Getenv("ACHILLES_FAKE_RECORDED_ARGS"); out != "" {
+				_ = os.WriteFile(out, []byte(strings.Join(extra, "\n")), 0o600)
+			}
+		}
+	}
+	// "STDOUT" as the report path stands for a tool that prints its report.
+	if outFile == "STDOUT" {
+		_, _ = os.Stdout.Write(doc)
+		return 0
+	}
 	if err := os.WriteFile(outFile, doc, 0o600); err != nil {
 		return 2
 	}

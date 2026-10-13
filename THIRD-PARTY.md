@@ -39,6 +39,10 @@ project, the unmodified release assets listed in
 each verified against a pinned sha256 before it is unpacked. Those tools keep their
 own licenses and run only as separate processes.
 
+One tool in that manifest is opt-in and is not in the container image:
+[zizmor](https://github.com/zizmorcore/zizmor) 1.30.1 (MIT), installed only by
+`achilles tools install zizmor` and run only with `--with zizmor`.
+
 `achilles tools install rules` downloads the community
 [opengrep-rules](https://github.com/opengrep/opengrep-rules) pack at a pinned commit
 (security rules for the main languages only). It is the Semgrep rules, **LGPL-2.1

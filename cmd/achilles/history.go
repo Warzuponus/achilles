@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"io"
+	"slices"
+	"sort"
+	"strings"
 
 	"github.com/Warzuponus/achilles/internal/config"
 	"github.com/Warzuponus/achilles/internal/model"
@@ -23,9 +26,53 @@ import (
 
 const optInSecretsHistory = "secrets-history"
 
-// optedIn reports whether the feature a registry tool is opt-in for was asked for.
+// optedIn reports whether the name a registry tool is opt-in under was asked for:
+// with --with NAME, or with the flag that exists for it.
 func (o *options) optedIn(feature string) bool {
-	return feature == optInSecretsHistory && o.secretsHistory
+	if feature == "" {
+		return false
+	}
+	if feature == optInSecretsHistory {
+		return o.secretsHistory
+	}
+	return slices.Contains(o.withList(), feature)
+}
+
+// withList is --with as a list of names.
+func (o *options) withList() []string {
+	var out []string
+	for _, n := range strings.Split(o.withTools, ",") {
+		if n = strings.ToLower(strings.TrimSpace(n)); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// checkWith turns --with into something that can only do what was asked. A name
+// the registry does not offer is an error before anything runs: a typo must not
+// become a scan that quietly left the scanner out.
+func checkWith(o *options, cfg *config.Config) error {
+	offered := map[string]bool{}
+	for _, tc := range cfg.Tools {
+		if tc.OptIn != "" {
+			offered[tc.OptIn] = true
+		}
+	}
+	names := make([]string, 0, len(offered))
+	for n := range offered {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range o.withList() {
+		if !offered[n] {
+			return fmt.Errorf("--with %s: the tool registry has no opt-in scanner by that name (it offers: %s)", n, strings.Join(names, ", "))
+		}
+		if n == optInSecretsHistory {
+			o.secretsHistory = true // the same thing as --secrets-history
+		}
+	}
+	return nil
 }
 
 // planHistoryScan checks, before any scanner runs, that the history can be

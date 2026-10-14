@@ -124,8 +124,12 @@ Loss points of the 2 misses: `not-detected` 1 (`JS-IDOR-1`), `noise-filter` 1
 
 The previous baseline, with only three built-in rules, was 45.8% (11 of 24); the
 community pack took it to 75%. The rules in `configs/rules/achilles-*.yaml` account
-for the difference: 20 more findings, every one of them on a labeled issue. The count
-of findings in labeled files that matched no label stayed at 40.
+for the difference, and every finding they added is on a labeled issue: the count of
+findings in labeled files that matched no label did not grow. The scan surfaces 61
+findings: 37 on a labeled issue and 24 elsewhere in the labeled files (unlabeled, not
+necessarily false; see the precision proxy above). Before Achilles dropped repeated
+scanner results (osv-scanner reports some advisories several times) and the two
+credential rules were tightened, the same scan counted 85.
 
 How to read it honestly:
 

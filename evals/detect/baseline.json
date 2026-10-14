@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-14T22:16:20Z",
+  "generatedAt": "2026-10-14T22:41:58Z",
   "config": {
     "lineTolerance": 3,
     "ai": false,
@@ -77,28 +77,22 @@
               "line": 0
             },
             {
-              "tool": "osv-scanner",
-              "ruleId": "CVE-2020-14343",
-              "file": "requirements.txt",
-              "line": 0
-            },
-            {
-              "tool": "osv-scanner",
-              "ruleId": "CVE-2020-14343",
-              "file": "requirements.txt",
-              "line": 0
-            },
-            {
-              "tool": "osv-scanner",
-              "ruleId": "CVE-2020-14343",
-              "file": "requirements.txt",
-              "line": 0
-            },
-            {
               "tool": "trivy",
               "ruleId": "CVE-2020-14343",
               "file": "requirements.txt",
               "line": 3
+            },
+            {
+              "tool": "trivy",
+              "ruleId": "CVE-2023-30861",
+              "file": "requirements.txt",
+              "line": 1
+            },
+            {
+              "tool": "trivy",
+              "ruleId": "CVE-2026-27205",
+              "file": "requirements.txt",
+              "line": 1
             }
           ]
         }
@@ -123,9 +117,9 @@
         ]
       },
       "findings": {
-        "surfaced": 54,
-        "matched": 22,
-        "unmatchedInLabeledFiles": 32,
+        "surfaced": 30,
+        "matched": 14,
+        "unmatchedInLabeledFiles": 16,
         "unlabeledFiles": 0,
         "unmatchedSamples": [
           {
@@ -221,60 +215,6 @@
           {
             "tool": "osv-scanner",
             "ruleId": "CVE-2020-26137",
-            "file": "requirements.txt",
-            "line": 0
-          },
-          {
-            "tool": "osv-scanner",
-            "ruleId": "CVE-2019-11236",
-            "file": "requirements.txt",
-            "line": 0
-          },
-          {
-            "tool": "osv-scanner",
-            "ruleId": "CVE-2019-11324",
-            "file": "requirements.txt",
-            "line": 0
-          },
-          {
-            "tool": "osv-scanner",
-            "ruleId": "CVE-2020-26137",
-            "file": "requirements.txt",
-            "line": 0
-          },
-          {
-            "tool": "osv-scanner",
-            "ruleId": "CVE-2023-43804",
-            "file": "requirements.txt",
-            "line": 0
-          },
-          {
-            "tool": "osv-scanner",
-            "ruleId": "CVE-2018-25091",
-            "file": "requirements.txt",
-            "line": 0
-          },
-          {
-            "tool": "osv-scanner",
-            "ruleId": "CVE-2023-45803",
-            "file": "requirements.txt",
-            "line": 0
-          },
-          {
-            "tool": "osv-scanner",
-            "ruleId": "CVE-2023-30861",
-            "file": "requirements.txt",
-            "line": 0
-          },
-          {
-            "tool": "osv-scanner",
-            "ruleId": "CVE-2024-3651",
-            "file": "requirements.txt",
-            "line": 0
-          },
-          {
-            "tool": "osv-scanner",
-            "ruleId": "CVE-2026-44431",
             "file": "requirements.txt",
             "line": 0
           }
@@ -1177,15 +1117,15 @@
     "not-detected": 1
   },
   "findings": {
-    "surfaced": 85,
-    "matched": 45,
-    "unmatchedInLabeledFiles": 40,
+    "surfaced": 61,
+    "matched": 37,
+    "unmatchedInLabeledFiles": 24,
     "unlabeledFiles": 0
   },
   "runs": 1,
   "history": [
     {
-      "at": "2026-10-14T22:15:54Z",
+      "at": "2026-10-14T22:41:32Z",
       "recall": 0.9166666666666666,
       "detected": 22,
       "scored": 24,
@@ -1241,7 +1181,7 @@
       ]
     },
     {
-      "at": "2026-10-14T22:16:08Z",
+      "at": "2026-10-14T22:41:45Z",
       "recall": 0.9166666666666666,
       "detected": 22,
       "scored": 24,
@@ -1297,7 +1237,7 @@
       ]
     },
     {
-      "at": "2026-10-14T22:16:20Z",
+      "at": "2026-10-14T22:41:58Z",
       "recall": 0.9166666666666666,
       "detected": 22,
       "scored": 24,

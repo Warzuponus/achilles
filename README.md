@@ -21,7 +21,7 @@ scan:
 | | Scanners on their own | With Achilles |
 |---|---|---|
 | Output | one format and one report per tool | one set of findings, one report, one gate |
-| A scanner that could not run | usually a green job | named in every report; `--strict-tools` fails the run |
+| A scanner that could not run | usually a green job | named in every report; a run where no scanner could run fails; `--strict-tools` fails on any |
 | False positives | you read every finding | a model reviews each one with the code around it, a second pass argues against the verdict, and confident false positives leave the gate (listed, so you can audit them) |
 | Suggested fixes | none, or unchecked | applied to a copy and re-scanned before being called a fix |
 | New findings only | per-tool baselines | one baseline and `--diff` across all tools |
@@ -203,7 +203,7 @@ The complete, current list is in the **[CLI Reference](docs/cli-reference.md)**
 | `--llm-no-code`, `--keep-dismissed` | privacy mode; gate on raw scanner severity instead of AI-filtered |
 | `--fail-on` | exit 1 if a finding at or above a severity remains |
 | `--baseline`, `--diff` | only new findings, only changed files |
-| `--strict-tools` | fail if any scanner could not run or could not analyze everything |
+| `--strict-tools` | fail if any scanner could not run or could not analyze everything (a run where none could run always fails) |
 | `--file-issues` | open and maintain GitHub issues (`--issues-*` options) |
 | `--dry-run`, `--max-cost` | cost estimate before any model call; a cap on what the run may spend |
 | `--html-report`, `--sarif-report`, `--markdown` | write a report |

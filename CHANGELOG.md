@@ -89,6 +89,13 @@ All notable changes to this project are recorded here. The format follows
 
 
 ### Fixed
+- **A run in which no scanner could run passed.** With every scanner missing (a first
+  run before `achilles tools install`, or a CI job without them), Achilles reported 0
+  findings, warned, and exited 0, so a CI job passed on a scan that looked at nothing.
+  It now exits 2 with "nothing was scanned", whatever `--strict-tools` says. A partial
+  scan, where at least one scanner ran, still exits 0 with the warning unless
+  `--strict-tools`. Scanners that are not installed are named on one line with the
+  command that installs them, instead of an "executable file not found" error each.
 - **The same finding was reported several times.** osv-scanner repeats some advisories
   word for word (CVE-2020-14343 for PyYAML 5.3.1 came four times), and each copy was
   triaged, counted, gated and filed on its own. A finding a scanner repeats exactly,

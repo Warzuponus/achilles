@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -22,6 +24,7 @@ import (
 	"github.com/Warzuponus/achilles/internal/research"
 	"github.com/Warzuponus/achilles/internal/scanner"
 	"github.com/Warzuponus/achilles/internal/scanner/opengrep"
+	"github.com/Warzuponus/achilles/internal/toolchain"
 	"github.com/Warzuponus/achilles/internal/vault"
 	"github.com/Warzuponus/achilles/internal/vcs"
 )
@@ -162,10 +165,15 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 	// Diagnostics sidecar: tools that failed to run or whose output couldn't be
 	// normalized. Silent gaps read as "clean" — we surface them (DESIGN §6).
 	var diags []toolDiag
+	var notInstalled []string
 	for _, r := range runScanners(ctx, applicable, tgt) {
 		if r.err != nil {
 			// A single tool failing degrades to a partial scan (DESIGN.md §6).
-			fmt.Fprintf(os.Stderr, "achilles: %s failed: %v\n", r.id, r.err)
+			if errors.Is(r.err, exec.ErrNotFound) {
+				notInstalled = append(notInstalled, r.id)
+			} else {
+				fmt.Fprintf(os.Stderr, "achilles: %s failed: %v\n", r.id, r.err)
+			}
 			diags = append(diags, toolDiag{Tool: r.id, Stage: "run", Error: r.err.Error()})
 			continue
 		}
@@ -202,6 +210,25 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 			if err := os.WriteFile(filepath.Join(o.sarifOut, r.id+".sarif"), r.raw.Data, 0o600); err != nil {
 				fmt.Fprintf(os.Stderr, "achilles: %s sarif-out write failed: %v\n", r.id, err)
 			}
+		}
+	}
+	if len(notInstalled) > 0 {
+		// One line with the fix, not one "executable file not found" per tool: on a
+		// first run that is every scanner.
+		var managed, other []string
+		for _, id := range notInstalled {
+			if _, err := toolchain.Lookup(id); err == nil {
+				managed = append(managed, id)
+			} else {
+				other = append(other, id)
+			}
+		}
+		if len(managed) > 0 {
+			fmt.Fprintf(os.Stderr, "achilles: not installed: %s. `achilles tools install` installs the pinned, checksum-verified scanners; `achilles doctor` checks them\n",
+				strings.Join(managed, ", "))
+		}
+		if len(other) > 0 {
+			fmt.Fprintf(os.Stderr, "achilles: not found on PATH: %s\n", strings.Join(other, ", "))
 		}
 	}
 

@@ -39,7 +39,7 @@ func WriteHuman(w io.Writer, s model.Scan) {
 
 	if len(s.FailedTools) > 0 {
 		fmt.Fprintf(w, "\nWARNING: %d tool(s) FAILED to run (%s) — results are incomplete. "+
-			"Install the missing tool(s) or see --diagnostics; this is NOT a clean scan.\n",
+			"`achilles doctor` shows what is missing and how to fix it (or see --diagnostics); this is NOT a clean scan.\n",
 			len(s.FailedTools), strings.Join(s.FailedTools, ", "))
 	}
 	if len(s.RepoConfigChanged) > 0 {

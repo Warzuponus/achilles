@@ -322,6 +322,14 @@ func run(argv []string) error {
 		return err
 	}
 
+	// No scanner produced anything, so nothing was scanned: an error whatever
+	// --strict-tools says. Zero findings from a scan that could not look must not
+	// pass a CI job.
+	if len(scan.Tools) == 0 && len(scan.FailedTools) > 0 {
+		return fmt.Errorf("no scanner could run (%s), so nothing was scanned; `achilles doctor` shows what is missing and how to install it",
+			strings.Join(scan.FailedTools, ", "))
+	}
+
 	// Fail closed on request: a partial scan is not evidence of safety. Exit 2
 	// (an error) rather than 1 (findings gated) so callers can tell them apart.
 	// Checked before the severity gate so a passing gate cannot mask it.

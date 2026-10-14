@@ -227,7 +227,7 @@ func installCommunityRules(ctx context.Context, in *toolchain.Installer, force b
 		return err
 	}
 	fmt.Fprintf(stdout, "rules %s: installed %d rule files in %s\n", rs.ShortSHA(), got.Files, got.Dir)
-	fmt.Fprintf(stdout, "  note: these rules are %s. They are loaded alongside the embedded baseline rules\n", rs.License)
+	fmt.Fprintf(stdout, "  note: these rules are %s. They are loaded alongside the built-in Achilles rules\n", rs.License)
 	fmt.Fprintln(stdout, "  and are skipped under --mode commercial (the Commons Clause forbids selling them).")
 	return nil
 }

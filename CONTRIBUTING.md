@@ -48,8 +48,8 @@ cmd/achillesd         the War Room HTTP server
 cmd/achilles-fleet    scans many projects and targets into per-project vaults
 cmd/achilles-eval     the eval CLI (context, verdict, corpus and detect modes)
 
-configs/              tools.yaml (the tool registry) and the baseline Opengrep rules,
-                      both embedded in the binary
+configs/              tools.yaml (the tool registry) and the built-in Opengrep rules
+                      (configs/rules/achilles-*.yaml), both embedded in the binary
 internal/config       loads the tool registry
 internal/policy       the license-mode gate (oss, commercial, attestation)
 internal/toolchain    `achilles tools install`: pinned, checksum-verified scanners
@@ -119,6 +119,27 @@ wrote the change or have the right to submit it under this license.
 ```bash
 git commit -s -m "fix: describe the change"     # adds: Signed-off-by: Your Name <you@example.com>
 ```
+
+## Writing a built-in rule
+
+The built-in Opengrep rules are in `configs/rules/achilles-<language>.yaml`, and every
+one of them needs test cases in `internal/config/testdata/rules/` (a file with the same
+name as the rule file, any extension). Mark each line that must fire with a
+`# ruleid: <rule id>` comment on the line above, and the near misses that must not with
+`# ok: <rule id>`. A rule earns its place by catching something real with few false
+positives, so the `ok:` cases matter as much as the `ruleid:` ones.
+
+```bash
+achilles tools install opengrep
+go test -tags integration -run TestRules ./internal/config
+```
+
+The test fails on a wrong match and on a rule with no case at all; CI runs it with the
+pinned Opengrep. Opengrep reads rule files as ASCII and does not support YAML anchors,
+and a pattern containing `: ` must be quoted. Rules are original work under the project's
+license: do not copy a rule from a pack with another license. To see what a rule change
+does to detection, run the benchmark (`go run ./cmd/achilles-eval --mode detect`, see
+[evals/detect](evals/detect)).
 
 ## Self-scan and the baseline
 

@@ -97,55 +97,54 @@ the AI review cost. It is real model spend, twice per target.
 
 ## The committed baseline
 
-`evals/detect/baseline.json` was generated on the maintainer's machine with
-`opengrep`, `gosec`, `gitleaks` and `osv-scanner` installed and **`trivy` not
-installed** (3 runs; no entry flapped):
+`evals/detect/baseline.json` was generated on the maintainer's machine with all five
+default scanners installed (`opengrep`, `gosec`, `gitleaks`, `osv-scanner`, `trivy`)
+and **`--mode commercial`**, so only the built-in Achilles rules were loaded, not the
+community pack (3 runs; no entry flapped):
 
 | | Recall |
 |---|---|
-| **Overall** | **45.8%** (11 of 24) |
-| injection | 62.5% (5 of 8) |
-| path-traversal | 50.0% (1 of 2) |
-| weak-crypto | 50.0% (1 of 2) |
-| ssrf | 50.0% (1 of 2) |
-| hardcoded-secret | 20.0% (1 of 5) |
-| vulnerable-dependency | 100% (2 of 2) |
-| xss, authz, deserialization | 0% (0 of 3) |
+| **Overall** | **91.7%** (22 of 24) |
+| injection | 87.5% (7 of 8) |
+| hardcoded-secret | 100% (5 of 5) |
+| path-traversal, ssrf, weak-crypto, vulnerable-dependency | 100% (2 of 2 each) |
+| xss, deserialization | 100% (1 of 1 each) |
+| authz | 0% (0 of 1) |
 
 | Target | Recall |
 |---|---|
-| go-service | 83% (5 of 6) |
+| go-service | 100% (6 of 6) |
 | deps-manifest | 100% (2 of 2) |
-| secrets-config | 33% (1 of 3) |
-| py-webapp | 25% (2 of 8) |
-| js-express | 20% (1 of 5) |
+| secrets-config | 100% (3 of 3) |
+| py-webapp | 88% (7 of 8) |
+| js-express | 80% (4 of 5) |
 
-Loss points of the 13 misses: `not-detected` 8, `tool-missing` 4, `noise-filter` 1.
+Loss points of the 2 misses: `not-detected` 1 (`JS-IDOR-1`), `noise-filter` 1
+(`PY-THIRDPARTY-EVAL-1`).
+
+The previous baseline, with only three built-in rules, was 45.8% (11 of 24); the
+community pack took it to 75%. The rules in `configs/rules/achilles-*.yaml` account
+for the difference: 20 more findings, every one of them on a labeled issue. The count
+of findings in labeled files that matched no label stayed at 40.
 
 How to read it honestly:
 
-- **Python and JavaScript recall is low because the baseline rule pack is thin.**
-  `configs/rules` has three rules (Python `eval`, Python `subprocess(shell=True)`,
-  JavaScript `eval`), and those are the only detections in those languages. Every
-  other Python/JavaScript miss is a plain `not-detected`. Go is strong because gosec
-  is a real type-aware analyzer. The community rule pack (`achilles tools install`)
-  would change this and was not installed for the baseline; measure it separately.
-- **Four `tool-missing` misses are all hard-coded secrets** that `trivy` also
-  covers. `gitleaks` ran and reported nothing near them (it found only the one
-  token-shaped value). With `trivy` installed these would resolve to a detection or
-  to `not-detected`; the baseline cannot say which, which is exactly why they are
-  labeled `tool-missing`.
+- **The new rules were written with these fixtures in view.** They target the
+  vulnerability classes in the fixtures, and the rule tests
+  (`internal/config/testdata/rules/`) hold their own true and false cases, but a
+  benchmark the rules were tuned on overstates what they catch elsewhere. Treat 91.7%
+  as "the classes in the benchmark are covered", not as an estimate of real-world
+  recall; external targets (below) are the stronger evidence.
 - **The `noise-filter` miss is deliberate**: a `third_party/` file the default noise
   filter drops, kept to exercise that loss point.
-- **One entry (`JS-IDOR-1`) is a business-logic flaw** no pattern scanner is
-  expected to find.
+- **`JS-IDOR-1` is a business-logic flaw** (no ownership check) that no pattern
+  scanner is expected to find. The AI review and the research agents are the parts
+  of Achilles that can.
 - **24 entries is small.** One entry is 4.2 points, which is why the gate tolerance
   is 2 points: any lost entry fails it. It catches regressions in rules and tool
   wiring; it cannot rank two scanners that differ by a few points.
 - The fixtures were written and labeled **before** looking at scanner output, but
-  by the people who maintain the scanners. Treat the absolute numbers as a
-  regression baseline, not a claim about real-world recall; external targets
-  (below) are the stronger evidence.
+  by the people who maintain the scanners.
 - `deps-manifest` depends on live OSV advisory data. The two labeled advisories are
   long-standing, but a future database change could still move that target.
 

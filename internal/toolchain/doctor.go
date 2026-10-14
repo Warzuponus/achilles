@@ -248,7 +248,25 @@ func stripURLCredentials(raw string) string {
 func (r Report) Write(w io.Writer) {
 	fmt.Fprintf(w, "achilles doctor — %s\nManaged tool directory: %s\n\n", r.Platform, r.BinDir)
 	fmt.Fprintln(w, "Scanners (default profile)")
+	r.writeTools(w, true)
+	optIn := false
 	for _, t := range r.Tools {
+		optIn = optIn || !t.Required
+	}
+	if optIn {
+		// Missing is fine here: these run only when a scan asks for them.
+		fmt.Fprintln(w, "\nOpt-in scanners (run only with --with <name>; nothing needs them otherwise)")
+		r.writeTools(w, false)
+	}
+	r.writeRest(w)
+}
+
+// writeTools prints the default-profile tools (required) or the opt-in ones.
+func (r Report) writeTools(w io.Writer, required bool) {
+	for _, t := range r.Tools {
+		if t.Required != required {
+			continue
+		}
 		ver := t.Version
 		if ver == "" {
 			ver = "-"
@@ -259,13 +277,20 @@ func (r Report) Write(w io.Writer) {
 		}
 		fmt.Fprintf(w, "  %-12s %-15s %-8s (pinned %s)  %s\n", t.Name, t.State, ver, t.Pinned, where)
 		if t.Fix != "" {
-			fmt.Fprintf(w, "      fix: %s\n", t.Fix)
+			label := "fix"
+			if !required {
+				label = "install" // not a problem: nothing runs it unless asked
+			}
+			fmt.Fprintf(w, "      %s: %s\n", label, t.Fix)
 		}
 		for _, n := range t.Notes {
 			fmt.Fprintf(w, "      warning: %s\n", n)
 		}
 	}
+}
 
+// writeRest prints everything after the scanners.
+func (r Report) writeRest(w io.Writer) {
 	fmt.Fprintln(w, "\nPrerequisites")
 	if r.Go.Found {
 		fmt.Fprintf(w, "  go           found  %s   (gosec needs it)\n", r.Go.Path)
@@ -278,7 +303,7 @@ func (r Report) Write(w io.Writer) {
 		fmt.Fprintln(w, "  docker       not found   (optional: only needed for --runner docker)")
 	}
 
-	fmt.Fprintln(w, "\nCommunity rules (optional; extra Opengrep coverage beyond the 3 embedded baseline rules)")
+	fmt.Fprintln(w, "\nCommunity rules (optional; more Opengrep coverage on top of the built-in Achilles rules)")
 	if r.Rules.Installed {
 		fmt.Fprintf(w, "  %s  installed: %d rule files in %s\n", r.RulesPack.DirName(), r.Rules.Files, r.Rules.Dir)
 	} else {

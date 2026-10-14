@@ -1,0 +1,303 @@
+# Achilles rules for JavaScript and TypeScript - original, written for this project
+# (Apache-2.0; not derived from the Semgrep registry), so they load in every license
+# mode. Each rule is tested by internal/config/testdata/rules/achilles-javascript.js
+# (opengrep --test). Keep this file ASCII-only: Opengrep reads rule files as ASCII.
+#
+# Request sources are Express-style: properties of an object named req or request.
+rules:
+  - id: achilles.javascript.command-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      Request data reaches a shell command. Characters such as ; | $( ) in it run
+      other commands. Use execFile/spawn with an argument array and no shell.
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(query|params|body|cookies|headers|signedCookies|files)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: exec($CMD, ...)
+              - pattern: execSync($CMD, ...)
+              - pattern: child_process.exec($CMD, ...)
+              - pattern: child_process.execSync($CMD, ...)
+              - pattern: require("child_process").exec($CMD, ...)
+              - pattern: require("child_process").execSync($CMD, ...)
+              - pattern: 'spawn($CMD, $ARGS, {..., shell: true, ...})'
+              - pattern: 'child_process.spawn($CMD, $ARGS, {..., shell: true, ...})'
+          - focus-metavariable: $CMD
+
+  - id: achilles.javascript.reflected-xss
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      Request data is written into the response as HTML without escaping. A script in
+      it runs in the victim's browser. Escape it (escape-html) or render it through a
+      template engine that escapes by default.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(query|params|body|cookies|headers|signedCookies)$
+    pattern-sanitizers:
+      - pattern: escapeHtml(...)
+      - pattern: escape(...)
+      - pattern: validator.escape(...)
+      - pattern: he.encode(...)
+      - pattern: DOMPurify.sanitize(...)
+      - pattern: sanitizeHtml(...)
+      - pattern: encodeURIComponent(...)
+      - pattern: parseInt(...)
+      - pattern: Number(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.send($BODY)
+              - pattern: $RES.write($BODY)
+              - pattern: $RES.end($BODY)
+          - metavariable-regex:
+              metavariable: $RES
+              regex: ^(res|response)$
+          - focus-metavariable: $BODY
+
+  - id: achilles.javascript.dom-xss
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      HTML is assigned from a variable. If any of it comes from the URL, storage or
+      another user, scripts in it run. Use textContent, or sanitize with DOMPurify.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $EL.innerHTML = $X
+              - pattern: $EL.outerHTML = $X
+          - pattern-not: $EL.innerHTML = "..."
+          - pattern-not: $EL.outerHTML = "..."
+          - pattern-not: $EL.innerHTML = DOMPurify.sanitize(...)
+      - patterns:
+          - pattern: document.write($X)
+          - pattern-not: document.write("...")
+      - patterns:
+          - pattern: $EL.insertAdjacentHTML($POS, $X)
+          - pattern-not: $EL.insertAdjacentHTML($POS, "...")
+
+  - id: achilles.javascript.sql-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      Request data is built into an SQL string. Pass values as query parameters
+      (db.query("... WHERE id = $1", [id])) instead.
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(query|params|body|cookies|headers)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.query($SQL, ...)
+              - pattern: $DB.execute($SQL, ...)
+              - pattern: $DB.raw($SQL, ...)
+              - pattern: $DB.$queryRawUnsafe($SQL, ...)
+              - pattern: $DB.$executeRawUnsafe($SQL, ...)
+          - focus-metavariable: $SQL
+
+  - id: achilles.javascript.path-traversal
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      A file path is built from request data. "../" in it reaches files outside the
+      intended directory. Reduce it to a file name (path.basename), or check that the
+      resolved path stays under the base directory.
+    metadata:
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory (Path Traversal)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(query|params|body|cookies|headers)$
+    pattern-sanitizers:
+      - pattern: path.basename(...)
+      - pattern: basename(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fs.$FN($PATH, ...)
+              - pattern: fsPromises.$FN($PATH, ...)
+              - pattern: $RES.sendFile($PATH)
+              - pattern: $RES.download($PATH, ...)
+          - pattern-not: '$RES.sendFile($PATH, {..., root: $ROOT, ...}, ...)'
+          - focus-metavariable: $PATH
+
+  - id: achilles.javascript.ssrf
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      An outgoing request goes to a URL taken from the incoming request. An attacker
+      can point it at internal services or cloud metadata endpoints. Allow only known
+      hosts.
+    metadata:
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(query|params|body|cookies|headers)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fetch($URL, ...)
+              - pattern: axios($URL, ...)
+              - pattern: axios.$METHOD($URL, ...)
+              - pattern: got($URL, ...)
+              - pattern: got.$METHOD($URL, ...)
+              - pattern: http.get($URL, ...)
+              - pattern: https.get($URL, ...)
+              - pattern: http.request($URL, ...)
+              - pattern: https.request($URL, ...)
+              - pattern: needle.get($URL, ...)
+          - focus-metavariable: $URL
+
+  - id: achilles.javascript.open-redirect
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      The response redirects to a URL taken from the request, so a link to this site
+      can send a user anywhere (phishing that looks like your domain). Redirect only
+      to known paths.
+    metadata:
+      cwe: ["CWE-601: URL Redirection to Untrusted Site (Open Redirect)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(query|params|body)$
+    pattern-sinks:
+      - patterns:
+          - pattern: $RES.redirect($URL)
+          - focus-metavariable: $URL
+
+  - id: achilles.javascript.code-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      A string is compiled and run as code. If any of it comes from input, that input
+      can run anything. Parse the data instead.
+    metadata:
+      cwe: ["CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (Eval Injection)"]
+      category: security
+    pattern-either:
+      - patterns:
+          - pattern: new Function(..., $BODY)
+          - pattern-not: new Function(..., "...")
+      - patterns:
+          - pattern-either:
+              - pattern: vm.runInNewContext($CODE, ...)
+              - pattern: vm.runInThisContext($CODE, ...)
+              - pattern: vm.runInContext($CODE, ...)
+          - pattern-not: vm.$RUN("...", ...)
+
+  - id: achilles.javascript.unsafe-deserialization
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      node-serialize's unserialize() runs functions embedded in the input. Use
+      JSON.parse for data from outside.
+    metadata:
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      category: security
+    pattern-either:
+      - pattern: require("node-serialize").unserialize(...)
+      - patterns:
+          - pattern-inside: |
+              $S = require("node-serialize")
+              ...
+          - pattern: $S.unserialize(...)
+
+  - id: achilles.javascript.tls-verification-disabled
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      TLS certificate verification is turned off, so anyone on the network path can
+      impersonate the server. Keep verification on; pass a CA (ca: ...) if the
+      server uses a private one.
+    metadata:
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      category: security
+    pattern-either:
+      - pattern: |
+          {..., rejectUnauthorized: false, ...}
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+      - pattern: process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
+
+  - id: achilles.javascript.weak-crypto
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      A broken algorithm is used: MD5 and SHA-1 for hashing, or DES, RC4 or ECB mode
+      for encryption. Use SHA-256 or better, a password hash (bcrypt, scrypt, argon2)
+      for passwords, and AES-GCM for encryption.
+    metadata:
+      cwe: ["CWE-327: Use of a Broken or Risky Cryptographic Algorithm"]
+      category: security
+    pattern-either:
+      - patterns:
+          - pattern: crypto.createHash($ALG)
+          - metavariable-regex:
+              metavariable: $ALG
+              regex: (?i)^["'](md5|md4|sha1|sha-1)["']$
+      - patterns:
+          - pattern-either:
+              - pattern: crypto.createCipheriv($ALG, ...)
+              - pattern: crypto.createDecipheriv($ALG, ...)
+          - metavariable-regex:
+              metavariable: $ALG
+              regex: (?i)^["'](des|des-ede|des-ede3|rc2|rc4|bf|blowfish)[^"']*["']$|(?i)^["'][^"']*-ecb["']$
+      - pattern: crypto.createCipher(...)

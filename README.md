@@ -131,18 +131,21 @@ report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/
   [SECURITY.md](SECURITY.md).
 - **Coverage depends on the scanners.** The default set covers Go, dependencies, IaC
   and secrets well. Code-level coverage for Python, JavaScript, Java, Ruby and PHP comes
-  mostly from Opengrep rules: Achilles ships a small baseline set, and
+  mostly from Opengrep rules: Achilles ships about 40 of its own for Python, JavaScript
+  and TypeScript, Java and credentials (Apache-2.0, loaded in every mode), and
   `achilles tools install` adds the community rules (a Commons Clause licence applies;
-  they are skipped under `--mode commercial`, see [THIRD-PARTY.md](THIRD-PARTY.md)). The
-  heavier per-language analyzers (`--profile full`) need Docker.
+  they are skipped under `--mode commercial`, see [THIRD-PARTY.md](THIRD-PARTY.md)). Ruby
+  and PHP have no built-in rules yet. The heavier per-language analyzers
+  (`--profile full`) need Docker.
 - **Go code and Go 1.27.2 or newer.** gosec cannot yet read the compiler data that Go
   1.27.2 writes, so with that toolchain on your PATH it skips its type-based rules.
   Achilles reports gosec as incomplete when this happens instead of passing the scan.
   Until gosec catches up, scan Go code with Go 1.27.1 (the Docker image does).
 - **Accuracy is only lightly measured:** an 18-case labeled triage corpus and a small
-  detection benchmark (24 labeled issues in synthetic fixtures; about 46% recall with the
-  default scanners, far lower for Python and JavaScript with only the bundled rules;
-  the community rules were not measured), not real-repository precision and recall. See
+  detection benchmark (24 labeled issues in synthetic fixtures; 22 found with the
+  default scanners and built-in rules, but those rules were written with the fixtures
+  in view, so that number is a regression check, not an estimate of real-world recall),
+  not real-repository precision and recall. See
   [evals/](evals/README.md) and [Benchmarking Detection](docs/benchmarking.md).
 - **You choose the model and pay the provider.** `--dry-run` prints a cost estimate
   first. There is no default model.

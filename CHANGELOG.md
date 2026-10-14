@@ -7,7 +7,17 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
-
+- **Built-in rules for Python, JavaScript/TypeScript and Java.** 35 new Achilles
+  Opengrep rules (Apache-2.0, so they load in every mode, `--mode commercial`
+  included) for SQL, command and code injection, path traversal, SSRF, XSS, open
+  redirects, template injection, unsafe deserialization, XXE, weak crypto, disabled TLS
+  checks, Flask debug and Spring CSRF, plus two generic credential rules (credentials in
+  a connection URL; a secret-looking value assigned to a secret-named variable). Each
+  rule has test cases that must fire and near misses that must not, and CI runs them
+  with the real Opengrep. On the detection benchmark, recall with the built-in rules
+  went from 45.8% to 91.7%, with no new findings outside the labeled issues; the rules
+  were written with that benchmark in view, so see `docs/benchmarking.md` for what the
+  number does and does not show.
 - **`achilles init`: set a repository up in one step.** It writes `.achilles.yaml` (fail
   on high, use the baseline), a CI workflow for GitHub or GitLab (detected; it needs no
   secret, scans pull requests and the default branch, and pins the Achilles action to
@@ -76,7 +86,8 @@ All notable changes to this project are recorded here. The format follows
   before this fix carries no mark: if you scan in commercial mode and have mined rules
   with the community pack installed, review `.achilles/generated-rules` (each rule's
   provenance names the finding it came from) and remove those from community findings.
-
+- **`achilles doctor` listed zizmor with the default scanners.** Opt-in scanners have
+  their own section now, and a missing one is offered as an install, not as a fix.
 - Findings in Achilles' own output were reported as findings in the project. The Evidence
   Vault (by default `.achilles/vault.jsonl` inside the scanned directory) and the reports
   quote the code around each finding, so a scanner that reads every file found the same

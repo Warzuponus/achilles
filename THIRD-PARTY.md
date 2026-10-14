@@ -24,8 +24,8 @@ imports are allowed.
 The release archives (`.goreleaser.yaml`) contain only Achilles itself, built from
 this repository, plus its Go library dependencies (permissive licenses; see the
 license check above). **No third-party scanner is included.** Embedded in the
-binary: `configs/tools.yaml` and the Achilles-authored baseline rules in
-`configs/rules/`.
+binary: `configs/tools.yaml` and the Achilles-authored rules in `configs/rules/`
+(original work, Apache-2.0).
 
 Every archive carries `LICENSE`, `NOTICE`, this file, and `third_party/licenses/`:
 the license (and any NOTICE or PATENTS file) of each Go module linked into the

@@ -1,0 +1,302 @@
+# Achilles rules for Python - original, written for this project (Apache-2.0; not
+# derived from the Semgrep registry), so they load in every license mode. Each rule
+# is tested by internal/config/testdata/rules/achilles-python.py (opengrep --test).
+# Keep this file ASCII-only: Opengrep reads rule files as ASCII.
+#
+# Request sources cover Flask, Django and Starlette/FastAPI request objects.
+rules:
+  - id: achilles.python.sql-string-building
+    languages: [python]
+    severity: ERROR
+    message: >
+      SQL is built by string formatting and passed to execute(). Any part of it that
+      comes from input can change the query. Pass values as parameters
+      (cursor.execute("... WHERE name = ?", (name,))) instead.
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
+      category: security
+    pattern-either:
+      - pattern: $DB.execute(f"...{$X}...", ...)
+      - pattern: $DB.executemany(f"...{$X}...", ...)
+      - pattern: $DB.execute("..." % $X, ...)
+      - pattern: $DB.execute("...".format(...), ...)
+      - pattern: $DB.execute("..." + $X, ...)
+      - pattern: $DB.execute($X + "...", ...)
+      - patterns:
+          - pattern-inside: |
+              $Q = f"...{$X}..."
+              ...
+          - pattern: $DB.execute($Q, ...)
+      - patterns:
+          - pattern-inside: |
+              $Q = "..." + $X
+              ...
+          - pattern: $DB.execute($Q, ...)
+      - patterns:
+          - pattern-inside: |
+              $Q = "..." % $X
+              ...
+          - pattern: $DB.execute($Q, ...)
+
+  - id: achilles.python.sql-injection-orm-raw
+    languages: [python]
+    severity: ERROR
+    message: >
+      A raw SQL string built from a variable is passed to the ORM. Use the ORM's
+      query API, or pass values as parameters (params=[...]).
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
+      category: security
+    pattern-either:
+      - pattern: $M.objects.raw(f"...{$X}...", ...)
+      - pattern: $M.objects.raw("..." % $X, ...)
+      - pattern: $M.objects.raw("..." + $X, ...)
+      - pattern: $M.objects.extra(where=[..., f"...{$X}...", ...], ...)
+      - pattern: sqlalchemy.text(f"...{$X}...")
+      - pattern: text(f"...{$X}...")
+
+  - id: achilles.python.os-command
+    languages: [python]
+    severity: ERROR
+    message: >
+      A shell command is built from a variable. Anything in it that comes from input
+      can run other commands. Use subprocess.run([...]) with an argument list and no
+      shell.
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)"]
+      category: security
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: os.system($CMD)
+              - pattern: os.popen($CMD, ...)
+              - pattern: commands.getoutput($CMD)
+              - pattern: commands.getstatusoutput($CMD)
+          - pattern-not: os.system("...")
+          - pattern-not: os.popen("...", ...)
+          - pattern-not: commands.getoutput("...")
+          - pattern-not: commands.getstatusoutput("...")
+
+  - id: achilles.python.code-injection-exec
+    languages: [python]
+    severity: ERROR
+    message: >
+      exec() runs a string as Python code. If any of it comes from input, that input
+      can run anything. Parse the data instead of executing it.
+    metadata:
+      cwe: ["CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (Eval Injection)"]
+      category: security
+    patterns:
+      - pattern: exec($CODE, ...)
+      - pattern-not: exec("...", ...)
+
+  - id: achilles.python.path-traversal
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      A file path is built from request data. "../" in it reaches files outside the
+      intended directory. Reduce it to a file name (werkzeug.utils.secure_filename,
+      os.path.basename) or check the resolved path stays under the base directory.
+    metadata:
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory (Path Traversal)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+    pattern-sanitizers:
+      - pattern: os.path.basename(...)
+      - pattern: secure_filename(...)
+      - pattern: werkzeug.utils.secure_filename(...)
+      - pattern: safe_join(...)
+      - pattern: werkzeug.utils.safe_join(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open($PATH, ...)
+              - pattern: io.open($PATH, ...)
+              - pattern: send_file($PATH, ...)
+              - pattern: flask.send_file($PATH, ...)
+              - pattern: os.remove($PATH)
+              - pattern: os.unlink($PATH)
+              - pattern: shutil.rmtree($PATH, ...)
+              - pattern: pathlib.Path($PATH)
+              - pattern: Path($PATH)
+              - pattern: FileResponse($PATH, ...)
+          - focus-metavariable: $PATH
+
+  - id: achilles.python.ssrf
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      An outgoing request goes to a URL taken from the incoming request. An attacker
+      can point it at internal services or cloud metadata endpoints. Allow only known
+      hosts.
+    metadata:
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$METHOD($URL, ...)
+              - pattern: httpx.$METHOD($URL, ...)
+              - pattern: urllib.request.urlopen($URL, ...)
+              - pattern: urlopen($URL, ...)
+              - pattern: aiohttp.ClientSession().$METHOD($URL, ...)
+          - focus-metavariable: $URL
+
+  - id: achilles.python.template-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Request data is compiled as a template. Template syntax in it runs on the
+      server. Pass the data to a fixed template as a variable instead.
+    metadata:
+      cwe: ["CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: render_template_string($T, ...)
+              - pattern: flask.render_template_string($T, ...)
+              - pattern: jinja2.Template($T, ...)
+              - pattern: Template($T, ...)
+              - pattern: $ENV.from_string($T, ...)
+          - focus-metavariable: $T
+
+  - id: achilles.python.untrusted-deserialization
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Request data is deserialized with pickle (or a format built on it). Unpickling
+      attacker-controlled bytes runs attacker-chosen code. Use JSON for data from
+      outside.
+    metadata:
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: pickle.loads($D, ...)
+              - pattern: pickle.load($D, ...)
+              - pattern: cPickle.loads($D, ...)
+              - pattern: dill.loads($D, ...)
+              - pattern: marshal.loads($D, ...)
+              - pattern: jsonpickle.decode($D, ...)
+              - pattern: yaml.unsafe_load($D, ...)
+          - focus-metavariable: $D
+
+  - id: achilles.python.yaml-unsafe-load
+    languages: [python]
+    severity: ERROR
+    message: >
+      yaml.load() without a safe loader can construct arbitrary Python objects from
+      the document. Use yaml.safe_load().
+    metadata:
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      category: security
+    patterns:
+      - pattern: yaml.load(...)
+      - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)
+      - pattern-not: yaml.load(..., Loader=yaml.CSafeLoader, ...)
+      - pattern-not: yaml.load(..., Loader=SafeLoader, ...)
+      - pattern-not: yaml.load(..., Loader=CSafeLoader, ...)
+
+  - id: achilles.python.weak-hash
+    languages: [python]
+    severity: WARNING
+    message: >
+      MD5 and SHA-1 are broken for security use: collisions are practical and they
+      are far too fast for passwords. Use hashlib.sha256 for integrity, and a password
+      hash (bcrypt, scrypt, argon2, hashlib.pbkdf2_hmac) for passwords. If this is not
+      a security use, say so with usedforsecurity=False.
+    metadata:
+      cwe: ["CWE-328: Use of Weak Hash"]
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+          - pattern: hashlib.new("md5", ...)
+          - pattern: hashlib.new("sha1", ...)
+          - pattern: hashlib.new("MD5", ...)
+          - pattern: hashlib.new("SHA1", ...)
+      - pattern-not: hashlib.$H(..., usedforsecurity=False, ...)
+      - pattern-not: hashlib.new(..., usedforsecurity=False, ...)
+
+  - id: achilles.python.tls-verification-disabled
+    languages: [python]
+    severity: WARNING
+    message: >
+      TLS certificate verification is turned off, so anyone on the network path can
+      impersonate the server. Keep verification on; point verify= at a CA bundle if
+      the server uses a private CA.
+    metadata:
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      category: security
+    pattern-either:
+      - pattern: requests.$METHOD(..., verify=False, ...)
+      - pattern: httpx.$METHOD(..., verify=False, ...)
+      - pattern: httpx.Client(..., verify=False, ...)
+      - pattern: httpx.AsyncClient(..., verify=False, ...)
+      - pattern: ssl._create_unverified_context(...)
+      - pattern: $CTX.verify_mode = ssl.CERT_NONE
+
+  - id: achilles.python.flask-debug
+    languages: [python]
+    severity: WARNING
+    message: >
+      The Flask debugger is on. Its console runs arbitrary Python for anyone who can
+      reach it. Read the setting from the environment and keep it off in production.
+    metadata:
+      cwe: ["CWE-489: Active Debug Code"]
+      category: security
+    pattern: $APP.run(..., debug=True, ...)

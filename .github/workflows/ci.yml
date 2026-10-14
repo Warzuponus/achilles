@@ -60,6 +60,15 @@ jobs:
       # case. Refresh the baseline deliberately with `make eval-baseline`.
       - name: Eval — triage context coverage (no regression)
         run: make eval-gate
+      # The built-in Opengrep rules (configs/rules/achilles-*.yaml) against their
+      # test cases, with the real opengrep, installed by its pinned checksum. Every
+      # rule must have a case that fires; ACHILLES_REQUIRE_OPENGREP=1 turns a missing
+      # opengrep into a failure instead of a skip.
+      - name: Rules (opengrep --test)
+        run: |
+          go build -o bin/achilles ./cmd/achilles
+          ./bin/achilles tools install opengrep
+          ACHILLES_REQUIRE_OPENGREP=1 go test -tags integration -run TestRules ./internal/config
       # Integration tests need the real tools (opengrep, git); they self-skip when absent.
       - name: Test (integration, best-effort)
         run: go test -tags integration ./... || true

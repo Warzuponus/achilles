@@ -295,12 +295,15 @@ func confirmedIssues(ev vault.Store) []research.Issue {
 }
 
 // seedOrigin says whether a mining seed came from a rule Achilles did not write.
-// Opengrep findings carry the rule's own id: Achilles' baseline rules are all
+// Opengrep findings carry the rule's own id: Achilles' built-in rules are all
 // named achilles.*, so any other Opengrep rule id is from another pack, which in
 // practice is the community pack (Commons Clause). A rule mined from such a
 // finding is kept out of --mode commercial scans, like the pack itself.
 func seedOrigin(f model.Finding) string {
-	if f.Tool == "opengrep" && !strings.HasPrefix(f.RuleID, "achilles.") && !strings.HasPrefix(f.RuleID, "gen.") {
+	// Opengrep names itself "Opengrep OSS" in its report; the registry calls it
+	// opengrep. Either says the finding came from an Opengrep rule.
+	fromOpengrep := f.Scanner == "opengrep" || strings.HasPrefix(strings.ToLower(f.Tool), "opengrep")
+	if fromOpengrep && !strings.HasPrefix(f.RuleID, "achilles.") && !strings.HasPrefix(f.RuleID, "gen.") {
 		return research.OriginExternalRule
 	}
 	return ""

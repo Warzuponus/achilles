@@ -94,6 +94,12 @@ func runScanners(ctx context.Context, scanners []scanner.Scanner, tgt scanner.Ta
 					continue
 				}
 				r.findings, r.normErr = normalize.Normalize(raw.Format, raw.Tool, raw.Data)
+				// Tool is the name the scanner gives itself in its report ("Opengrep
+				// OSS", "Trivy"); Scanner is the registry entry that ran it, which is
+				// what anything that has to run it again looks it up by.
+				for i := range r.findings {
+					r.findings[i].Scanner = r.id
+				}
 				if r.normErr == nil {
 					// From here on the raw output is only stored and written out
 					// (vault, --sarif-out), so the matched text of credential

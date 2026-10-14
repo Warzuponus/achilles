@@ -88,8 +88,14 @@ type Location struct {
 // Explanation, SuggestedFix) are filled in by the model review and are absent
 // on a scanner-only run.
 type Finding struct {
-	ID          string          `json:"id"`
-	Tool        string          `json:"tool"`
+	ID   string `json:"id"`
+	Tool string `json:"tool"`
+	// Scanner is the id of the registry entry that produced the finding ("opengrep",
+	// "trivy"). Tool is the name the scanner gives itself in its report, which can
+	// differ ("Opengrep OSS", "Trivy"); identity and fingerprints use Tool, anything
+	// that has to run the scanner again uses Scanner. Empty in records written
+	// before it existed.
+	Scanner     string          `json:"scanner,omitempty"`
 	RuleID      string          `json:"ruleId"`
 	CWE         []string        `json:"cwe,omitempty"`
 	Message     string          `json:"message"`

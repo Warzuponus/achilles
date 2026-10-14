@@ -21,10 +21,6 @@ import (
 	"github.com/Warzuponus/achilles/internal/vault"
 )
 
-// scaTools are the scanners whose findings carry dependency-vulnerability info
-// (package + vulnerable/fixed versions) worth feeding the advisor.
-var scaTools = map[string]bool{"osv-scanner": true, "trivy": true, "govulncheck": true}
-
 // maxDeps caps how many dependencies go into the prompt (prompt-size bound).
 const maxDeps = 200
 
@@ -141,7 +137,9 @@ func promptBody(inv inventory.Inventory, scan model.Scan) string {
 	b.WriteString("\nSCA vulnerability findings:\n")
 	n := 0
 	for _, f := range scan.Findings {
-		if !scaTools[f.Tool] {
+		// Dependency advisories carry the package and its vulnerable and fixed
+		// versions. Trivy's misconfiguration and secret findings do not.
+		if !f.IsDependencyAdvisory() {
 			continue
 		}
 		fmt.Fprintf(&b, "  - [%s] %s: %s (%s)\n", f.Severity, f.RuleID, strings.TrimSpace(f.Message), f.Tool)

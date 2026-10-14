@@ -7,6 +7,7 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+
 - **`achilles init`: set a repository up in one step.** It writes `.achilles.yaml` (fail
   on high, use the baseline), a CI workflow for GitHub or GitLab (detected; it needs no
   secret, scans pull requests and the default branch, and pins the Achilles action to
@@ -63,6 +64,19 @@ All notable changes to this project are recorded here. The format follows
 
 
 ### Fixed
+- **Fix verification skipped every Opengrep and Trivy finding.** It looked a finding's
+  scanner up by the name the scanner gives itself in its report (`Opengrep OSS`,
+  `Trivy`), which is not the scanner's id, so `--remediate` (which verifies fixes by default) reported those
+  fixes as skipped instead of re-scanning them. Findings now record the scanner that
+  produced them (`scanner` in the JSON), and verification uses it. The same mismatch
+  kept Trivy's dependency advisories out of the upgrade advisor, and, more seriously,
+  meant a rule mined (`--mine-rules`) from a community-pack finding was not marked as
+  derived from that pack, so it could load under `--mode commercial`, which the
+  pack's Commons Clause rules out. Such rules are now marked and left out. A rule mined
+  before this fix carries no mark: if you scan in commercial mode and have mined rules
+  with the community pack installed, review `.achilles/generated-rules` (each rule's
+  provenance names the finding it came from) and remove those from community findings.
+
 - Findings in Achilles' own output were reported as findings in the project. The Evidence
   Vault (by default `.achilles/vault.jsonl` inside the scanned directory) and the reports
   quote the code around each finding, so a scanner that reads every file found the same

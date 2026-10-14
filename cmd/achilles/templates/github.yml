@@ -1,0 +1,32 @@
+# Written by `achilles init`. Scans every pull request and every push to __BRANCH__.
+#
+# It needs no secret, so pull requests from forks are scanned too. On a pull
+# request only the files it changes are reported, and the check fails only on
+# findings at or above the severity in .achilles.yaml (`fail-on`) that are not in
+# the committed baseline (.achilles/baseline.json).
+#
+# To add the AI review (verdicts, fix suggestions, issues), see
+# https://github.com/Warzuponus/achilles/blob/main/docs/ci-and-hub.md
+name: Achilles
+
+on:
+  pull_request:
+  push:
+    branches: [__BRANCH__]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # nothing here pushes with git
+          fetch-depth: 0 # the pull request diff needs the base branch
+      - uses: Warzuponus/achilles@__VERSION__
+        with:
+          # zizmor checks this repository's GitHub Actions workflows as well.
+          with: zizmor
+          args: ${{ github.event_name == 'pull_request' && format('--diff origin/{0}', github.base_ref) || '' }}

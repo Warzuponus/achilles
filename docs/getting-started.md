@@ -103,6 +103,21 @@ Write a shareable report instead of (or as well as) the terminal output:
 achilles --html-report report.html /path/to/code   # open report.html in a browser
 ```
 
+### Set the repository up for CI
+
+```bash
+achilles init
+```
+
+One command for what the rest of this guide explains piece by piece: it writes
+`.achilles.yaml` (the gate and the baseline), a CI workflow for GitHub
+(`.github/workflows/achilles.yml`) or GitLab (`.gitlab/achilles.yml`, to include
+from `.gitlab-ci.yml`), adds the Evidence Vault to `.gitignore`, and, when the
+default scanners are installed, scans once to seed `.achilles/baseline.json` so that
+CI fails only on findings that are new. It never overwrites a file without
+`--force`, and `--dry-run` shows what it would do. `--ci github|gitlab|none` overrides
+the detection.
+
 ## 4. The core knobs
 
 - **`--profile default|full`** — `default` is the five baseline tools above.

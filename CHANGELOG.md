@@ -7,6 +7,12 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **`achilles init`: set a repository up in one step.** It writes `.achilles.yaml` (fail
+  on high, use the baseline), a CI workflow for GitHub or GitLab (detected; it needs no
+  secret, scans pull requests and the default branch, and pins the Achilles action to
+  this release's commit), adds the Evidence Vault to `.gitignore`, and, when the default
+  scanners are installed, scans once to seed the baseline so CI fails only on new
+  findings. Existing files are kept unless `--force`; `--dry-run` shows what it would do.
 - **`--with zizmor`: GitHub Actions workflows.** An opt-in scanner,
   [zizmor](https://docs.zizmor.sh), audits workflows and composite actions (template
   injection, credential persistence, cache poisoning, unpinned actions). It is not
@@ -57,6 +63,11 @@ All notable changes to this project are recorded here. The format follows
 
 
 ### Fixed
+- Findings in Achilles' own output were reported as findings in the project. The Evidence
+  Vault (by default `.achilles/vault.jsonl` inside the scanned directory) and the reports
+  quote the code around each finding, so a scanner that reads every file found the same
+  issue again in them, one more time on every run. Findings in `.achilles/`, the vault and
+  the run's own report files are now always left out.
 - A scanner that says there is nothing for it to scan (osv-scanner on a tree with no
   dependency manifests, exit code 128) was reported as incomplete because of that exit
   code, which failed the scan under `--strict-tools`. It is a finished run with no

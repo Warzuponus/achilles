@@ -64,6 +64,20 @@ achilles --ai --llm-provider openrouter --llm-model <model> .
 open achilles-report/report.html
 ```
 
+**Set up a repository in one step.** In the repository, after installing the
+scanners:
+
+```bash
+achilles init
+```
+
+It writes `.achilles.yaml` (fail on high, use the baseline), a CI workflow for GitHub
+or GitLab (detected; it needs no secret and scans pull requests and the default
+branch), adds the Evidence Vault to `.gitignore`, and seeds `.achilles/baseline.json`
+with the findings in the code today. From then on CI fails only on new findings.
+Existing files are left alone (`--force` replaces them, `--dry-run` shows what it
+would write).
+
 **In Docker**, which already contains the scanners:
 `docker run --rm -v "$PWD":/work ghcr.io/warzuponus/achilles achilles --ai ... /work`
 (see [Running in containers](docs/containers.md)).

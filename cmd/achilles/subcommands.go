@@ -33,6 +33,8 @@ func runSubcommand(argv []string, stdout, stderr io.Writer) (handled bool, err e
 		return true, runTools(argv[1:], stdout, stderr)
 	case "mcp":
 		return true, runMCP(argv[1:], os.Stdin, stdout, stderr)
+	case "init":
+		return true, runInit(argv[1:], stdout, stderr)
 	}
 	return false, nil
 }

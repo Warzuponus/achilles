@@ -9,11 +9,12 @@ Every `achilles` flag, grouped by task. (For `achilles-fleet`, see [Fleet](fleet
 ## Subcommands
 
 These run instead of a scan. (A scan target literally named `version`, `doctor`,
-`tools` or `mcp` must be written `./version` etc.)
+`tools`, `mcp` or `init` must be written `./version` etc.)
 
 | Command | What it does |
 |---------|--------------|
 | `achilles version` | same as `--version` |
+| `achilles init [--ci auto\|github\|gitlab\|none] [--no-baseline] [--force] [--dry-run] [DIR]` | set a repository up in one step: `.achilles.yaml` (fail on high, use the baseline), a CI workflow (GitHub or GitLab, detected; needs no secret), the Evidence Vault in `.gitignore`, and a baseline seeded from a scan when the default scanners are installed (a scan that could not run every scanner seeds nothing). Existing files are kept unless `--force` |
 | `achilles doctor` | per default-profile scanner: where it was found (`~/.achilles/bin` first, then `PATH`), its version vs the pinned one, `ok`/`missing`/`outdated`/`no-asset`, and the exact fix command; also whether `go` (needed by gosec) and Docker are available, whether an LLM key is set (`set`/`not set` only — the key is never printed) and the resolved base URL, and whether the community rules are installed. Exits non-zero (2) if a required scanner is missing. |
 | `achilles tools list` | pinned versions, whether upstream publishes a download for this platform, and what is installed |
 | `achilles tools install [--force] [name...]` | download, sha256-verify (fail closed) and install pinned scanners into `$ACHILLES_HOME/bin` (default `~/.achilles/bin`). Names: `opengrep gosec osv-scanner trivy gitleaks rules`, and the opt-in `zizmor`. No names = the five default scanners plus the community rules; an opt-in scanner is installed by name. Skips tools already at the pinned version unless `--force`. |

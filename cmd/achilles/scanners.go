@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"sort"
 	"sync"
@@ -231,4 +232,29 @@ func applyFailOn(failOn string, scan model.Scan) error {
 		return &gateError{worst: worst, threshold: threshold}
 	}
 	return nil
+}
+
+// staleBuildHint explains an incomplete run of a tool Achilles builds with Go
+// (gosec) when the installed binary was built with an older Go than the one on
+// PATH: that go/types cannot read what the newer standard library uses, and the
+// tool's report does not say so. "" when that is not the case.
+func staleBuildHint(ctx context.Context, id string) string {
+	t, err := toolchain.Lookup(id)
+	if err != nil || t.GoPackage == "" {
+		return ""
+	}
+	bin, _, err := toolchain.LookBin(t.Bin)
+	if err != nil {
+		return ""
+	}
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		return ""
+	}
+	built, stale := toolchain.StaleGoBuild(bin, toolchain.LocalGoVersion(ctx, goPath))
+	if !stale {
+		return ""
+	}
+	return fmt.Sprintf("likely cause: this %s was built with %s, older than the Go it type-checks with; `achilles tools install --force %s` builds it with your Go",
+		t.Name, built, t.Name)
 }

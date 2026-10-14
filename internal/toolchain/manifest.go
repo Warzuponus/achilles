@@ -39,6 +39,14 @@ type Tool struct {
 	Assets map[string]Asset
 	// Manual is the hint printed for platforms without an asset.
 	Manual string
+	// GoPackage, when set, is the tool's main package. With `go` on PATH the
+	// installer builds the pinned version from source with that Go instead of
+	// downloading the prebuilt binary (see Installer.Go).
+	GoPackage string
+	// GoVersionVars are the main-package variables a source build sets to the
+	// pinned version ("{v}" is the version, "{tag}" is "v" + version), so the
+	// tool reports the version it was built at instead of "dev".
+	GoVersionVars map[string]string
 }
 
 // Asset returns the asset for a platform.
@@ -97,6 +105,13 @@ var manifest = []Tool{
 		VersionArgs: []string{"-version"},
 		Requires:    []string{"go"}, // gosec type-checks via the Go toolchain
 		Manual:      "go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1, or use the Achilles Docker image",
+		// gosec type-checks the code it scans with the go/types it was built with.
+		// Upstream's binaries are built with an older Go than the one they scan
+		// with, and that go/types cannot read newer standard-library export data:
+		// the v2.27.1 release, built with Go 1.26, fails on any Go 1.27 package
+		// that imports math/rand/v2. Built with the Go it will scan with, it can.
+		GoPackage:     "github.com/securego/gosec/v2/cmd/gosec",
+		GoVersionVars: map[string]string{"main.Version": "{v}", "main.GitTag": "{tag}"},
 		Assets: map[string]Asset{
 			"linux/amd64":   {gh("securego/gosec", "v2.27.1", "gosec_2.27.1_linux_amd64.tar.gz"), TarGz, "gosec", "a1cc5fba45fb51131ba05dee4029b364f62f4b6739b8f24236f93de82f40da40"},
 			"linux/arm64":   {gh("securego/gosec", "v2.27.1", "gosec_2.27.1_linux_arm64.tar.gz"), TarGz, "gosec", "33582a6ed6878e4a0456585a8c3b043eef74d989d606bef85afc1a0f9b12f475"},

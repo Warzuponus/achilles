@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"strings"
@@ -43,11 +44,15 @@ const toolsUsage = `usage: achilles tools <command>
 
   list                     show the pinned scanners and community rules, whether upstream
                            publishes one for this platform, and where each is installed
-  install [--force] [name...]
+  install [--force] [--prebuilt] [name...]
                            download, sha256-verify and install pinned scanners into
                            $ACHILLES_HOME/bin (default ~/.achilles/bin) and, as the name
                            "rules", the community Opengrep rule pack into
-                           $ACHILLES_HOME/rules; no names = every scanner plus the rules
+                           $ACHILLES_HOME/rules; no names = every default scanner plus
+                           the rules. With go on PATH, gosec is built from source with
+                           that Go (checked against the Go checksum database), since it
+                           can only type-check code its own Go can read; --prebuilt
+                           downloads upstream's binary instead
   doctor                   same as 'achilles doctor'
 `
 
@@ -114,6 +119,7 @@ func runToolsList(stdout io.Writer) error {
 func runToolsInstall(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("tools install", flag.ContinueOnError)
 	force := fs.Bool("force", false, "reinstall even if the pinned version is already installed")
+	prebuilt := fs.Bool("prebuilt", false, "download upstream's binary even for a tool Achilles would build with your Go (gosec)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -154,10 +160,18 @@ func runToolsInstall(args []string, stdout, stderr io.Writer) error {
 	defer cancel()
 
 	in := &toolchain.Installer{BinDir: binDir, Log: stdout}
+	goVersion := ""
+	if !*prebuilt {
+		// gosec is built with the Go it will scan with, when there is one.
+		if p, err := exec.LookPath("go"); err == nil {
+			in.Go = p
+			goVersion = toolchain.LocalGoVersion(ctx, p)
+		}
+	}
 	var failed []string
 	for _, t := range selected {
 		if !*force {
-			if v := installedPinnedVersion(ctx, t); v != "" {
+			if v := installedPinnedVersion(ctx, t, goVersion); v != "" {
 				fmt.Fprintf(stdout, "%s %s: already installed (use --force to reinstall)\n", t.Name, v)
 				continue
 			}
@@ -193,11 +207,17 @@ func runToolsInstall(args []string, stdout, stderr io.Writer) error {
 }
 
 // installedPinnedVersion returns the version when the MANAGED copy of t already
-// reports the pinned version, else "".
-func installedPinnedVersion(ctx context.Context, t toolchain.Tool) string {
+// reports the pinned version, else "". A copy built with an older Go than
+// goVersion does not count for a tool that is built from source: it is rebuilt.
+func installedPinnedVersion(ctx context.Context, t toolchain.Tool, goVersion string) string {
 	path, src, err := toolchain.LookBin(t.Bin)
 	if err != nil || src != toolchain.SourceManaged {
 		return ""
+	}
+	if t.GoPackage != "" {
+		if _, stale := toolchain.StaleGoBuild(path, goVersion); stale {
+			return ""
+		}
 	}
 	vctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()

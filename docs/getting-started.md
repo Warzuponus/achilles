@@ -59,7 +59,7 @@ achilles tools list         # pinned versions and what is installed
 | Tool | Covers | Notes |
 |------|--------|-------|
 | Opengrep | multi-language patterns | upstream publishes no checksums; the pinned digests were computed at pin time |
-| gosec | Go SAST | needs `go` on PATH to type-check packages. No gosec release can yet read what Go 1.27.2 and newer produce: with such a `go` first on PATH, gosec skips its type-based analysis and Achilles reports it as **incomplete** rather than clean. Until gosec catches up, scan Go code with Go 1.27.1 on PATH and `GOTOOLCHAIN=local` |
+| gosec | Go SAST | needs `go` on PATH to type-check packages. With `go` on PATH, `tools install` **builds gosec from source with that Go** (pinned version; every module checked against the Go checksum database; `--prebuilt` downloads upstream's binary instead). gosec can only read the standard library of the Go it was built with: upstream's v2.27.1 binary, built with Go 1.26, cannot type-check a Go 1.27 package that imports `math/rand/v2`. `achilles doctor` flags a gosec built with an older Go than yours. Separately, no gosec release can yet read what Go 1.27.2 and newer produce: with such a `go` first on PATH, gosec skips its type-based analysis and Achilles reports it as **incomplete** rather than clean. Until gosec catches up, scan Go code with Go 1.27.1 on PATH and `GOTOOLCHAIN=local` |
 | osv-scanner | dependency CVEs (SCA) | needs network access to the OSV database |
 | Trivy | IaC / misconfig / secrets / SCA | needs network access on first use for its vulnerability database and misconfiguration checks |
 | Gitleaks | secret scanning | |

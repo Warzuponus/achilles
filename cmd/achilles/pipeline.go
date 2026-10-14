@@ -188,8 +188,14 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 			// The tool ran and its findings stand, but it told us it could not
 			// analyze everything. Its silence about the rest is not a clean bill, so
 			// the scan is marked incomplete exactly as if the tool had failed.
-			fmt.Fprintf(os.Stderr, "achilles: %s ran but could not analyze all of the target, so its results are INCOMPLETE: %s\n", r.id, r.raw.Incomplete)
-			diags = append(diags, toolDiag{Tool: r.id, Stage: "partial", Error: r.raw.Incomplete})
+			reason := r.raw.Incomplete
+			if o.runnerKind == "local" {
+				if hint := staleBuildHint(ctx, r.id); hint != "" {
+					reason += " (" + hint + ")"
+				}
+			}
+			fmt.Fprintf(os.Stderr, "achilles: %s ran but could not analyze all of the target, so its results are INCOMPLETE: %s\n", r.id, reason)
+			diags = append(diags, toolDiag{Tool: r.id, Stage: "partial", Error: reason})
 		}
 
 		if o.sarifOut != "" {

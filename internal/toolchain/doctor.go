@@ -78,6 +78,10 @@ type Doctor struct {
 	DockerInfo   func(ctx context.Context) string // "" = daemon not reachable
 	Rules        func() InstalledRules            // nil = not checked
 	BinDir       string
+	// GoVersion reports the version of the go at a path ("go1.27.1"; "" =
+	// unknown), and BuiltWith the Go a binary was built with. nil = not checked.
+	GoVersion func(ctx context.Context, goPath string) string
+	BuiltWith func(path string) string
 }
 
 // NewDoctor returns a Doctor for the running machine.
@@ -91,6 +95,8 @@ func NewDoctor() Doctor {
 		DockerInfo: dockerInfo,
 		Rules:      InstalledCommunityRules,
 		BinDir:     bd,
+		GoVersion:  LocalGoVersion,
+		BuiltWith:  BuiltWithGo,
 	}
 }
 
@@ -106,6 +112,9 @@ func (d Doctor) Diagnose(ctx context.Context) Report {
 
 	goPath, _, goErr := d.Look("go")
 	r.Go = Prereq{Found: goErr == nil, Path: goPath}
+	if r.Go.Found && d.GoVersion != nil {
+		r.Go.Detail = d.GoVersion(ctx, goPath)
+	}
 	if dp, _, err := d.Look("docker"); err == nil {
 		detail := "CLI found, daemon not reachable"
 		if v := d.DockerInfo(ctx); v != "" {
@@ -115,7 +124,7 @@ func (d Doctor) Diagnose(ctx context.Context) Report {
 	}
 
 	for _, t := range Tools() {
-		r.Tools = append(r.Tools, d.diagnoseTool(ctx, t, r.Go.Found))
+		r.Tools = append(r.Tools, d.diagnoseTool(ctx, t, r.Go))
 	}
 
 	for _, k := range []string{"ACHILLES_LLM_API_KEY", "OPENAI_API_KEY"} {
@@ -132,7 +141,8 @@ func (d Doctor) Diagnose(ctx context.Context) Report {
 	return r
 }
 
-func (d Doctor) diagnoseTool(ctx context.Context, t Tool, haveGo bool) ToolStatus {
+func (d Doctor) diagnoseTool(ctx context.Context, t Tool, goTool Prereq) ToolStatus {
+	haveGo := goTool.Found
 	st := ToolStatus{Name: t.Name, Required: t.Default, Pinned: t.Version}
 	path, src, err := d.Look(t.Bin)
 	if err != nil {
@@ -178,6 +188,20 @@ func (d Doctor) diagnoseTool(ctx context.Context, t Tool, haveGo bool) ToolStatu
 	if st.State == StateOutdated {
 		if _, ok := t.Asset(d.GOOS, d.GOARCH); ok {
 			st.Fix = "achilles tools install " + t.Name
+		}
+	}
+
+	// A Go tool built with an older Go than the one it type-checks with cannot
+	// read what the newer standard library uses (gosec 2.27.1's release binary,
+	// built with Go 1.26, fails on any Go 1.27 package importing math/rand/v2).
+	if t.GoPackage != "" && d.BuiltWith != nil && goTool.Detail != "" {
+		if built := d.BuiltWith(path); built != "" && olderGo(built, goTool.Detail) {
+			st.Notes = append(st.Notes, fmt.Sprintf(
+				"built with %s but type-checks with %s: it cannot read Go code that uses what %s added, and reports such packages as incomplete",
+				built, goTool.Detail, goMinorString(goTool.Detail)))
+			if st.Fix == "" {
+				st.Fix = "achilles tools install --force " + t.Name + "   (builds it with your Go)"
+			}
 		}
 	}
 
@@ -293,7 +317,11 @@ func (r Report) writeTools(w io.Writer, required bool) {
 func (r Report) writeRest(w io.Writer) {
 	fmt.Fprintln(w, "\nPrerequisites")
 	if r.Go.Found {
-		fmt.Fprintf(w, "  go           found  %s   (gosec needs it)\n", r.Go.Path)
+		ver := ""
+		if r.Go.Detail != "" {
+			ver = " (" + r.Go.Detail + ")"
+		}
+		fmt.Fprintf(w, "  go           found  %s%s   (gosec needs it)\n", r.Go.Path, ver)
 	} else {
 		fmt.Fprintln(w, "  go           NOT FOUND  (gosec cannot scan Go code without it: https://go.dev/dl/)")
 	}

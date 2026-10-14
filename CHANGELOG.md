@@ -74,6 +74,18 @@ All notable changes to this project are recorded here. The format follows
 
 
 ### Fixed
+- **gosec could not analyze Go 1.27 code that imports `math/rand/v2`.** gosec
+  type-checks with the standard library of the Go it was built with, and upstream's
+  v2.27.1 binary is built with Go 1.26, which cannot read Go 1.27's `math/rand/v2`; every
+  package importing it was reported incomplete, and the report did not say why. With
+  `go` on PATH, `achilles tools install` now builds gosec from source with that Go
+  (pinned version, every module checked against the Go checksum database, refused under
+  `GOSUMDB=off`) and falls back to the prebuilt binary, saying why, if that fails;
+  `--prebuilt` downloads it as before. A managed gosec built with an older Go is rebuilt
+  without `--force`, `achilles doctor` flags one, and a scan that gosec could not
+  complete names it as the likely cause. The GitHub Action installs the scanners with
+  the Go the job has on PATH, so it gets a gosec that matches it too (a cold build took
+  about 30 seconds here).
 - **Fix verification skipped every Opengrep and Trivy finding.** It looked a finding's
   scanner up by the name the scanner gives itself in its report (`Opengrep OSS`,
   `Trivy`), which is not the scanner's id, so `--remediate` (which verifies fixes by default) reported those

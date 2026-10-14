@@ -7,6 +7,10 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **The terminal report summarizes a long scan by rule.** Above the per-finding detail,
+  a scan with more than 10 findings lists how many each rule produced and in how many
+  files, most severe and most frequent first (up to 15 rules), since a few rules usually
+  account for most of a report.
 - **Built-in rules for Python, JavaScript/TypeScript and Java.** 35 new Achilles
   Opengrep rules (Apache-2.0, so they load in every mode, `--mode commercial`
   included) for SQL, command and code injection, path traversal, SSRF, XSS, open

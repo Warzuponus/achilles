@@ -111,6 +111,8 @@ func WriteHuman(w io.Writer, s model.Scan) {
 		return sorted[i].Location.Region.StartLine < sorted[j].Location.Region.StartLine
 	})
 
+	writeByRule(w, sorted)
+
 	fmt.Fprintln(w, "\nDetail:")
 	for _, f := range sorted {
 		loc := f.Location.File
@@ -179,6 +181,70 @@ func WriteHuman(w io.Writer, s model.Scan) {
 				fmt.Fprintln(w, "    (patch available in the Evidence Vault)")
 			}
 		}
+	}
+}
+
+// byRuleThreshold is the number of findings above which the human report
+// summarizes them by rule before listing each one; byRuleMax is how many rules
+// that summary shows.
+const (
+	byRuleThreshold = 10
+	byRuleMax       = 15
+)
+
+// writeByRule prints how many findings each rule produced, most severe and
+// most frequent first, so a long report can be read at a glance: a few rules
+// usually account for most of it. sorted is most severe first.
+func writeByRule(w io.Writer, sorted []model.Finding) {
+	if len(sorted) <= byRuleThreshold {
+		return
+	}
+	type row struct {
+		tool, rule string
+		sev        model.Severity
+		n          int
+		files      map[string]bool
+		first      int // index in sorted, for a stable order
+	}
+	idx := map[string]*row{}
+	var rows []*row
+	for i, f := range sorted {
+		k := f.Tool + "\x00" + f.RuleID
+		r := idx[k]
+		if r == nil {
+			r = &row{tool: f.Tool, rule: f.RuleID, sev: f.Severity, files: map[string]bool{}, first: i}
+			idx[k] = r
+			rows = append(rows, r)
+		}
+		r.n++
+		r.files[f.Location.File] = true
+		if f.Severity.Rank() > r.sev.Rank() {
+			r.sev = f.Severity
+		}
+	}
+	if len(rows) == len(sorted) {
+		return // one finding per rule: the summary would repeat the detail
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if a, b := rows[i].sev.Rank(), rows[j].sev.Rank(); a != b {
+			return a > b
+		}
+		if rows[i].n != rows[j].n {
+			return rows[i].n > rows[j].n
+		}
+		return rows[i].first < rows[j].first
+	})
+	fmt.Fprintf(w, "\nBy rule (%d rules):\n", len(rows))
+	for i, r := range rows {
+		if i == byRuleMax {
+			fmt.Fprintf(w, "  ... and %d more rule(s)\n", len(rows)-byRuleMax)
+			break
+		}
+		where := "1 file"
+		if len(r.files) != 1 {
+			where = fmt.Sprintf("%d files", len(r.files))
+		}
+		fmt.Fprintf(w, "  %-8s %4d  %s (%s, %s)\n", r.sev, r.n, r.rule, r.tool, where)
 	}
 }
 

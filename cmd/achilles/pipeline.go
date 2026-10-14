@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -226,6 +227,10 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 // --diff, findings outside the changed files. It runs before baseline and gating,
 // so filtered findings never surface, gate, or get baselined.
 func filterFindings(o *options, ev vault.Store, runID, absTarget string, scan *model.Scan) error {
+	// --- Achilles' own state and reports: always left out (see ownOutputs). ---
+	if n := dropOwnOutputs(o, absTarget, scan); n > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: left out %d finding(s) in Achilles' own state and reports (.achilles/, the vault, this run's report files)\n", n)
+	}
 	// --- noise filter: on by default; --no-default-excludes disables the built-ins. ---
 	nm := noise.DefaultMatcher()
 	if o.noDefaultExcludes {
@@ -268,7 +273,13 @@ func filterFindings(o *options, ev vault.Store, runID, absTarget string, scan *m
 		scan.Findings = append(inFiles, inCommits...)
 		// The one change a diff-scoped scan must not let pass quietly: the diff
 		// edits the file that tells a scanner what to ignore.
-		if scan.RepoConfigChanged = repoConfigChanged(scan.RepoConfig, changed); len(scan.RepoConfigChanged) > 0 {
+		// The repository's settings file counts whatever it sets: a change that lowers
+		// fail-on or points the baseline elsewhere is as much a change to the scan.
+		inEffect := scan.RepoConfig
+		if s := o.repoSettings; s != nil && len(s.Applied) > 0 && !slices.Contains(inEffect, "achilles: "+s.File) {
+			inEffect = append(append([]string(nil), inEffect...), "achilles: "+s.File)
+		}
+		if scan.RepoConfigChanged = repoConfigChanged(inEffect, changed); len(scan.RepoConfigChanged) > 0 {
 			fmt.Fprintf(os.Stderr, "achilles: WARNING: this change modifies scanner configuration (%s). It can hide findings in the same change; review that file as part of this scan.\n",
 				strings.Join(scan.RepoConfigChanged, "; "))
 		}

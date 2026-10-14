@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -190,7 +191,11 @@ func run(argv []string) error {
 	collapseHistory(&scan, os.Stderr)
 	// The repository's own scanner configuration is named, never applied silently.
 	diags = append(diags, applyRepoConfigPolicy(o.noRepoConfig, repoConfigInEffect(cfg, reg, absTarget), &scan, os.Stderr)...)
-	if s := o.repoSettings; s != nil && len(s.Applied) > 0 {
+	// The repository's .achilles.yaml is listed with the configuration that can
+	// remove findings only when it does that: by excluding paths. fail-on, the
+	// baseline path and the rest are announced when the scan starts; a change to
+	// any of them under --diff is flagged regardless (see filterFindings).
+	if s := o.repoSettings; s != nil && slices.Contains(s.Applied, "exclude") {
 		scan.RepoConfig = append(scan.RepoConfig, "achilles: "+s.File)
 	}
 	// --timeout bounded the scanners. Every later phase gets its own clock, started

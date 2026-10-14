@@ -72,10 +72,11 @@ manual install or the Docker image.
 
 **Rules.** Opengrep's `-f` rules are, in order: the `rules:` directory from your tool
 config if it exists on disk (a repo checkout uses `configs/rules`), otherwise the
-built-in rules embedded in the binary (materialized into your user cache): about 40
-Achilles-authored rules for injection, path traversal, SSRF, unsafe deserialization,
-weak crypto, disabled TLS checks and hard-coded credentials in Python, JavaScript and
-TypeScript, Java, and any language for credentials. They are Apache-2.0 like the rest
+built-in rules embedded in the binary (materialized into your user cache): about 60
+Achilles-authored rules for injection, path traversal, SSRF, XSS, unsafe
+deserialization, weak crypto, disabled TLS checks and hard-coded credentials in
+Python, JavaScript and TypeScript, Java, Ruby (Rails, Sinatra) and PHP (plain PHP,
+Laravel, Symfony), and any language for credentials. They are Apache-2.0 like the rest
 of Achilles, so they load in every mode. The
 community rule pack from `achilles tools install rules`
 ([opengrep-rules](https://github.com/opengrep/opengrep-rules), pinned commit, security

@@ -7,6 +7,17 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Built-in rules for Ruby and PHP.** 24 more Achilles Opengrep rules, Apache-2.0 like
+  the rest. Ruby (Rails, Sinatra): SQL injection through ActiveRecord (`where`, `order`,
+  `find_by_sql` and the rest) and SQL built by interpolation, command injection
+  (including backticks and `Kernel#open`), code injection (`eval`, `send`,
+  `constantize`), path traversal, SSRF, XSS (`raw`, `html_safe`, `render inline:`),
+  open redirects, `Marshal`/`YAML.unsafe_load`, `permit!`, `VERIFY_NONE`, and MD5/SHA-1.
+  PHP (plain PHP, Laravel, Symfony): SQL injection (mysqli, PDO, `DB::` and the `*Raw`
+  builder methods), command and code injection, file inclusion, path traversal, SSRF,
+  XSS, header injection and open redirects, `unserialize`, `extract`/`parse_str`
+  variable overwrite, disabled TLS checks, and fast password hashes. Each rule has
+  cases that must fire and near misses that must not.
 - **The terminal report summarizes a long scan by rule.** Above the per-finding detail,
   a scan with more than 10 findings lists how many each rule produced and in how many
   files, most severe and most frequent first (up to 15 rules), since a few rules usually

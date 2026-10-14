@@ -131,11 +131,11 @@ report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/
   [SECURITY.md](SECURITY.md).
 - **Coverage depends on the scanners.** The default set covers Go, dependencies, IaC
   and secrets well. Code-level coverage for Python, JavaScript, Java, Ruby and PHP comes
-  mostly from Opengrep rules: Achilles ships about 40 of its own for Python, JavaScript
-  and TypeScript, Java and credentials (Apache-2.0, loaded in every mode), and
-  `achilles tools install` adds the community rules (a Commons Clause licence applies;
-  they are skipped under `--mode commercial`, see [THIRD-PARTY.md](THIRD-PARTY.md)). Ruby
-  and PHP have no built-in rules yet. The heavier per-language analyzers
+  mostly from Opengrep rules: Achilles ships about 60 of its own for Python,
+  JavaScript and TypeScript, Java, Ruby, PHP and credentials (Apache-2.0, loaded in
+  every mode), and `achilles tools install` adds the community rules (a Commons Clause
+  licence applies; they are skipped under `--mode commercial`, see
+  [THIRD-PARTY.md](THIRD-PARTY.md)). The heavier per-language analyzers
   (`--profile full`) need Docker.
 - **Go code and Go 1.27.2 or newer.** gosec cannot yet read the compiler data that Go
   1.27.2 writes, so with that toolchain on your PATH it skips its type-based rules.

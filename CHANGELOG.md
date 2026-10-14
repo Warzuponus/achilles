@@ -74,6 +74,11 @@ All notable changes to this project are recorded here. The format follows
 
 
 ### Fixed
+- **The same finding was reported several times.** osv-scanner repeats some advisories
+  word for word (CVE-2020-14343 for PyYAML 5.3.1 came four times), and each copy was
+  triaged, counted, gated and filed on its own. A finding a scanner repeats exactly,
+  same rule, place and message, is now kept once. Scanning this repository went from 413
+  findings to 388.
 - **gosec could not analyze Go 1.27 code that imports `math/rand/v2`.** gosec
   type-checks with the standard library of the Go it was built with, and upstream's
   v2.27.1 binary is built with Go 1.26, which cannot read Go 1.27's `math/rand/v2`; every

@@ -56,5 +56,29 @@ func Normalize(format, fallbackTool string, data []byte) ([]model.Finding, error
 			fs[i].CodeContext = ""
 		}
 	}
-	return fs, nil
+	return dropExactDuplicates(fs), nil
+}
+
+// dropExactDuplicates keeps one of each finding a scanner reported more than
+// once, word for word at the same place. osv-scanner 2.4.0 repeats some
+// advisories (CVE-2020-14343 for PyYAML 5.3.1 comes four times). Each copy
+// would otherwise be triaged, counted, gated and filed on its own, under the
+// same id. The same rule matching the same text at two places is two findings
+// and stays two.
+func dropExactDuplicates(fs []model.Finding) []model.Finding {
+	type key struct {
+		fingerprint, rule, file, message string
+		region                           model.Region
+	}
+	seen := make(map[key]bool, len(fs))
+	out := fs[:0]
+	for _, f := range fs {
+		k := key{f.Fingerprint, f.RuleID, f.Location.File, f.Message, f.Location.Region}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, f)
+	}
+	return out
 }

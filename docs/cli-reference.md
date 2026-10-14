@@ -194,7 +194,7 @@ Need `GITHUB_TOKEN` and `--repo` (or `$GITHUB_REPOSITORY`).
 | `--pr-review` | `0` | post findings as inline review comments (needs `--pr-head-sha`) |
 | `--pr-head-sha` | — | PR head commit SHA for `--pr-review` |
 | `--file-issues` | `false` | open/maintain GitHub Issues with fix suggestions for kept findings; see [Filing issues](#filing-issues) below |
-| `--fix-pr` | `false` | open a review PR with auto-fixes (needs `--remediate`; **never merges**). The branch is built in a temporary git worktree from the committed base: your checkout is not switched, and only the files the fixes change are committed (never untracked or uncommitted files). Each fix may change only its finding's own file |
+| `--fix-pr` | `false` | open a review PR with auto-fixes (needs `--remediate`; **never merges**). The branch is built in a temporary git worktree from the committed base: your checkout is not switched, and only the files the fixes change are committed (never untracked or uncommitted files). Each fix may change only its finding's own file. In GitHub Actions it pushes with git, so that one workflow needs the checkout's credentials (`persist-credentials: true`, the checkout default) and `contents: write`; the example workflows turn them off because they do not push |
 | `--fix-remote` | `origin` | git remote to push the auto-fix branch to |
 | `--fix-base` | current branch | base branch for the auto-fix PR (required when the checkout is on a detached HEAD, as in many CI jobs) |
 

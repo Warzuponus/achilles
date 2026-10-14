@@ -47,6 +47,15 @@ All notable changes to this project are recorded here. The format follows
   or failed, never clean: gitleaks itself exits 0 with an empty report in those cases.
   A repository can turn it on for itself with `secrets-history: true` in `.achilles.yaml`.
 
+### Security
+- **Achilles' own workflows are hardened, and checked by zizmor in the self-scan.** The
+  release workflow no longer lets `setup-go` restore a build cache (a poisoned cache
+  could have reached the signed archives); every checkout, here and in the example
+  workflows, sets `persist-credentials: false`; Dependabot waits seven days before
+  proposing a new release. The self-scan now runs zizmor over the workflows and
+  `action.yml`, so a change that weakens them fails CI.
+
+
 ### Fixed
 - A scanner that says there is nothing for it to scan (osv-scanner on a tree with no
   dependency manifests, exit code 128) was reported as incomplete because of that exit

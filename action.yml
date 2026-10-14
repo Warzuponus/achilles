@@ -180,7 +180,7 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
         ACTION_REF: ${{ github.action_ref }}
         ACHILLES_REQUIRE_SIGNATURE: "1"   # no signature, no install
-      run: |
+      run: | # zizmor: ignore[github-env] -- writes only the two fixed directories below to GITHUB_PATH
         set -euo pipefail
         bindir="${RUNNER_TEMP}/achilles-bin"
         mkdir -p "$bindir"
@@ -200,6 +200,8 @@ runs:
         else
           VERSION="$version" INSTALL_DIR="$bindir" sh "$GITHUB_ACTION_PATH/scripts/install.sh"
         fi
+        # Both directories are fixed paths this step created; nothing from an input,
+        # the event or the repository is written to GITHUB_PATH.
         echo "$bindir" >> "$GITHUB_PATH"
         echo "$HOME/.achilles/bin" >> "$GITHUB_PATH"
 

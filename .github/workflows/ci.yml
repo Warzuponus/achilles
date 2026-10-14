@@ -34,6 +34,8 @@ jobs:
       ACHILLES_TEST_POSTGRES_DSN: postgres://postgres:test@localhost:5432/vaulttest?sslmode=disable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27'
@@ -71,8 +73,10 @@ jobs:
       GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       - name: Run the action against the bundled sample
-        uses: ./
+        uses: ./ # achilles:ignore zizmor:self-repository -- this job tests the action in this checkout, on purpose
         with:
           version: source # build from this checkout, not a published release
           # The Go that gosec scans with: 1.27.2 is not readable by any gosec
@@ -95,6 +99,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27'
@@ -111,6 +117,8 @@ jobs:
       GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.1'
@@ -134,6 +142,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27'

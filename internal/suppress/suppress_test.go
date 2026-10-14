@@ -61,6 +61,7 @@ func TestParse(t *testing.T) {
 func TestCovers(t *testing.T) {
 	gosec := model.Finding{Tool: "gosec", RuleID: "G204"}
 	long := model.Finding{Tool: "opengrep", RuleID: "python.lang.security.dangerous-system-call"}
+	zizmorFinding := model.Finding{Tool: "zizmor", RuleID: "zizmor/self-repository"}
 	for _, c := range []struct {
 		rules string
 		f     model.Finding
@@ -78,6 +79,12 @@ func TestCovers(t *testing.T) {
 		{"system-call", long, false}, // a whole segment, not a suffix
 		{"security.dangerous-system-call", long, false},
 		{"*", gosec, false}, // there is no "everything"
+		// zizmor names its rules "zizmor/AUDIT"; the audit name alone is what people write.
+		{"self-repository", zizmorFinding, true},
+		{"zizmor:self-repository", zizmorFinding, true},
+		{"zizmor/self-repository", zizmorFinding, true},
+		{"repository", zizmorFinding, false},
+		{"gosec:self-repository", zizmorFinding, false},
 	} {
 		m := Marker{Rules: strings.Fields(c.rules)}
 		if got := m.Covers(c.f); got != c.want {

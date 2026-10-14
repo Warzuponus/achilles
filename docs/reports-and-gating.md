@@ -177,7 +177,7 @@ out, err := exec.Command(bin, args...).Output()
 The comment names the rule (or several, separated by commas) and gives a reason after
 ` -- `. It applies to a finding on its own line, or on the line directly below when
 the comment stands alone. A rule can be written as its id (`G204`), with its tool
-(`gosec:G204`), or as the last part of a long dotted id (`dangerous-system-call`).
+(`gosec:G204`), or as the last part of a long dotted id (`dangerous-system-call`, or `template-injection` for `zizmor/template-injection`).
 
 What happens to a suppressed finding:
 

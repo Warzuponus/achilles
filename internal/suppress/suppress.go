@@ -89,19 +89,24 @@ func Parse(line string) (m Marker, why string, ok bool) {
 
 // Covers reports whether the marker names the finding's rule: the rule id, the
 // rule id qualified by its tool ("gosec:G204"), or the last dotted segment of a
-// long rule id ("dangerous-system-call" for "python.lang.security.dangerous-system-call").
+// long rule id ("dangerous-system-call" for "python.lang.security.dangerous-system-call",
+// "template-injection" for "zizmor/template-injection"), alone or with the tool.
 func (m Marker) Covers(f model.Finding) bool {
 	id := strings.ToLower(f.RuleID)
 	if id == "" {
 		return false
 	}
+	// The last segment of a long id: after the last "." (Opengrep's
+	// "python.lang.security.dangerous-system-call") or "/" (zizmor's
+	// "zizmor/template-injection").
 	last := id
-	if i := strings.LastIndexByte(id, '.'); i >= 0 && i < len(id)-1 {
+	if i := strings.LastIndexAny(id, "./"); i >= 0 && i < len(id)-1 {
 		last = id[i+1:]
 	}
+	tool := strings.ToLower(f.Tool) + ":"
 	for _, r := range m.Rules {
 		r = strings.ToLower(r)
-		if r == id || r == last || r == strings.ToLower(f.Tool)+":"+id {
+		if r == id || r == last || r == tool+id || r == tool+last {
 			return true
 		}
 	}

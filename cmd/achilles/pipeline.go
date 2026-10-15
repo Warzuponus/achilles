@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,6 +24,7 @@ import (
 	"github.com/Warzuponus/achilles/internal/research"
 	"github.com/Warzuponus/achilles/internal/scanner"
 	"github.com/Warzuponus/achilles/internal/scanner/opengrep"
+	"github.com/Warzuponus/achilles/internal/toolchain"
 	"github.com/Warzuponus/achilles/internal/vault"
 	"github.com/Warzuponus/achilles/internal/vcs"
 )
@@ -74,7 +78,7 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 		if tc.ID == "syft" {
 			continue // SBOM generator, not a findings scanner — see the --sbom step
 		}
-		if !tc.RunsInProfile(o.profile) {
+		if !tc.RunsInProfile(o.profile) && !o.optedIn(tc.OptIn) {
 			continue
 		}
 		if err := gate.Allow(tc.ToLicense()); err != nil {
@@ -83,6 +87,12 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 		}
 		if o.noRepoConfig {
 			tc.LocalConfig = nil // do not hand the scanner the repository's own ignore/config files
+			// ... and tell it not to go and load them itself, when it has a switch for that.
+			tc.Argv = append(append([]string(nil), tc.Argv...), tc.NoRepoConfigArgs...)
+		}
+		if o.diffRef != "" && tc.DiffArg != "" {
+			// A tool that reads commits is limited to the ones under review.
+			tc.Argv = append(append([]string(nil), tc.Argv...), strings.ReplaceAll(tc.DiffArg, "{diff}", o.diffRef))
 		}
 		toolRunner := runnerFor(tc, runner, os.Stderr)
 		sc, err := buildScanner(tc, toolRunner, opengrepRules)
@@ -155,10 +165,15 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 	// Diagnostics sidecar: tools that failed to run or whose output couldn't be
 	// normalized. Silent gaps read as "clean" — we surface them (DESIGN §6).
 	var diags []toolDiag
+	var notInstalled []string
 	for _, r := range runScanners(ctx, applicable, tgt) {
 		if r.err != nil {
 			// A single tool failing degrades to a partial scan (DESIGN.md §6).
-			fmt.Fprintf(os.Stderr, "achilles: %s failed: %v\n", r.id, r.err)
+			if errors.Is(r.err, exec.ErrNotFound) {
+				notInstalled = append(notInstalled, r.id)
+			} else {
+				fmt.Fprintf(os.Stderr, "achilles: %s failed: %v\n", r.id, r.err)
+			}
 			diags = append(diags, toolDiag{Tool: r.id, Stage: "run", Error: r.err.Error()})
 			continue
 		}
@@ -181,14 +196,39 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 			// The tool ran and its findings stand, but it told us it could not
 			// analyze everything. Its silence about the rest is not a clean bill, so
 			// the scan is marked incomplete exactly as if the tool had failed.
-			fmt.Fprintf(os.Stderr, "achilles: %s ran but could not analyze all of the target, so its results are INCOMPLETE: %s\n", r.id, r.raw.Incomplete)
-			diags = append(diags, toolDiag{Tool: r.id, Stage: "partial", Error: r.raw.Incomplete})
+			reason := r.raw.Incomplete
+			if o.runnerKind == "local" {
+				if hint := staleBuildHint(ctx, r.id); hint != "" {
+					reason += " (" + hint + ")"
+				}
+			}
+			fmt.Fprintf(os.Stderr, "achilles: %s ran but could not analyze all of the target, so its results are INCOMPLETE: %s\n", r.id, reason)
+			diags = append(diags, toolDiag{Tool: r.id, Stage: "partial", Error: reason})
 		}
 
 		if o.sarifOut != "" {
 			if err := os.WriteFile(filepath.Join(o.sarifOut, r.id+".sarif"), r.raw.Data, 0o600); err != nil {
 				fmt.Fprintf(os.Stderr, "achilles: %s sarif-out write failed: %v\n", r.id, err)
 			}
+		}
+	}
+	if len(notInstalled) > 0 {
+		// One line with the fix, not one "executable file not found" per tool: on a
+		// first run that is every scanner.
+		var managed, other []string
+		for _, id := range notInstalled {
+			if _, err := toolchain.Lookup(id); err == nil {
+				managed = append(managed, id)
+			} else {
+				other = append(other, id)
+			}
+		}
+		if len(managed) > 0 {
+			fmt.Fprintf(os.Stderr, "achilles: not installed: %s. `achilles tools install` installs the pinned, checksum-verified scanners; `achilles doctor` checks them\n",
+				strings.Join(managed, ", "))
+		}
+		if len(other) > 0 {
+			fmt.Fprintf(os.Stderr, "achilles: not found on PATH: %s\n", strings.Join(other, ", "))
 		}
 	}
 
@@ -220,6 +260,10 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 // --diff, findings outside the changed files. It runs before baseline and gating,
 // so filtered findings never surface, gate, or get baselined.
 func filterFindings(o *options, ev vault.Store, runID, absTarget string, scan *model.Scan) error {
+	// --- Achilles' own state and reports: always left out (see ownOutputs). ---
+	if n := dropOwnOutputs(o, absTarget, scan); n > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: left out %d finding(s) in Achilles' own state and reports (.achilles/, the vault, this run's report files)\n", n)
+	}
 	// --- noise filter: on by default; --no-default-excludes disables the built-ins. ---
 	nm := noise.DefaultMatcher()
 	if o.noDefaultExcludes {
@@ -234,6 +278,18 @@ func filterFindings(o *options, ev vault.Store, runID, absTarget string, scan *m
 		recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta, Source: "noise"},
 			map[string]any{"excluded": len(excluded)})
 	}
+	// Files whose header says a tool wrote them ("// Code generated ... DO NOT
+	// EDIT.", "@generated"). The header is the scanned repository's say-so, so
+	// --no-repo-config ignores it, and noise.Generated never drops credentials,
+	// advisories or history findings on its word.
+	if !o.noDefaultExcludes && !o.noRepoConfig {
+		if kept, excluded := noise.Generated(absTarget, scan.Findings); len(excluded) > 0 {
+			scan.Findings = kept
+			fmt.Fprintf(os.Stderr, "achilles: excluded %d finding(s) in files marked as generated (\"Code generated ... DO NOT EDIT.\" or @generated; --no-default-excludes to keep them)\n", len(excluded))
+			recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta, Source: "noise-generated"},
+				map[string]any{"excluded": len(excluded)})
+		}
+	}
 
 	// --- diff-aware: keep only findings in changed files ---
 	if o.diffRef != "" {
@@ -241,12 +297,34 @@ func filterFindings(o *options, ev vault.Store, runID, absTarget string, scan *m
 		if err != nil {
 			return fmt.Errorf("git diff: %w", err)
 		}
-		before := len(scan.Findings)
-		scan.Findings = vcs.FilterFindings(scan.Findings, changed)
-		fmt.Fprintf(os.Stderr, "achilles: diff-aware — %d/%d finding(s) in %d changed file(s)\n", len(scan.Findings), before, len(changed))
+		// A finding made in a commit is not filtered by the net diff. The history
+		// scan was already limited to the commits under review, and the case it
+		// exists for is a file added in one of them and deleted in a later one,
+		// which the net diff does not contain at all.
+		var inFiles, inCommits []model.Finding
+		for _, f := range scan.Findings {
+			if f.Commit != "" {
+				inCommits = append(inCommits, f)
+			} else {
+				inFiles = append(inFiles, f)
+			}
+		}
+		before := len(inFiles)
+		inFiles = vcs.FilterFindings(inFiles, changed)
+		fmt.Fprintf(os.Stderr, "achilles: diff-aware — %d/%d finding(s) in %d changed file(s)\n", len(inFiles), before, len(changed))
+		if len(inCommits) > 0 {
+			fmt.Fprintf(os.Stderr, "achilles: diff-aware — %d credential(s) in the commits since %s, kept whatever the net diff shows\n", len(inCommits), o.diffRef)
+		}
+		scan.Findings = append(inFiles, inCommits...)
 		// The one change a diff-scoped scan must not let pass quietly: the diff
 		// edits the file that tells a scanner what to ignore.
-		if scan.RepoConfigChanged = repoConfigChanged(scan.RepoConfig, changed); len(scan.RepoConfigChanged) > 0 {
+		// The repository's settings file counts whatever it sets: a change that lowers
+		// fail-on or points the baseline elsewhere is as much a change to the scan.
+		inEffect := scan.RepoConfig
+		if s := o.repoSettings; s != nil && len(s.Applied) > 0 && !slices.Contains(inEffect, "achilles: "+s.File) {
+			inEffect = append(append([]string(nil), inEffect...), "achilles: "+s.File)
+		}
+		if scan.RepoConfigChanged = repoConfigChanged(inEffect, changed); len(scan.RepoConfigChanged) > 0 {
 			fmt.Fprintf(os.Stderr, "achilles: WARNING: this change modifies scanner configuration (%s). It can hide findings in the same change; review that file as part of this scan.\n",
 				strings.Join(scan.RepoConfigChanged, "; "))
 		}

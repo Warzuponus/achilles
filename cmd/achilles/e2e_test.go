@@ -38,6 +38,26 @@ func fakeScanner(outFile, src string, extra []string) int {
 		// What gosec does: complain on stderr, then report and exit 0 anyway.
 		fmt.Fprintln(os.Stderr, "[fakescan] Error building the SSA representation of the package p: package p has type errors, skipping SSA analysis, no ssa result")
 	}
+	// --history stands for a scanner's git-history mode: instead of reading the
+	// files it reports whatever results the test prepared (as a commit scanner
+	// reports what it found in the commits), and notes the arguments it was given.
+	for _, a := range extra {
+		if a != "--history" {
+			continue
+		}
+		if out := os.Getenv("ACHILLES_FAKE_HISTORY_ARGS"); out != "" {
+			_ = os.WriteFile(out, []byte(strings.Join(extra, "\n")), 0o600)
+		}
+		prepared, _ := os.ReadFile(os.Getenv("ACHILLES_FAKE_HISTORY_RESULTS"))
+		if len(prepared) == 0 {
+			prepared = []byte("[]")
+		}
+		doc := `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"fakescan"}},"results":` + string(prepared) + `}]}`
+		if err := os.WriteFile(outFile, []byte(doc), 0o600); err != nil {
+			return 2
+		}
+		return 0
+	}
 	var results []any
 	_ = filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -61,6 +81,19 @@ func fakeScanner(outFile, src string, extra []string) int {
 	doc, _ := json.Marshal(map[string]any{"version": "2.1.0", "runs": []any{map[string]any{
 		"tool": map[string]any{"driver": map[string]any{"name": "fakescan"}}, "results": results,
 	}}})
+	// "--record-args" notes what the tool was run with, for a test to read.
+	for _, a := range extra {
+		if a == "--record-args" {
+			if out := os.Getenv("ACHILLES_FAKE_RECORDED_ARGS"); out != "" {
+				_ = os.WriteFile(out, []byte(strings.Join(extra, "\n")), 0o600)
+			}
+		}
+	}
+	// "STDOUT" as the report path stands for a tool that prints its report.
+	if outFile == "STDOUT" {
+		_, _ = os.Stdout.Write(doc)
+		return 0
+	}
 	if err := os.WriteFile(outFile, doc, 0o600); err != nil {
 		return 2
 	}

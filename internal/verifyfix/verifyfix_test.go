@@ -29,9 +29,17 @@ func init() {
 // the real files under the target, so a patch that removes the marker fixes it.
 type fakeScanner struct {
 	id    string
+	tool  string            // the name it gives itself in its report; id when empty
 	rules map[string]string // marker -> rule id
 	runs  atomic.Int32
 	fail  error
+}
+
+func (s *fakeScanner) toolName() string {
+	if s.tool != "" {
+		return s.tool
+	}
+	return s.id
 }
 
 func (s *fakeScanner) ID() string                     { return s.id }
@@ -53,9 +61,9 @@ func (s *fakeScanner) Run(_ context.Context, t scanner.Target) (scanner.RawResul
 				if strings.Contains(line, marker) {
 					// Absolute path on purpose: the verifier must relativize.
 					out = append(out, model.Finding{
-						Tool: s.id, RuleID: rule,
+						Tool: s.toolName(), RuleID: rule,
 						Location:    model.Location{File: p, Region: model.Region{StartLine: i + 1}},
-						Fingerprint: model.ComputeFingerprint(s.id, rule, p, strings.TrimSpace(line)),
+						Fingerprint: model.ComputeFingerprint(s.toolName(), rule, p, strings.TrimSpace(line)),
 					})
 				}
 			}
@@ -63,7 +71,7 @@ func (s *fakeScanner) Run(_ context.Context, t scanner.Target) (scanner.RawResul
 		return nil
 	})
 	data, _ := json.Marshal(out)
-	return scanner.RawResult{Tool: s.id, Format: fakeFormat, Data: data}, nil
+	return scanner.RawResult{Tool: s.toolName(), Format: fakeFormat, Data: data}, nil
 }
 
 type lookup map[string]scanner.Scanner
@@ -146,6 +154,27 @@ func TestVerify_NotFixed(t *testing.T) {
 		t.Fatalf("status = %s (%s), want not_fixed", res.Status, res.Detail)
 	}
 	leftovers(t, tmp)
+}
+
+// A scanner that names itself differently from its registry id (Opengrep reports
+// "Opengrep OSS") must still be found and re-run, through the finding's Scanner.
+func TestVerify_ScannerWhoseReportNameIsNotItsID(t *testing.T) {
+	needGit(t)
+	files := map[string]string{"app.py": "import os\nos.system(cmd)  # VULN\nprint('x')\n"}
+	unfixed := "--- a/app.py\n+++ b/app.py\n@@ -1,3 +1,3 @@\n-import os\n+import os, sys\n os.system(cmd)  # VULN\n print('x')\n"
+	for _, c := range []struct {
+		diff string
+		want model.FixVerificationStatus
+	}{{fixDiff, Verified}, {unfixed, NotFixed}} {
+		root := writeTree(t, files)
+		sc := &fakeScanner{id: "fake", tool: "Fake Scanner OSS", rules: map[string]string{"VULN": "cmd-injection"}}
+		f := orig("Fake Scanner OSS", "cmd-injection", "app.py", "os.system(cmd)  # VULN", 2)
+		f.Scanner = "fake"
+		res := newVerifier(t, root, sc, Options{}).Verify(context.Background(), f, c.diff)
+		if res.Status != c.want {
+			t.Errorf("status = %s (%s), want %s", res.Status, res.Detail, c.want)
+		}
+	}
 }
 
 func TestVerify_NotFixed_LineShiftedWithinWindow(t *testing.T) {

@@ -8,16 +8,18 @@ Every `achilles` flag, grouped by task. (For `achilles-fleet`, see [Fleet](fleet
 
 ## Subcommands
 
-These run instead of a scan. (A scan target literally named `version`, `doctor` or
-`tools` must be written `./version` etc.)
+These run instead of a scan. (A scan target literally named `version`, `doctor`,
+`tools`, `mcp` or `init` must be written `./version` etc.)
 
 | Command | What it does |
 |---------|--------------|
 | `achilles version` | same as `--version` |
+| `achilles init [--ci auto\|github\|gitlab\|none] [--no-baseline] [--force] [--dry-run] [DIR]` | set a repository up in one step: `.achilles.yaml` (fail on high, use the baseline), a CI workflow (GitHub or GitLab, detected; needs no secret), the Evidence Vault in `.gitignore`, and a baseline seeded from a scan when the default scanners are installed (a scan that could not run every scanner seeds nothing). Existing files are kept unless `--force` |
 | `achilles doctor` | per default-profile scanner: where it was found (`~/.achilles/bin` first, then `PATH`), its version vs the pinned one, `ok`/`missing`/`outdated`/`no-asset`, and the exact fix command; also whether `go` (needed by gosec) and Docker are available, whether an LLM key is set (`set`/`not set` only — the key is never printed) and the resolved base URL, and whether the community rules are installed. Exits non-zero (2) if a required scanner is missing. |
 | `achilles tools list` | pinned versions, whether upstream publishes a download for this platform, and what is installed |
-| `achilles tools install [--force] [name...]` | download, sha256-verify (fail closed) and install pinned scanners into `$ACHILLES_HOME/bin` (default `~/.achilles/bin`). Names: `opengrep gosec osv-scanner trivy gitleaks rules`. No names = all five plus the community rules. Skips tools already at the pinned version unless `--force`. |
+| `achilles tools install [--force] [--prebuilt] [name...]` | download, sha256-verify (fail closed) and install pinned scanners into `$ACHILLES_HOME/bin` (default `~/.achilles/bin`). Names: `opengrep gosec osv-scanner trivy gitleaks rules`, and the opt-in `zizmor`. No names = the five default scanners plus the community rules; an opt-in scanner is installed by name. Skips tools already at the pinned version unless `--force`. With `go` on PATH, gosec is built from source with that Go (`go install` of the pinned version, every module checked against the Go checksum database; refused under `GOSUMDB=off`), because gosec can only type-check code its own Go can read; a managed gosec built with an older Go is rebuilt even without `--force`. If the build fails it downloads the prebuilt binary and says why. `--prebuilt` always downloads. |
 | `achilles tools doctor` | same as `achilles doctor` |
+| `achilles mcp [--vault PATH]` | serve the Evidence Vault, read-only, to an MCP client over stdin/stdout (started by the client, not by hand). Tools: `list_scans`, `list_findings`, `get_finding`, `rule_health`. See [MCP Server](mcp.md) |
 
 ## Settings files
 
@@ -42,7 +44,7 @@ code is scanned:
 
 | Setting | Notes |
 |---------|-------|
-| `profile`, `timeout` | which scanners run, and how long they get |
+| `profile`, `with`, `timeout`, `secrets-history` | which scanners run (including opt-in ones the operator has installed), how long they get, and whether the git history is scanned for credentials too |
 | `exclude`, `no-default-excludes` | what counts as noise in this repository |
 | `fail-on` | the gate, when the command line sets none |
 | `baseline` | a path inside the repository, relative to its root |
@@ -94,8 +96,10 @@ you set there wins over the repository's file.
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--exclude` | — | extra noise patterns, comma-separated (path segment like `tests`, or glob like `*.gen.go`) |
-| `--no-default-excludes` | `false` | disable the built-in vendored/generated/minified filter |
+| `--no-default-excludes` | `false` | disable the built-in vendored/generated/minified filter, including files whose header marks them as generated (`// Code generated ... DO NOT EDIT.`, `@generated`) |
 | `--no-correlate` | `false` | disable cross-tool correlation (triage every duplicate report separately) |
+| `--with` | — | comma-separated opt-in scanners to run as well as the profile's. `zizmor`: GitHub Actions workflows and composite actions, always offline (no token is used and no request is made, so its online audits do not run); install it with `achilles tools install zizmor`. A name the registry does not offer is an error. In the GitHub Action, use the `with` input, which also installs the scanner |
+| `--secrets-history` | `false` | also scan the git history for credentials: one that was committed and later deleted is in no file, but is still leaked. With `--diff`, only the commits since that ref. Needs a full clone and the repository root as the target; a shallow clone or a checkout git cannot read is reported as incomplete or failed, never as clean. See [Reports & Gating](reports-and-gating.md#credentials-in-the-git-history) |
 | `--dry-run` | `false` | scan, print the LLM cost estimate, stop before any model call or outward action |
 | `--max-cost` | `0` | cap on LLM spend in USD (needs `--price-config`): refuse to start if the per-finding estimate exceeds it, and stop making model calls once the spend counted during the run reaches it |
 | `--price-config` | — | YAML per-model token prices (see `configs/prices.example.yaml`) |
@@ -125,7 +129,7 @@ Needs `--llm-model` and an API key in `ACHILLES_LLM_API_KEY` (or `OPENAI_API_KEY
 | `--llm-concurrency` | `4` | findings triaged in parallel, most severe first |
 | `--llm-no-code` | `false` | privacy mode: send the model only rule, message and location, never source. The AI then never dismisses findings |
 | `--keep-dismissed` | `false` | keep findings the AI confidently dismissed in the gate, issues and counts (default: list them separately) |
-| `--verdict-cache-days` | `30` | reuse a verdict from an earlier run in this vault for up to this many days when the finding's code, the prompt and the models are unchanged, instead of asking the model again; `0` reviews everything afresh |
+| `--verdict-cache-days` | `30` | reuse a verdict from an earlier run in this vault for up to this many days when the finding's code, the prompt and the models are unchanged, instead of asking the model again; `0` reviews everything afresh. Also covers fix suggestions from `--remediate`, which are reused only when the code is in the same place as well |
 | `--llm-samples` | `1` | ask the model this many times on borderline verdicts and keep the majority; a verdict the samples disagree on is never dismissed. The cost estimate becomes an upper bound |
 | `--deep-verify` | `0` | let the model read and search the repository (bounded, read-only, secrets-blocked) to settle the N highest-priority findings; see [Deep verification](deep-verify.md) |
 | `--deep-max-steps` | `6` | with `--deep-verify`: most tool calls per finding |
@@ -177,8 +181,8 @@ Full walkthrough: [LLM Triage & Agents](llm-and-agents.md).
 | `--github` | `false` | emit GitHub Actions annotations to stdout |
 | `--sbom` | — | generate a CycloneDX SBOM (via Syft) to this file |
 | `--diagnostics` | — | write a diagnostics sidecar (tool/parse failures + LLM token usage) |
-| `--strict-tools` | `$ACHILLES_STRICT_TOOLS` | fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan. On in the container image — see [Running in containers](containers.md) |
-| `--no-repo-config` | `$ACHILLES_NO_REPO_CONFIG` | do not let the scanned repository configure the scanners. Its ignore and config files (`.trivyignore`, `.gitleaks.toml`, `.semgrepignore`, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. Without the flag such files are applied, and named in the output and reports. For code you do not trust; see [SECURITY.md](../SECURITY.md) for what it does not cover. Also ignores the repository's `.achilles.yaml`, and turns `--calibrate` and `--rag` off when the Evidence Vault they would read is committed in that repository |
+| `--strict-tools` | `$ACHILLES_STRICT_TOOLS` | fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan. On in the container image — see [Running in containers](containers.md). Without it, a run in which no scanner could run at all still fails (exit 2): nothing was scanned |
+| `--no-repo-config` | `$ACHILLES_NO_REPO_CONFIG` | do not let the scanned repository configure the scanners. Its ignore and config files (`.trivyignore`, `.gitleaks.toml`, `.semgrepignore`, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. Without the flag such files are applied, and named in the output and reports. For code you do not trust; see [SECURITY.md](../SECURITY.md) for what it does not cover. Also ignores the repository's `.achilles.yaml`, its `achilles:ignore` comments and its generated-file headers, and turns `--calibrate` and `--rag` off when the Evidence Vault they would read is committed in that repository |
 
 ## GitHub integrations (outward-facing, opt-in)
 
@@ -191,7 +195,7 @@ Need `GITHUB_TOKEN` and `--repo` (or `$GITHUB_REPOSITORY`).
 | `--pr-review` | `0` | post findings as inline review comments (needs `--pr-head-sha`) |
 | `--pr-head-sha` | — | PR head commit SHA for `--pr-review` |
 | `--file-issues` | `false` | open/maintain GitHub Issues with fix suggestions for kept findings; see [Filing issues](#filing-issues) below |
-| `--fix-pr` | `false` | open a review PR with auto-fixes (needs `--remediate`; **never merges**). The branch is built in a temporary git worktree from the committed base: your checkout is not switched, and only the files the fixes change are committed (never untracked or uncommitted files). Each fix may change only its finding's own file |
+| `--fix-pr` | `false` | open a review PR with auto-fixes (needs `--remediate`; **never merges**). The branch is built in a temporary git worktree from the committed base: your checkout is not switched, and only the files the fixes change are committed (never untracked or uncommitted files). Each fix may change only its finding's own file. In GitHub Actions it pushes with git, so that one workflow needs the checkout's credentials (`persist-credentials: true`, the checkout default) and `contents: write`; the example workflows turn them off because they do not push |
 | `--fix-remote` | `origin` | git remote to push the auto-fix branch to |
 | `--fix-base` | current branch | base branch for the auto-fix PR (required when the checkout is on a detached HEAD, as in many CI jobs) |
 

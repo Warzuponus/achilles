@@ -7,15 +7,18 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: monthly }
+    cooldown: { default-days: 7 } # let a new release age a week before proposing it
     groups:
       actions: { patterns: ["*"] }
   - package-ecosystem: gomod
     directory: /
     schedule: { interval: monthly }
+    cooldown: { default-days: 7 } # let a new release age a week before proposing it
     groups:
       go: { patterns: ["*"] }
   - package-ecosystem: docker
     directories: ["/deployments/*"]   # the all-in-one image and every tool image
     schedule: { interval: monthly }
+    cooldown: { default-days: 7 } # let a new release age a week before proposing it
     groups:
       docker: { patterns: ["*"] }

@@ -29,7 +29,7 @@ tools:
     commercialSafe: true
     enabled: true
     bespoke: true                 # hand-written adapter (internal/scanner/opengrep)
-    languages: [python, javascript, typescript, go, java, ruby, generic]
+    languages: [python, javascript, typescript, go, java, ruby, php, generic]
     # No public container image: Opengrep ships as a binary. Under `--runner docker`
     # it therefore runs as the local binary (and Achilles says so on stderr).
     bin: opengrep
@@ -101,6 +101,56 @@ tools:
         arg: "--config={src}/.gitleaks.toml"
     # gitleaks loads <target>/.gitleaks.toml and .gitleaksignore by itself.
     repoConfig: [.gitleaks.toml, .gitleaksignore]
+
+  # The same gitleaks, over the commits instead of the files (--secrets-history). A
+  # credential that was committed and deleted a commit later is in no file, so the
+  # entry above cannot see it, but it is in every clone.
+  - id: gitleaks-history
+    license: MIT
+    commercialSafe: true
+    optIn: secrets-history         # runs only when asked for
+    languages: [generic]
+    image: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+    bin: gitleaks
+    format: sarif
+    argv: ["git", "--exit-code", "0", "--report-format", "sarif", "--report-path", "{out}/results.sarif", "{src}"]
+    # With --diff REF only the commits under review are read.
+    diffArg: "--log-opts={diff}..HEAD"
+    outputFile: "{out}/results.sarif"
+    successExitCodes: [0]
+    # When git itself fails (a checkout git refuses to read, a range that does not
+    # resolve, a damaged object) gitleaks logs this, exits 0 and reports no leaks.
+    # It also logs it for a harmless git warning; an unneeded "incomplete" is the
+    # cheaper mistake.
+    incompleteWhen: ["stderr is not empty"]
+    localConfig:
+      - file: .gitleaks.toml
+        arg: "--config={src}/.gitleaks.toml"
+    repoConfig: [.gitleaks.toml, .gitleaksignore]
+
+  # zizmor — static analysis of GitHub Actions workflows and composite actions:
+  # template injection, credential persistence, cache poisoning, unpinned actions and
+  # more (MIT). Opt-in (`--with zizmor`); install it with `achilles tools install
+  # zizmor`. It is always run offline: it is given no token and makes no request, so
+  # its online audits (which query the GitHub API) do not run.
+  - id: zizmor
+    license: MIT
+    commercialSafe: true
+    optIn: zizmor
+    languages: [generic]           # workflows are not a language the detector knows
+    image: ghcr.io/zizmorcore/zizmor:1.30.1@sha256:a2eb396d886c053073405c7a980f2139ba2248ec172243cfa3841e57196e8101
+    bin: zizmor
+    format: sarif
+    argv: ["--offline", "--no-progress", "--format", "sarif", "{src}"]
+    outputFile: "{stdout}"         # zizmor has no option to write the report to a file
+    successExitCodes: [0]          # with --format sarif findings do not change the exit code
+    # A repository with no workflows: exit 3, nothing printed.
+    nothingToScan: ["no inputs collected"]
+    # A workflow it cannot parse is skipped with a warning; the rest are audited.
+    incompleteWhen: ["failed to parse input"]
+    # zizmor loads zizmor.yml or .github/zizmor.yml by itself; --no-config stops it.
+    noRepoConfigArgs: ["--no-config"]
+    repoConfig: [zizmor.yml, .github/zizmor.yml]
 
   - id: osv-scanner
     license: Apache-2.0

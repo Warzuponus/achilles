@@ -1,6 +1,7 @@
 package vcs
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -128,5 +129,66 @@ func TestTrackedAndCommittedChanges(t *testing.T) {
 	}
 	if got := CommittedChanges(dir, "no-such-ref", "state"); got != nil {
 		t.Errorf("an unknown ref: %v, want nil", got)
+	}
+}
+
+func TestAddedLines(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	dir := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "core.autocrlf=false"}, args...)...)
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=T", "GIT_AUTHOR_EMAIL=t@e.com",
+			"GIT_COMMITTER_NAME=T", "GIT_COMMITTER_EMAIL=t@e.com")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	write := func(name, c string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git("init", "-q", "-b", "main")
+	write("a.py", "one\ntwo\nthree\nfour\n")
+	write("same.py", "x\n")
+	git("add", ".")
+	git("commit", "-q", "-m", "base")
+	git("checkout", "-q", "-b", "change")
+	// Line 2 edited, two lines added at the end; committed. Then one more edit left
+	// uncommitted: the working tree is what gets scanned, so it counts too.
+	write("a.py", "one\nTWO\nthree\nfour\nfive\nsix\n")
+	git("commit", "-q", "-am", "edit")
+	write("a.py", "ONE\nTWO\nthree\nfour\nfive\nsix\n")
+	write("new.py", "brand new\n")
+
+	lines, whole := AddedLines(dir, "main", "a.py")
+	if whole {
+		t.Fatal("a tracked file was reported as wholly new")
+	}
+	var got []int
+	for n := 1; n <= 8; n++ {
+		if lines[n] {
+			got = append(got, n)
+		}
+	}
+	if fmt.Sprint(got) != "[1 2 5 6]" {
+		t.Errorf("changed lines = %v, want [1 2 5 6]", got)
+	}
+	if lines, whole := AddedLines(dir, "main", "same.py"); whole || len(lines) != 0 {
+		t.Errorf("an unchanged file: lines=%v whole=%v", lines, whole)
+	}
+	// A file git does not track yet is new from its first line to its last.
+	if _, whole := AddedLines(dir, "main", "new.py"); !whole {
+		t.Error("an untracked file must count as wholly new")
+	}
+	// A ref that does not resolve gives nothing rather than everything: the
+	// caller's diff of the same ref has already failed loudly.
+	if lines, whole := AddedLines(dir, "no-such-ref", "a.py"); whole || len(lines) != 0 {
+		t.Errorf("unknown ref: lines=%v whole=%v", lines, whole)
 	}
 }

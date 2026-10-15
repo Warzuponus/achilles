@@ -113,8 +113,13 @@ what matters — they stack.
 
 ### 1. Noise filter (on by default)
 
-Vendored / generated / minified files are dropped before findings are counted.
-Add your own patterns or turn it off:
+Vendored / generated / minified files are dropped before findings are counted:
+vendored directories (`vendor`, `node_modules`, `third_party`, ...), minified assets,
+`*.pb.go` and `*_pb2.py`, and any file whose header says a tool wrote it (Go's
+`// Code generated ... DO NOT EDIT.` line, or an `@generated` marker in a comment near
+the top). That header is the scanned repository's say-so, so it never hides a
+credential, a dependency advisory or a finding in commit history, and
+`--no-repo-config` ignores it. Add your own patterns or turn it off:
 
 ```bash
 achilles --exclude 'tests,*.gen.go' .     # extra patterns (path segment or glob)
@@ -160,6 +165,83 @@ changed files, at/above your severity floor:
 ```bash
 achilles --diff origin/main --baseline .achilles/baseline.json --fail-on high .
 ```
+
+### Suppressing one finding in the code
+
+When a finding has been looked at and is fine where it is, say so beside it:
+
+```python
+subprocess.run(cmd, shell=True)  # achilles:ignore B602 -- cmd comes from a fixed table in build.py
+```
+
+```go
+// achilles:ignore gosec:G204 -- bin is checked against an allowlist in resolveTool
+out, err := exec.Command(bin, args...).Output()
+```
+
+The comment names the rule (or several, separated by commas) and gives a reason after
+` -- `. It applies to a finding on its own line, or on the line directly below when
+the comment stands alone. A rule can be written as its id (`G204`), with its tool
+(`gosec:G204`), or as the last part of a long dotted id (`dangerous-system-call`, or `template-injection` for `zizmor/template-injection`).
+
+What happens to a suppressed finding:
+
+- It does not gate, is not sent to the model, and files no issue. An open issue for
+  it is closed with a comment that quotes the reason and says it was not fixed.
+- It is **not hidden**. Every report lists suppressed findings with their reasons, the
+  scan prints how many there were, and SARIF marks them as suppressed in source.
+- With `--diff`, a suppression on a line the change itself added or edited is flagged
+  on stderr and at the top of every report, the same way a change to a scanner's
+  ignore file is. The change is suppressing a finding in itself; read the reason.
+- With `--no-repo-config` no suppression comment is honoured.
+
+What a comment cannot do:
+
+- Suppress without saying why, or without naming the rule. Such a comment is not
+  honoured, and the scan says where it is. There is no "ignore everything here".
+- Suppress a credential finding, a dependency advisory, or a finding from the git
+  history. Use the scanner's own allowlist for a test fixture that looks like a
+  secret; an advisory is resolved by upgrading.
+- Suppress a different rule that fires on the same line. Each rule is named.
+
+Scanners have their own inline comments too (`#nosec`, `nosemgrep`, `gitleaks:allow`).
+Those remove the finding before Achilles sees it, so they are not reported; prefer
+`achilles:ignore` where you want the suppression to stay visible.
+
+### Credentials in the git history
+
+A scan reads the files as they are now. A credential that was committed and deleted a
+commit later is in none of them, so it is not reported, but it is in every clone and
+fork of the repository and has to be treated as leaked. `--secrets-history` scans the
+commits as well:
+
+```bash
+achilles --secrets-history --fail-on high .             # every commit on every fetched branch
+achilles --secrets-history --diff origin/main --fail-on high .   # only the commits since main
+```
+
+- A finding from the history names the commit that added the credential and says what
+  deleting the line does not fix: the credential must be revoked and replaced. Its
+  location is the file and line in that commit, which may no longer exist.
+- A credential that is still in a file is reported once, as the finding in the file. One
+  that appears in several commits is reported once, for the earliest.
+- With `--diff`, only the commits since that ref are read, and a finding in them is kept
+  even when the net diff no longer contains the file. That is the case this exists for
+  on a pull request: a secret added in one commit and removed in the next.
+- **It needs the whole history.** CI checkouts are shallow by default, and a shallow
+  clone holds only the newest commits. Achilles then reports the history scan as
+  incomplete instead of clean; fetch everything (`fetch-depth: 0` for
+  `actions/checkout`, `GIT_DEPTH: "0"` in GitLab CI). Scan the repository root: the
+  history covers the whole repository whatever directory is given.
+- If git cannot read the checkout at all (not a repository, or one owned by another
+  user, which is common for a directory mounted into a container), the history scan is
+  reported as a failed tool. Inside a container, mark the mount as safe first:
+  `git config --global --add safe.directory /src`.
+- The repository's own `.gitleaks.toml` and `.gitleaksignore` apply, and are named, as
+  for the scan of the files.
+
+It is off by default because it reads every commit. A repository can turn it on for
+itself with `secrets-history: true` in `.achilles.yaml`.
 
 ### `--pr-mini`: baseline autopilot
 

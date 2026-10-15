@@ -217,7 +217,12 @@ func writeGitLabSecurity(w io.Writer, s model.Scan, meta GitLabMeta, scanType st
 		}
 		v := gitlabVuln(f, seen)
 		if scanType == "secret_detection" {
-			sha := strings.TrimSpace(meta.Commit)
+			// A finding made in the history names its own commit; one made in the
+			// files names the commit that was scanned.
+			sha := strings.TrimSpace(f.Commit)
+			if sha == "" {
+				sha = strings.TrimSpace(meta.Commit)
+			}
 			if sha == "" {
 				sha = gitlabNoCommit
 			}

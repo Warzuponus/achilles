@@ -513,3 +513,18 @@ func TestGitLabCodeQuality_EveryFindingThatCounts(t *testing.T) {
 		t.Error("the fingerprint changed when the finding only moved")
 	}
 }
+
+// A credential found in the git history names its own commit, which is what the
+// secret detection format's commit field is for.
+func TestGitLabSecretDetection_HistoryFindingNamesItsCommit(t *testing.T) {
+	s := gitlabScan()
+	s.Findings[2].Commit = "689bd12734c6a21c4431adae399f29b9d181649b"
+	meta := gitlabMeta
+	meta.Commit = "4f2a9c1" // the commit that was scanned
+	doc := decodeGitLab(t, func(b *bytes.Buffer) error { return WriteGitLabSecretDetection(b, s, meta) })
+	checkGitLabSecurityReport(t, doc, "secret_detection")
+	sha := doc["vulnerabilities"].([]any)[0].(map[string]any)["location"].(map[string]any)["commit"].(map[string]any)["sha"]
+	if sha != "689bd12734c6a21c4431adae399f29b9d181649b" {
+		t.Errorf("commit sha = %v, want the commit the credential was found in", sha)
+	}
+}

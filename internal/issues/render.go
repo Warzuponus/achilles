@@ -383,7 +383,13 @@ func (r *renderer) link(f model.Finding) string {
 	for i, s := range segs {
 		segs[i] = url.PathEscape(s)
 	}
-	u := fmt.Sprintf("%s/%s/blob/%s/%s", r.server, r.repo, r.sha, strings.Join(segs, "/"))
+	// A finding made in the git history links to the file as it was in that commit:
+	// at the scanned commit the line may not exist any more.
+	sha := r.sha
+	if f.Commit != "" {
+		sha = sanitizeKey(f.Commit)
+	}
+	u := fmt.Sprintf("%s/%s/blob/%s/%s", r.server, r.repo, sha, strings.Join(segs, "/"))
 	if line > 0 {
 		u += fmt.Sprintf("#L%d", line)
 		if end := f.Location.Region.EndLine; end > line {
@@ -562,6 +568,23 @@ func (r *renderer) reopenComment() string {
 	}
 	return "Reopened: Achilles detects this finding again" + at + ". It had been closed automatically. " +
 		"If you intend to ignore it, close this issue again and Achilles will leave it closed."
+}
+
+// suppressedComment closes an issue whose finding now has a suppression comment
+// beside it. It says so, and quotes the reason: closing it as "resolved" would
+// claim a fix nobody made.
+func (r *renderer) suppressedComment(f model.Finding) string {
+	sup := f.Suppression
+	var b strings.Builder
+	b.WriteString("<!-- achilles:resolved -->\nClosing: this finding is now suppressed by an `achilles:ignore` comment in the code")
+	if sup != nil {
+		fmt.Fprintf(&b, " (`%s:%d`)", strings.ReplaceAll(redact.Prompt(relPath(r.target, sup.File)), "`", ""), sup.Line)
+		if reason := r.prose(sup.Reason, maxReason); reason != "" {
+			b.WriteString(". The reason given there:\n\n" + reason)
+		}
+	}
+	b.WriteString("\n\nIt was not fixed. If the comment is removed and the finding is reported again, this issue will be reopened.")
+	return b.String()
 }
 
 func (r *renderer) dismissedComment(f model.Finding) string {

@@ -37,6 +37,7 @@ GUIDES = [
     ("ci-and-hub", "CI & the Scan Hub"),
     ("fleet", "Fleet"),
     ("containers", "Running in Containers"),
+    ("mcp", "MCP Server"),
 ]
 
 SIBLING_LINK = re.compile(r"\]\((?!\.\.?/|https?://)([a-z0-9-]+)\.md(#[^)]*)?\)")

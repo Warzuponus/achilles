@@ -1,0 +1,17 @@
+# How Achilles scans this repository, written by `achilles init`.
+#
+# Every key is a command-line flag without its dashes; a flag given on the command
+# line, or in a --settings file, wins. The repository's own settings can only shape
+# the scan: see https://github.com/Warzuponus/achilles/blob/main/docs/cli-reference.md#settings-files
+
+# Fail the run on a finding at or above this severity: critical | high | medium | low
+fail-on: high
+
+# Findings already in this file are not reported as new. `achilles init` seeds it
+# with the findings in the code today; regenerate it deliberately when you accept
+# more: achilles --write-baseline .achilles/baseline.json .
+baseline: .achilles/baseline.json
+
+# Paths that are noise in this repository (a path segment like `testdata`, or a
+# glob like `*.gen.go`), in addition to the built-in vendored/generated filter.
+# exclude: [testdata]

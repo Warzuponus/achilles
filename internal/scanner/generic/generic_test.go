@@ -344,3 +344,87 @@ func TestRun_UnexpectedExitCodeMakesTheRunIncomplete(t *testing.T) {
 		t.Errorf("no successExitCodes configured: Incomplete=%q err=%v", raw.Incomplete, err)
 	}
 }
+
+// stdoutRunner is a tool that prints its report instead of writing a file.
+type stdoutRunner struct {
+	stdout, stderr string
+	exit           int
+}
+
+func (r stdoutRunner) Run(context.Context, xexec.Command) (xexec.Result, error) {
+	return xexec.Result{Stdout: []byte(r.stdout), Stderr: []byte(r.stderr), ExitCode: r.exit}, nil
+}
+
+func stdoutCfg() config.ToolConfig {
+	return config.ToolConfig{
+		ID: "zizmor", Languages: []string{"generic"}, Bin: "zizmor", Format: "sarif",
+		Argv: []string{"--offline", "--format", "sarif", "{src}"}, OutputFile: StdoutReport,
+		SuccessExitCodes: []int{0}, NothingToScan: []string{"no inputs collected"},
+		IncompleteWhen: []string{"failed to parse input"},
+	}
+}
+
+// A tool with no "write to this file" option: the report is what it printed.
+func TestRun_ReportOnStdout(t *testing.T) {
+	doc := `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"zizmor"}},"results":[]}]}`
+	raw, err := New(stdoutRunner{stdout: doc, stderr: " INFO audit: completed x.yml"}, stdoutCfg(), "").
+		Run(context.Background(), scanner.Target{Path: t.TempDir()})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if string(raw.Data) != doc || raw.Incomplete != "" {
+		t.Errorf("data=%q incomplete=%q", raw.Data, raw.Incomplete)
+	}
+
+	// What it says on stderr still counts: a workflow it could not parse was skipped.
+	raw, err = New(stdoutRunner{stdout: doc, stderr: " WARN collect_inputs: failed to parse input: bad yaml"}, stdoutCfg(), "").
+		Run(context.Background(), scanner.Target{Path: t.TempDir()})
+	if err != nil || !strings.Contains(raw.Incomplete, "failed to parse input") {
+		t.Errorf("err=%v incomplete=%q, want the run reported as incomplete", err, raw.Incomplete)
+	}
+}
+
+// Nothing printed is a failure, unless the tool said there was nothing to scan.
+func TestRun_EmptyStdoutIsAFailureUnlessNothingToScan(t *testing.T) {
+	_, err := New(stdoutRunner{stderr: "error: something broke", exit: 1}, stdoutCfg(), "").
+		Run(context.Background(), scanner.Target{Path: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "printed no report") {
+		t.Errorf("err = %v, want a failure that says no report was printed", err)
+	}
+	if _, err = New(stdoutRunner{stdout: "  \n", exit: 2}, stdoutCfg(), "").Run(context.Background(), scanner.Target{Path: t.TempDir()}); err == nil {
+		t.Error("blank output was accepted as a report")
+	}
+
+	raw, err := New(stdoutRunner{stderr: "fatal: no audit was performed\nCaused by:\n    no inputs collected", exit: 3}, stdoutCfg(), "").
+		Run(context.Background(), scanner.Target{Path: t.TempDir()})
+	if err != nil {
+		t.Fatalf("a repository with nothing for the tool to read must not be a failure: %v", err)
+	}
+	if !strings.Contains(string(raw.Data), `"results":[]`) {
+		t.Errorf("data = %s, want an empty report", raw.Data)
+	}
+	// Exit 3 is how zizmor says it, and 3 is not among the codes that mean "finished":
+	// the run must still not be reported as incomplete.
+	if raw.Incomplete != "" {
+		t.Errorf("a run with nothing to scan was reported incomplete: %s", raw.Incomplete)
+	}
+}
+
+// osv-scanner exits 128 on a tree with no dependency manifests and writes no
+// report. With its "finished" exit codes listed (0 and 1), that used to be read as
+// an unexpected exit, so every scan of such a tree was reported incomplete and
+// failed under --strict-tools.
+func TestRun_NothingToScanIsNotAnUnexpectedExit(t *testing.T) {
+	cfg := testCfg()
+	cfg.ID = "osv-scanner"
+	cfg.NothingToScan = []string{"No package sources found"}
+	cfg.SuccessExitCodes = []int{0, 1}
+	raw, err := New(noReportRunner{stderr: "Scanning dir /x\nNo package sources found, --help for usage information.\n"}, cfg, "").
+		Run(context.Background(), scanner.Target{Path: "/x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw.Incomplete != "" {
+		t.Errorf("incomplete = %q, want a finished run with no results", raw.Incomplete)
+	}
+}

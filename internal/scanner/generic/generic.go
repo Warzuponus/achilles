@@ -6,6 +6,7 @@ package generic
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,10 @@ import (
 	xexec "github.com/Warzuponus/achilles/internal/exec"
 	"github.com/Warzuponus/achilles/internal/scanner"
 )
+
+// StdoutReport as a tool's outputFile means its report is what it prints on
+// standard output.
+const StdoutReport = "{stdout}"
 
 // Scanner runs one config-declared tool.
 type Scanner struct {
@@ -124,8 +129,20 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 	// output file existing, not on the exit code.
 	outHost := strings.ReplaceAll(s.cfg.OutputFile, "{out}", outDir)
 	data, err := os.ReadFile(outHost)
+	if s.cfg.OutputFile == StdoutReport {
+		// A tool with no "write the report to this file" option prints it instead.
+		// (The read above found no such file; its result is replaced here.)
+		data, err = res.Stdout, nil
+		if len(strings.TrimSpace(string(data))) == 0 {
+			data, err = nil, errors.New("the tool printed no report")
+		}
+	}
+	// "Nothing here for me" is a finished run with no results. The exit code a tool
+	// uses to say so (osv-scanner: 128, zizmor: 3) is then not an unexpected one.
+	nothing := false
 	if err != nil && nothingToScan(s.cfg.NothingToScan, res) {
 		data, err = []byte(fmt.Sprintf(`{"version":"2.1.0","runs":[{"tool":{"driver":{"name":%q}},"results":[]}]}`, s.cfg.ID)), nil
+		nothing = true
 	}
 	if err != nil {
 		return scanner.RawResult{}, fmt.Errorf("%s: reading %s failed (exit %d): %w (stderr: %s)",
@@ -136,23 +153,18 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 	if format == "" {
 		format = "sarif" // default/common path
 	}
+	incomplete := incompleteReason(s.cfg.IncompleteWhen, res)
+	if incomplete == "" && !nothing {
+		incomplete = unexpectedExit(s.cfg.SuccessExitCodes, res)
+	}
 	return scanner.RawResult{
 		Tool:       s.cfg.ID,
 		Format:     format,
 		Data:       data,
 		ExitCode:   res.ExitCode,
 		Stderr:     string(res.Stderr),
-		Incomplete: firstNonEmpty(incompleteReason(s.cfg.IncompleteWhen, res), unexpectedExit(s.cfg.SuccessExitCodes, res)),
+		Incomplete: incomplete,
 	}, nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // unexpectedExit returns why a run that wrote a report is still not a complete

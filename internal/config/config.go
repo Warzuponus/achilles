@@ -26,6 +26,11 @@ type ToolConfig struct {
 	// Profiles are the scan profiles (besides the baseline) this tool runs in,
 	// e.g. [full]. Selected via `--profile`.
 	Profiles []string `yaml:"profiles"`
+	// OptIn names what turns this tool on, for a tool that is neither part of the
+	// baseline nor of a profile: it runs only when asked for by that name with
+	// `--with NAME` ("zizmor"), or by the flag made for it ("secrets-history" is
+	// --secrets-history).
+	OptIn string `yaml:"optIn"`
 	// Bespoke marks a tool that has a hand-written adapter rather than the
 	// generic config-driven runner (e.g. opengrep).
 	Bespoke   bool     `yaml:"bespoke"`
@@ -41,6 +46,10 @@ type ToolConfig struct {
 	Format     string   `yaml:"format"`
 	Argv       []string `yaml:"argv"`
 	OutputFile string   `yaml:"outputFile"`
+	// DiffArg is appended to Argv on a diff-aware scan (--diff REF), with {diff}
+	// replaced by REF. For a tool that reads commits rather than files, it is how
+	// the scan is limited to the commits under review.
+	DiffArg string `yaml:"diffArg"`
 	// NothingToScan lists phrases a tool prints when it exits without writing a
 	// report because the target has nothing it applies to (osv-scanner on a tree
 	// with no dependency manifests). Seeing one means "no results", not "the tool
@@ -67,6 +76,11 @@ type ToolConfig struct {
 	// if the target contains File, Arg is appended to the tool's argv (so the
 	// tool applies the repo's existing suppressions instead of re-reporting them).
 	LocalConfig []LocalConfigRule `yaml:"localConfig"`
+	// NoRepoConfigArgs are appended to Argv under --no-repo-config, for a tool that
+	// has a switch to ignore the configuration it would otherwise load from the
+	// scanned repository by itself (zizmor's --no-config). With them the files in
+	// RepoConfig are not in effect, so the tool's result is not marked incomplete.
+	NoRepoConfigArgs []string `yaml:"noRepoConfigArgs"`
 	// RepoConfig names the files this tool reads from the scanned repository ON
 	// ITS OWN, with no flag from Achilles (gitleaks loads <target>/.gitleaks.toml
 	// by itself). Achilles cannot withhold these, so it names them when present,
@@ -163,7 +177,7 @@ func (c Config) validate() error {
 		seen[t.ID] = true
 		// Any tool that can actually run (baseline or in some profile) and isn't
 		// a bespoke adapter must define how to invoke it.
-		if !t.Bespoke && (t.Enabled || len(t.Profiles) > 0) && len(t.Argv) == 0 {
+		if !t.Bespoke && (t.Enabled || len(t.Profiles) > 0 || t.OptIn != "") && len(t.Argv) == 0 {
 			return fmt.Errorf("tool %q: runnable generic tool needs an argv", t.ID)
 		}
 	}

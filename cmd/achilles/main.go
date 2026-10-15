@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -158,6 +159,13 @@ func run(argv []string) error {
 	opengrepRules, shadowRules, cleanupRules := provisionGeneratedRules(o, cfg)
 	defer cleanupRules()
 
+	if err := checkWith(o, cfg); err != nil {
+		return err
+	}
+	// Decided before the registry is built: a history scan that cannot work is not
+	// run, and is reported as a failed tool instead.
+	historyDiags := planHistoryScan(o, cfg, absTarget, os.Stderr)
+
 	reg, shadow, err := buildRegistry(o, cfg, gate, runner, opengrepRules, shadowRules)
 	if err != nil {
 		return err
@@ -179,9 +187,15 @@ func run(argv []string) error {
 	if root.Err() != nil {
 		return errInterrupted
 	}
+	diags = append(diags, historyDiags...)
+	collapseHistory(&scan, os.Stderr)
 	// The repository's own scanner configuration is named, never applied silently.
 	diags = append(diags, applyRepoConfigPolicy(o.noRepoConfig, repoConfigInEffect(cfg, reg, absTarget), &scan, os.Stderr)...)
-	if s := o.repoSettings; s != nil && len(s.Applied) > 0 {
+	// The repository's .achilles.yaml is listed with the configuration that can
+	// remove findings only when it does that: by excluding paths. fail-on, the
+	// baseline path and the rest are announced when the scan starts; a change to
+	// any of them under --diff is flagged regardless (see filterFindings).
+	if s := o.repoSettings; s != nil && slices.Contains(s.Applied, "exclude") {
 		scan.RepoConfig = append(scan.RepoConfig, "achilles: "+s.File)
 	}
 	// --timeout bounded the scanners. Every later phase gets its own clock, started
@@ -207,6 +221,8 @@ func run(argv []string) error {
 	if err := applyBaseline(o, ev, runID, &scan); err != nil {
 		return err
 	}
+	// Comments in the code that suppress a finding: honoured, reported, refusable.
+	applySuppressions(o, ev, runID, absTarget, &scan, os.Stderr)
 	clusters := correlateFindings(o, ev, runID, &scan)
 
 	llmUsage, err := triageScan(llmCtx, o, ev, runID, &scan, clusters, tasks)
@@ -304,6 +320,14 @@ func run(argv []string) error {
 	}
 	if err := reportVaultReadFailures(ev); err != nil {
 		return err
+	}
+
+	// No scanner produced anything, so nothing was scanned: an error whatever
+	// --strict-tools says. Zero findings from a scan that could not look must not
+	// pass a CI job.
+	if len(scan.Tools) == 0 && len(scan.FailedTools) > 0 {
+		return fmt.Errorf("no scanner could run (%s), so nothing was scanned; `achilles doctor` shows what is missing and how to install it",
+			strings.Join(scan.FailedTools, ", "))
 	}
 
 	// Fail closed on request: a partial scan is not evidence of safety. Exit 2

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -35,7 +36,13 @@ type Installer struct {
 	MaxDownload int64 // 0 = defaultMaxDownload
 	MaxBinary   int64 // 0 = defaultMaxBinary
 
+	// Go is the go executable to build tools that name a GoPackage with ("" =
+	// always download the prebuilt binary). See buildFromSource.
+	Go string
+
 	allowHTTP bool // tests only: the httptest server is plain http
+	// goRunner replaces running Go (tests only).
+	goRunner func(ctx context.Context, dir string, env []string, args ...string) ([]byte, error)
 }
 
 func (in *Installer) logf(format string, a ...any) {
@@ -63,7 +70,20 @@ func (in *Installer) client() *http.Client {
 
 // Install installs tool t for the given platform and returns the installed path.
 // It is a no-op error (ErrNoAsset) when upstream publishes nothing for the platform.
+//
+// A tool with a GoPackage is built from source when Go is available and the
+// platform is this machine's, and downloaded only if that fails.
 func (in *Installer) Install(ctx context.Context, t Tool, goos, goarch string) (string, error) {
+	if t.GoPackage != "" && in.Go != "" && goos == runtime.GOOS && goarch == runtime.GOARCH {
+		p, err := in.buildFromSource(ctx, t, goos)
+		if err == nil {
+			return p, nil
+		}
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("%s: %w", t.Name, ctx.Err())
+		}
+		in.logf("%s: could not build it from source (%v); downloading the prebuilt binary instead, which may not read code that needs a newer Go than it was built with", t.Name, err)
+	}
 	a, ok := t.Asset(goos, goarch)
 	if !ok {
 		return "", &NoAssetError{Tool: t, GOOS: goos, GOARCH: goarch}

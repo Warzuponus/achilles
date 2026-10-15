@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"os"
@@ -97,7 +98,7 @@ func TestSettings_CommandLineThenSettingsFileThenRepository(t *testing.T) {
 // whatever it is: a flag added later is refused until someone decides otherwise.
 func TestRepoSettings_OnlyScanShapingKeys(t *testing.T) {
 	want := []string{"baseline", "exclude", "fail-on", "issues-group", "issues-max", "issues-min-severity",
-		"keep-dismissed", "llm-no-code", "no-default-excludes", "profile", "timeout"}
+		"keep-dismissed", "llm-no-code", "no-default-excludes", "profile", "secrets-history", "timeout", "with"}
 	if got := sortedKeys(repoSettingKeys); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("the repository may set %v\nthis test expects %v\nWidening the list lets a pull request set that flag: decide that deliberately, then update this test and docs/cli-reference.md", got, want)
 	}
@@ -253,9 +254,12 @@ func TestRun_RepoSettingsAreAppliedAndRecorded(t *testing.T) {
 	if err := run([]string{"--config", cfg, "--vault", vaultPath, "--markdown", md, target}); !errors.As(err, &gated) {
 		t.Fatalf("fail-on from .achilles.yaml: err = %v, want a *gateError", err)
 	}
+	// A gate and a baseline path remove nothing, so the report does not list the
+	// file among the configuration that can hide findings (the start of the scan
+	// announces what it set, and --diff flags a change to it; see below).
 	report, _ := os.ReadFile(md)
-	if !strings.Contains(string(report), "achilles: .achilles.yaml") {
-		t.Errorf("the report must name the repository's settings file:\n%s", report)
+	if strings.Contains(string(report), "achilles: .achilles.yaml") {
+		t.Errorf("a settings file that only sets fail-on was reported as hiding findings:\n%s", report)
 	}
 
 	// The repository excludes the file with the finding. That works, and is on record.
@@ -283,5 +287,37 @@ func TestRepoSettings_AChangeToTheFileIsFlaggedUnderDiff(t *testing.T) {
 	got := repoConfigChanged(inEffect, []string{"src/app.go", ".achilles.yaml"})
 	if len(got) != 1 || got[0] != "achilles: .achilles.yaml" {
 		t.Errorf("changed = %v, want the settings file flagged", got)
+	}
+}
+
+// Whatever the repository's settings file sets, a change to it in the commits
+// under review is flagged: lowering fail-on in the same pull request as a new
+// high finding must not pass quietly.
+func TestRun_DiffThatEditsTheSettingsFileIsFlagged(t *testing.T) {
+	cfg, _, vaultPath := fakeScanFixture(t)
+	target := gitRepo(t, map[string]string{".achilles.yaml": "fail-on: high\n", "README.md": "x\n"})
+	git(t, target, "checkout", "-q", "-b", "change")
+	writeFile(t, filepath.Join(target, ".achilles.yaml"), "fail-on: critical\n")
+	writeFile(t, filepath.Join(target, "app.py"), vulnApp)
+	git(t, target, "add", "-A")
+	git(t, target, "commit", "-q", "-m", "a high finding, and a gate that no longer sees it")
+
+	out := filepath.Join(t.TempDir(), "scan.json")
+	if err := run([]string{"--config", cfg, "--vault", vaultPath, "--json-report", out, "--diff", "main", target}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	var r struct {
+		RepoConfig        []string `json:"repoConfig"`
+		RepoConfigChanged []string `json:"repoConfigChanged"`
+	}
+	b, _ := os.ReadFile(out)
+	if err := json.Unmarshal(b, &r); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.RepoConfigChanged) != 1 || r.RepoConfigChanged[0] != "achilles: .achilles.yaml" {
+		t.Errorf("repoConfigChanged = %v, want the settings file", r.RepoConfigChanged)
+	}
+	if len(r.RepoConfig) != 0 {
+		t.Errorf("repoConfig = %v: a file that only sets fail-on is not configuration that removes findings", r.RepoConfig)
 	}
 }

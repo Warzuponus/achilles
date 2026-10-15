@@ -16,6 +16,7 @@ scheduled scans) see [DEPLOY.md](../DEPLOY.md); for contributing see [ONBOARDING
 | [CI & the Scan Hub](ci-and-hub.md) | wire Achilles into GitHub Actions — a per-PR gate, a routed full scan, or a central hub that scans other repos |
 | [Fleet](fleet.md) | scan many of your repos from one command into per-project vaults |
 | [Running in containers](containers.md) | run Achilles with Docker Compose or Kubernetes: the all-in-one image, PostgreSQL, the War Room (and its no-authentication security model), recurring scans, and local models |
+| [MCP Server](mcp.md) | let an assistant in your editor or terminal read the scan results, verdicts and proposed fixes from the Evidence Vault (read-only) |
 
 ## Prefer HTML?
 

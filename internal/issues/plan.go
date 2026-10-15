@@ -200,6 +200,20 @@ func BuildPlan(scan model.Scan, existing []github.Issue, opts Options) Plan {
 		}
 	}
 
+	// 3b. Findings a comment in the code suppressed, likewise.
+	suppressed := map[string]model.Finding{}
+	if opts.Group != GroupRollup {
+		for _, f := range scan.Suppressed {
+			key := keyFor(f, opts.Group)
+			if key == "" || present[key] || f.Suppression == nil {
+				continue
+			}
+			if _, ok := suppressed[key]; !ok {
+				suppressed[key] = f
+			}
+		}
+	}
+
 	// 4. Index existing issues of THIS group mode. Other modes are left alone.
 	byIssueKey := map[string][]tracked{}
 	other := 0
@@ -285,6 +299,13 @@ func BuildPlan(scan model.Scan, existing []github.Issue, opts Options) Plan {
 				closes = append(closes, Action{
 					Kind: ActionClose, Key: k, Number: t.Number, Labels: labels, StateReason: "not_planned",
 					Comment: r.dismissedComment(f), Reason: "AI review now dismisses this finding",
+				})
+				continue
+			}
+			if f, ok := suppressed[k]; ok {
+				closes = append(closes, Action{
+					Kind: ActionClose, Key: k, Number: t.Number, Labels: labels, StateReason: "not_planned",
+					Comment: r.suppressedComment(f), Reason: "suppressed by a comment in the code",
 				})
 				continue
 			}

@@ -336,7 +336,11 @@ achilles: 41 verdict(s) reused from earlier runs: the same code was reviewed wit
 - Reuse makes results steadier as well as cheaper: a model asked the same question
   twice does not always answer the same way, which is how a finding can flip between
   runs when nothing changed.
-- Fix suggestions are not cached; they are requested again for confirmed findings.
+- Fix suggestions (`--remediate`) are cached the same way, with one difference: a
+  suggestion usually carries a patch, and a patch is written against lines, so it is
+  reused only when the code is also in the same place. If the code moved, the fix is
+  asked for again. Whether a patch works is never cached: the re-scan that verifies it
+  runs in every scan.
 - Cache entries are signed with a key kept in the Achilles home directory
   (`~/.achilles/verdict-cache.key`, or under `$ACHILLES_HOME`), not in the vault. The
   vault's default location is inside the scanned directory, so a vault file can arrive

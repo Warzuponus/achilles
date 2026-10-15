@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"strings"
@@ -31,6 +32,10 @@ func runSubcommand(argv []string, stdout, stderr io.Writer) (handled bool, err e
 		return true, runDoctor(argv[1:], stdout)
 	case "tools":
 		return true, runTools(argv[1:], stdout, stderr)
+	case "mcp":
+		return true, runMCP(argv[1:], os.Stdin, stdout, stderr)
+	case "init":
+		return true, runInit(argv[1:], stdout, stderr)
 	}
 	return false, nil
 }
@@ -39,11 +44,15 @@ const toolsUsage = `usage: achilles tools <command>
 
   list                     show the pinned scanners and community rules, whether upstream
                            publishes one for this platform, and where each is installed
-  install [--force] [name...]
+  install [--force] [--prebuilt] [name...]
                            download, sha256-verify and install pinned scanners into
                            $ACHILLES_HOME/bin (default ~/.achilles/bin) and, as the name
                            "rules", the community Opengrep rule pack into
-                           $ACHILLES_HOME/rules; no names = every scanner plus the rules
+                           $ACHILLES_HOME/rules; no names = every default scanner plus
+                           the rules. With go on PATH, gosec is built from source with
+                           that Go (checked against the Go checksum database), since it
+                           can only type-check code its own Go can read; --prebuilt
+                           downloads upstream's binary instead
   doctor                   same as 'achilles doctor'
 `
 
@@ -110,14 +119,23 @@ func runToolsList(stdout io.Writer) error {
 func runToolsInstall(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("tools install", flag.ContinueOnError)
 	force := fs.Bool("force", false, "reinstall even if the pinned version is already installed")
+	prebuilt := fs.Bool("prebuilt", false, "download upstream's binary even for a tool Achilles would build with your Go (gosec)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	var selected []toolchain.Tool
 	wantRules := fs.NArg() == 0
+	var optional []string
 	if fs.NArg() == 0 {
-		selected = toolchain.Tools()
+		// No names: what the default scan needs. An opt-in scanner is installed by name.
+		for _, t := range toolchain.Tools() {
+			if t.Default {
+				selected = append(selected, t)
+			} else {
+				optional = append(optional, t.Name)
+			}
+		}
 	} else {
 		for _, name := range fs.Args() {
 			if name == "rules" {
@@ -142,10 +160,18 @@ func runToolsInstall(args []string, stdout, stderr io.Writer) error {
 	defer cancel()
 
 	in := &toolchain.Installer{BinDir: binDir, Log: stdout}
+	goVersion := ""
+	if !*prebuilt {
+		// gosec is built with the Go it will scan with, when there is one.
+		if p, err := exec.LookPath("go"); err == nil {
+			in.Go = p
+			goVersion = toolchain.LocalGoVersion(ctx, p)
+		}
+	}
 	var failed []string
 	for _, t := range selected {
 		if !*force {
-			if v := installedPinnedVersion(ctx, t); v != "" {
+			if v := installedPinnedVersion(ctx, t, goVersion); v != "" {
 				fmt.Fprintf(stdout, "%s %s: already installed (use --force to reinstall)\n", t.Name, v)
 				continue
 			}
@@ -173,16 +199,25 @@ func runToolsInstall(args []string, stdout, stderr io.Writer) error {
 	if len(failed) > 0 {
 		return fmt.Errorf("tools install: failed: %s", strings.Join(failed, ", "))
 	}
+	if len(optional) > 0 {
+		fmt.Fprintf(stdout, "\nOpt-in scanners are installed by name: achilles tools install %s\n", strings.Join(optional, " "))
+	}
 	fmt.Fprintln(stdout, "\nNext: achilles doctor")
 	return nil
 }
 
 // installedPinnedVersion returns the version when the MANAGED copy of t already
-// reports the pinned version, else "".
-func installedPinnedVersion(ctx context.Context, t toolchain.Tool) string {
+// reports the pinned version, else "". A copy built with an older Go than
+// goVersion does not count for a tool that is built from source: it is rebuilt.
+func installedPinnedVersion(ctx context.Context, t toolchain.Tool, goVersion string) string {
 	path, src, err := toolchain.LookBin(t.Bin)
 	if err != nil || src != toolchain.SourceManaged {
 		return ""
+	}
+	if t.GoPackage != "" {
+		if _, stale := toolchain.StaleGoBuild(path, goVersion); stale {
+			return ""
+		}
 	}
 	vctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -212,7 +247,7 @@ func installCommunityRules(ctx context.Context, in *toolchain.Installer, force b
 		return err
 	}
 	fmt.Fprintf(stdout, "rules %s: installed %d rule files in %s\n", rs.ShortSHA(), got.Files, got.Dir)
-	fmt.Fprintf(stdout, "  note: these rules are %s. They are loaded alongside the embedded baseline rules\n", rs.License)
+	fmt.Fprintf(stdout, "  note: these rules are %s. They are loaded alongside the built-in Achilles rules\n", rs.License)
 	fmt.Fprintln(stdout, "  and are skipped under --mode commercial (the Commons Clause forbids selling them).")
 	return nil
 }

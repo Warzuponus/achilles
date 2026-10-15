@@ -40,6 +40,8 @@ jobs:
             suffix: "-slim"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       # The full multi-arch build (Go toolchain, two platforms under QEMU) filled the
       # runner's disk on v0.1.0-rc1 ("No space left on device"). Remove preinstalled
       # SDKs this job never uses before building.

@@ -88,8 +88,14 @@ type Location struct {
 // Explanation, SuggestedFix) are filled in by the model review and are absent
 // on a scanner-only run.
 type Finding struct {
-	ID          string          `json:"id"`
-	Tool        string          `json:"tool"`
+	ID   string `json:"id"`
+	Tool string `json:"tool"`
+	// Scanner is the id of the registry entry that produced the finding ("opengrep",
+	// "trivy"). Tool is the name the scanner gives itself in its report, which can
+	// differ ("Opengrep OSS", "Trivy"); identity and fingerprints use Tool, anything
+	// that has to run the scanner again uses Scanner. Empty in records written
+	// before it existed.
+	Scanner     string          `json:"scanner,omitempty"`
 	RuleID      string          `json:"ruleId"`
 	CWE         []string        `json:"cwe,omitempty"`
 	Message     string          `json:"message"`
@@ -107,6 +113,13 @@ type Finding struct {
 	// IsDependencyAdvisory consult it first.
 	Category string `json:"category,omitempty"`
 
+	// Commit is set on a finding made in the git history rather than in the files
+	// as they are now (--secrets-history): the commit that added the reported line.
+	// Location is then that commit's file and line, which may no longer exist.
+	// CommitDate is when it was committed, as the scanner gave it.
+	Commit     string `json:"commit,omitempty"`
+	CommitDate string `json:"commitDate,omitempty"`
+
 	// Shadow marks a finding produced by a generated rule still inside its
 	// shadow window (§9.4 rule flywheel): it is reported for observation but
 	// does NOT affect the --fail-on gate, issue filing, or a written baseline.
@@ -118,6 +131,11 @@ type Finding struct {
 	// severity, and gating behaviour. It is NOT part of ID or Fingerprint.
 	Correlated []string `json:"correlated,omitempty"`
 
+	// Suppression is set on a finding that a comment in the scanned code
+	// (`achilles:ignore RULE -- reason`) suppressed. Such a finding is in
+	// Scan.Suppressed, not Scan.Findings.
+	Suppression *Suppression `json:"suppression,omitempty"`
+
 	// Populated by the triage layer; nil before triage.
 	Verdict     *Verdict     `json:"verdict,omitempty"`
 	Provenance  *Provenance  `json:"provenance,omitempty"`
@@ -126,6 +144,18 @@ type Finding struct {
 	// Deep is set when --deep-verify let the model read the repository to settle this
 	// finding; nil otherwise.
 	Deep *DeepVerification `json:"deep,omitempty"`
+}
+
+// Suppression is a comment in the scanned code that says a finding is to be
+// ignored, and why. It is the repository speaking about its own findings, so it is
+// reported wherever findings are, never applied silently.
+type Suppression struct {
+	File   string `json:"file"`   // where the comment is
+	Line   int    `json:"line"`   // its line
+	Reason string `json:"reason"` // what it gives as the reason
+	// New is true when the change under review (--diff) added or edited the line
+	// the comment is on: the change is suppressing a finding in itself.
+	New bool `json:"new,omitempty"`
 }
 
 // Scan is the result of running one or more tools against a target.
@@ -137,6 +167,10 @@ type Scan struct {
 	// Verdict.Dismissed). They are not in Findings, so they do not gate, file
 	// issues, or inflate counts, but reports list them so the call can be audited.
 	Dismissed []Finding `json:"dismissed,omitempty"`
+	// Suppressed holds findings that a comment in the scanned code suppressed (see
+	// Suppression). Like Dismissed they are not in Findings and do not gate or file
+	// issues, and every report lists them with the reason given.
+	Suppressed []Finding `json:"suppressed,omitempty"`
 	// FailedTools are tools that could not run or whose output could not be
 	// normalized. A scan with failures is incomplete, so "no findings" must never
 	// be presented as a clean result.

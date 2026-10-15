@@ -190,3 +190,8 @@ func redactValue(key string, v any) any {
 	}
 	return v
 }
+
+// RedactFinding removes secret material from a finding the way the War Room does
+// before serving it, for other readers of the vault that hand findings to someone
+// (the MCP server).
+func RedactFinding(f *model.Finding) { redactFinding(f) }

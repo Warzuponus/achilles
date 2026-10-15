@@ -202,6 +202,49 @@ func TestSync_Lifecycle(t *testing.T) {
 			},
 		},
 		{
+			name:     "a finding suppressed by a comment in the code closes its issue, saying it was not fixed",
+			existing: func() []github.Issue { return []github.Issue{issueFor(7, "open", one, baseOpts())} },
+			scan: func() model.Scan {
+				s := high
+				s.Suppression = &model.Suppression{File: "/work/proj/src/a.go", Line: 11, Reason: "the query is built from constants @everyone"}
+				return model.Scan{Target: "/work/proj", Suppressed: []model.Finding{s}}
+			}(),
+			mod: func(o *Options) { o.Reconcile = false },
+			check: func(t *testing.T, f *fakeAPI, s Summary, _ string) {
+				is := f.find(7)
+				if s.Closed != 1 || is.State != "closed" || is.StateReason != "not_planned" {
+					t.Fatalf("summary=%+v issue=%+v", s, is)
+				}
+				c := f.comments[7][0]
+				for _, want := range []string{"achilles:ignore", "src/a.go:11", "the query is built from constants", "It was not fixed"} {
+					if !strings.Contains(c, want) {
+						t.Errorf("comment lacks %q: %q", want, c)
+					}
+				}
+				// The reason is text from the scanned code: it must not ping anyone, and
+				// the comment must not name a path on the scanning machine.
+				if strings.Contains(c, "@everyone") || strings.Contains(c, "/work/proj") {
+					t.Errorf("comment=%q", c)
+				}
+			},
+		},
+		{
+			name:     "a suppressed copy does not close an issue whose fingerprint is still active",
+			existing: func() []github.Issue { return []github.Issue{issueFor(7, "open", one, baseOpts())} },
+			scan: func() model.Scan {
+				s := one
+				sup := high
+				sup.Suppression = &model.Suppression{File: "a.go", Line: 1, Reason: "r"}
+				s.Suppressed = []model.Finding{sup}
+				return s
+			}(),
+			check: func(t *testing.T, f *fakeAPI, s Summary, _ string) {
+				if len(f.writes) != 0 {
+					t.Errorf("writes=%v", f.writes)
+				}
+			},
+		},
+		{
 			name:     "dismissed copy does not close an issue whose fingerprint is still active",
 			existing: func() []github.Issue { return []github.Issue{issueFor(7, "open", one, baseOpts())} },
 			scan: func() model.Scan {
@@ -912,4 +955,25 @@ func TestBody_FixVerification(t *testing.T) {
 			t.Errorf("nothing to verify without a diff:\n%s", body)
 		}
 	})
+}
+
+// A finding made in the git history links to the file in the commit it was found
+// in: at the scanned commit the line, or the whole file, may be gone.
+func TestBody_HistoryFindingLinksToItsOwnCommit(t *testing.T) {
+	f := fnd("sqli", "/work/proj/old/config.go", 7, model.SeverityHigh)
+	f.Commit = "689bd12734c6a21c4431adae399f29b9d181649b"
+	opts := baseOpts()
+	opts.CommitSHA, opts.ServerURL = "abc123def456", "https://github.com"
+	_, body := renderOne(t, f, opts)
+	if !strings.Contains(body, "/acme/app/blob/689bd12734c6a21c4431adae399f29b9d181649b/old/config.go#L7") {
+		t.Errorf("the link must use the finding's commit:\n%s", body)
+	}
+	if strings.Contains(body, "/blob/abc123def456/old/config.go") {
+		t.Errorf("the link points at the scanned commit, where the line may not exist:\n%s", body)
+	}
+	// Without a scanned commit there are no links at all, as before.
+	_, plain := renderOne(t, f, baseOpts())
+	if strings.Contains(plain, "/blob/") {
+		t.Errorf("a link was made without a scanned commit:\n%s", plain)
+	}
 }

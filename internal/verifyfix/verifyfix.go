@@ -145,9 +145,13 @@ func (v *Verifier) Verify(ctx context.Context, f model.Finding, diff string) Res
 	if err := checkScope(diff, file); err != nil {
 		return Result{Status: PatchFailed, Detail: "diff rejected: " + err.Error()}
 	}
-	sc, ok := v.scanners.Get(f.Tool)
+	scannerID := f.Scanner
+	if scannerID == "" {
+		scannerID = f.Tool // a finding from before Scanner existed
+	}
+	sc, ok := v.scanners.Get(scannerID)
 	if !ok {
-		return Result{Status: Skipped, Detail: fmt.Sprintf("scanner %q is not available to re-run (shadow or unregistered tool)", f.Tool)}
+		return Result{Status: Skipped, Detail: fmt.Sprintf("scanner %q is not available to re-run (shadow or unregistered tool)", scannerID)}
 	}
 	if file != "" && inDir(file, neverCopied) {
 		return Result{Status: Skipped, Detail: fmt.Sprintf("%s is in a directory that is never copied for verification", file)}

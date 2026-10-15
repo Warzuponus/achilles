@@ -21,7 +21,7 @@ scan:
 | | Scanners on their own | With Achilles |
 |---|---|---|
 | Output | one format and one report per tool | one set of findings, one report, one gate |
-| A scanner that could not run | usually a green job | named in every report; `--strict-tools` fails the run |
+| A scanner that could not run | usually a green job | named in every report; a run where no scanner could run fails; `--strict-tools` fails on any |
 | False positives | you read every finding | a model reviews each one with the code around it, a second pass argues against the verdict, and confident false positives leave the gate (listed, so you can audit them) |
 | Suggested fixes | none, or unchecked | applied to a copy and re-scanned before being called a fix |
 | New findings only | per-tool baselines | one baseline and `--diff` across all tools |
@@ -64,6 +64,20 @@ achilles --ai --llm-provider openrouter --llm-model <model> .
 open achilles-report/report.html
 ```
 
+**Set up a repository in one step.** In the repository, after installing the
+scanners:
+
+```bash
+achilles init
+```
+
+It writes `.achilles.yaml` (fail on high, use the baseline), a CI workflow for GitHub
+or GitLab (detected; it needs no secret and scans pull requests and the default
+branch), adds the Evidence Vault to `.gitignore`, and seeds `.achilles/baseline.json`
+with the findings in the code today. From then on CI fails only on new findings.
+Existing files are left alone (`--force` replaces them, `--dry-run` shows what it
+would write).
+
 **In Docker**, which already contains the scanners:
 `docker run --rm -v "$PWD":/work ghcr.io/warzuponus/achilles achilles --ai ... /work`
 (see [Running in containers](docs/containers.md)).
@@ -105,7 +119,7 @@ their flags or behavior may change): `--fix-pr`, `--deep-verify`, `--llm-samples
 `--calibrate` and `--feedback`, `--rag`, `--threat-model`, `--sbom`, the research
 agents (`--research`, `--mine-rules`), the `anthropic` provider preset, the War Room
 (`achillesd`), the fleet dispatcher (`achilles-fleet`), `--profile full` with its
-per-language tool images, and the GitLab report outputs (`--gitlab-sast`,
+per-language tool images, the MCP server (`achilles mcp`), and the GitLab report outputs (`--gitlab-sast`,
 `--gitlab-secret-detection`, `--gitlab-code-quality`: checked against GitLab's published
 report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/README.md) cover each of them.
 
@@ -117,18 +131,21 @@ report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/
   [SECURITY.md](SECURITY.md).
 - **Coverage depends on the scanners.** The default set covers Go, dependencies, IaC
   and secrets well. Code-level coverage for Python, JavaScript, Java, Ruby and PHP comes
-  mostly from Opengrep rules: Achilles ships a small baseline set, and
-  `achilles tools install` adds the community rules (a Commons Clause licence applies;
-  they are skipped under `--mode commercial`, see [THIRD-PARTY.md](THIRD-PARTY.md)). The
-  heavier per-language analyzers (`--profile full`) need Docker.
+  mostly from Opengrep rules: Achilles ships about 60 of its own for Python,
+  JavaScript and TypeScript, Java, Ruby, PHP and credentials (Apache-2.0, loaded in
+  every mode), and `achilles tools install` adds the community rules (a Commons Clause
+  licence applies; they are skipped under `--mode commercial`, see
+  [THIRD-PARTY.md](THIRD-PARTY.md)). The heavier per-language analyzers
+  (`--profile full`) need Docker.
 - **Go code and Go 1.27.2 or newer.** gosec cannot yet read the compiler data that Go
   1.27.2 writes, so with that toolchain on your PATH it skips its type-based rules.
   Achilles reports gosec as incomplete when this happens instead of passing the scan.
   Until gosec catches up, scan Go code with Go 1.27.1 (the Docker image does).
 - **Accuracy is only lightly measured:** an 18-case labeled triage corpus and a small
-  detection benchmark (24 labeled issues in synthetic fixtures; about 46% recall with the
-  default scanners, far lower for Python and JavaScript with only the bundled rules;
-  the community rules were not measured), not real-repository precision and recall. See
+  detection benchmark (24 labeled issues in synthetic fixtures; 22 found with the
+  default scanners and built-in rules, but those rules were written with the fixtures
+  in view, so that number is a regression check, not an estimate of real-world recall),
+  not real-repository precision and recall. See
   [evals/](evals/README.md) and [Benchmarking Detection](docs/benchmarking.md).
 - **You choose the model and pay the provider.** `--dry-run` prints a cost estimate
   first. There is no default model.
@@ -186,7 +203,7 @@ The complete, current list is in the **[CLI Reference](docs/cli-reference.md)**
 | `--llm-no-code`, `--keep-dismissed` | privacy mode; gate on raw scanner severity instead of AI-filtered |
 | `--fail-on` | exit 1 if a finding at or above a severity remains |
 | `--baseline`, `--diff` | only new findings, only changed files |
-| `--strict-tools` | fail if any scanner could not run or could not analyze everything |
+| `--strict-tools` | fail if any scanner could not run or could not analyze everything (a run where none could run always fails) |
 | `--file-issues` | open and maintain GitHub issues (`--issues-*` options) |
 | `--dry-run`, `--max-cost` | cost estimate before any model call; a cap on what the run may spend |
 | `--html-report`, `--sarif-report`, `--markdown` | write a report |

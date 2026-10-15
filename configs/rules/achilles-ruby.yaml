@@ -1,0 +1,406 @@
+# Achilles rules for Ruby - original, written for this project (Apache-2.0; not
+# derived from the Semgrep registry or Brakeman), so they load in every license
+# mode. Each rule is tested by internal/config/testdata/rules/achilles-ruby.rb
+# (opengrep --test). Keep this file ASCII-only: Opengrep reads rule files as ASCII.
+#
+# Request sources cover Rails controllers and Sinatra (params, cookies and the
+# request object). YAML anchors are not supported by Opengrep, so each taint rule
+# lists them in full.
+rules:
+  - id: achilles.ruby.sql-injection
+    languages: [ruby]
+    severity: ERROR
+    message: >
+      Request data reaches an SQL string. ActiveRecord passes the first argument of
+      where, order, group, joins, find_by_sql and the like to the database as SQL,
+      so the input can change the query. Use placeholders (where("name = ?", name)),
+      a hash (where(name: name)), or, for ORDER BY, pick the column from a fixed list.
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: params
+          - pattern: cookies
+          - pattern: request.params
+          - pattern: request.query_parameters
+          - pattern: request.request_parameters
+          - pattern: request.headers
+          - pattern: request.raw_post
+          - pattern: request.body.read
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: $X.to_i
+          - pattern: $X.to_f
+          - pattern: Integer(...)
+          - pattern: $C.quote(...)
+          - pattern: sanitize_sql(...)
+          - pattern: sanitize_sql_array(...)
+          - pattern: sanitize_sql_like(...)
+          - pattern: $M.sanitize_sql(...)
+          - pattern: $M.sanitize_sql_array(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $M.where($Q, ...)
+              - pattern: $M.not($Q, ...)
+              - pattern: $M.order($Q, ...)
+              - pattern: $M.reorder($Q, ...)
+              - pattern: $M.group($Q, ...)
+              - pattern: $M.having($Q, ...)
+              - pattern: $M.joins($Q, ...)
+              - pattern: $M.select($Q, ...)
+              - pattern: $M.from($Q, ...)
+              - pattern: $M.pluck($Q, ...)
+              - pattern: $M.find_by_sql($Q, ...)
+              - pattern: $M.count_by_sql($Q, ...)
+              - pattern: $M.exists?($Q, ...)
+              - pattern: $M.update_all($Q, ...)
+              - pattern: $M.delete_all($Q, ...)
+              - pattern: $C.execute($Q, ...)
+              - pattern: $C.exec_query($Q, ...)
+              - pattern: $C.select_all($Q, ...)
+              - pattern: $C.select_value($Q, ...)
+              - pattern: $C.select_rows($Q, ...)
+          - focus-metavariable: $Q
+          # A hash argument is bound by ActiveRecord, not spliced into SQL.
+          - pattern-not: '{...}'
+
+  - id: achilles.ruby.sql-string-building
+    languages: [ruby]
+    severity: WARNING
+    message: >
+      SQL is built by string interpolation and passed to ActiveRecord or the
+      connection. Any part of it that comes from input can change the query. Use
+      placeholders (where("name = ?", name)) or a hash (where(name: name)).
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $M.where($Q, ...)
+          - pattern: $M.order($Q, ...)
+          - pattern: $M.group($Q, ...)
+          - pattern: $M.having($Q, ...)
+          - pattern: $M.joins($Q, ...)
+          - pattern: $M.find_by_sql($Q, ...)
+          - pattern: $M.count_by_sql($Q, ...)
+          - pattern: $C.execute($Q, ...)
+          - pattern: $C.exec_query($Q, ...)
+          - pattern: $C.select_all($Q, ...)
+          - pattern: $C.select_value($Q, ...)
+      # An interpolation converted to a number (#{id.to_i}) cannot change the query.
+      - metavariable-regex:
+          metavariable: $Q
+          regex: '(?s)^"[^"]*#\{(?![^}]*\.to_[if]\s*\})'
+
+  - id: achilles.ruby.command-injection
+    languages: [ruby]
+    severity: ERROR
+    message: >
+      Request data reaches a command that runs through a shell (system or exec with a
+      single string, backticks, %x, IO.popen, Open3, or Kernel#open with a leading
+      pipe), so it can run other commands. Pass the program and its arguments
+      separately (system("ping", "-c", "1", host)), which starts no shell.
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: params
+          - pattern: cookies
+          - pattern: request.params
+          - pattern: request.query_parameters
+          - pattern: request.request_parameters
+          - pattern: request.headers
+          - pattern: request.raw_post
+          - pattern: request.body.read
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: Shellwords.escape(...)
+          - pattern: Shellwords.shellescape(...)
+          - pattern: $X.shellescape
+          - pattern: $X.to_i
+    pattern-sinks:
+      - pattern-either:
+          - pattern: system($CMD)
+          - pattern: exec($CMD)
+          - pattern: spawn($CMD)
+          - pattern: Kernel.system($CMD)
+          - pattern: Kernel.exec($CMD)
+          - pattern: Process.spawn($CMD)
+          - pattern: '`...`'
+          - pattern: IO.popen($CMD, ...)
+          - pattern: Open3.capture2($CMD, ...)
+          - pattern: Open3.capture2e($CMD, ...)
+          - pattern: Open3.capture3($CMD, ...)
+          - pattern: Open3.popen2($CMD, ...)
+          - pattern: Open3.popen2e($CMD, ...)
+          - pattern: Open3.popen3($CMD, ...)
+          - pattern: open($CMD, ...)
+          - pattern: Kernel.open($CMD, ...)
+
+  - id: achilles.ruby.code-injection
+    languages: [ruby]
+    severity: ERROR
+    message: >
+      Request data is evaluated as Ruby, names a method to call, or names a class to
+      load. Any of these lets the input run code the application never meant to
+      expose. Map the input to an allowed list of methods or classes instead.
+    metadata:
+      cwe: ["CWE-94: Improper Control of Generation of Code (Code Injection)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: params
+          - pattern: cookies
+          - pattern: request.params
+          - pattern: request.query_parameters
+          - pattern: request.request_parameters
+          - pattern: request.headers
+          - pattern: request.raw_post
+          - pattern: request.body.read
+    pattern-sanitizers:
+      # Looking the input up in the application's own table (an allow-list).
+      - patterns:
+          - pattern: $H.fetch(...)
+          - pattern-not: params.fetch(...)
+          - pattern-not: cookies.fetch(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($X, ...)
+              - pattern: instance_eval($X, ...)
+              - pattern: $O.instance_eval($X, ...)
+              - pattern: $O.class_eval($X, ...)
+              - pattern: $O.module_eval($X, ...)
+              - pattern: $O.send($X, ...)
+              - pattern: $O.public_send($X, ...)
+              - pattern: $O.__send__($X, ...)
+              - pattern: $O.method($X)
+              - pattern: $X.constantize
+              - pattern: $X.safe_constantize
+              - pattern: Object.const_get($X, ...)
+              - pattern: $O.const_get($X, ...)
+          - focus-metavariable: $X
+
+  - id: achilles.ruby.path-traversal
+    languages: [ruby]
+    severity: ERROR
+    message: >
+      Request data is used as a file path. "../" in it reaches files outside the
+      directory you meant. Keep only the file name (File.basename) and check that the
+      resolved path is still inside the directory, or look the file up by an id.
+    metadata:
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory (Path Traversal)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: params
+          - pattern: cookies
+          - pattern: request.params
+          - pattern: request.query_parameters
+          - pattern: request.request_parameters
+          - pattern: request.headers
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: File.basename(...)
+          - pattern: $X.to_i
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: send_file($P, ...)
+              - pattern: File.read($P, ...)
+              - pattern: File.open($P, ...)
+              - pattern: File.new($P, ...)
+              - pattern: File.write($P, ...)
+              - pattern: File.binread($P, ...)
+              - pattern: File.readlines($P, ...)
+              - pattern: File.delete($P, ...)
+              - pattern: File.unlink($P, ...)
+              - pattern: IO.read($P, ...)
+              - pattern: IO.readlines($P, ...)
+              - pattern: FileUtils.rm($P, ...)
+              - pattern: FileUtils.rm_f($P, ...)
+              - pattern: FileUtils.rm_r($P, ...)
+              - pattern: FileUtils.rm_rf($P, ...)
+              - pattern: FileUtils.cp($P, ...)
+              - pattern: FileUtils.mv($P, ...)
+              - pattern: Dir.glob($P, ...)
+              - pattern: 'render(file: $P, ...)'
+          - focus-metavariable: $P
+
+  - id: achilles.ruby.ssrf
+    languages: [ruby]
+    severity: ERROR
+    message: >
+      Request data decides where the server sends a request. It can point the server
+      at internal services or the cloud metadata endpoint. Allow only known hosts,
+      or build the URL from a fixed base and validated parts.
+    metadata:
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: params
+          - pattern: cookies
+          - pattern: request.params
+          - pattern: request.query_parameters
+          - pattern: request.request_parameters
+          - pattern: request.headers
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Net::HTTP.get($U, ...)
+              - pattern: Net::HTTP.get_response($U, ...)
+              - pattern: Net::HTTP.post($U, ...)
+              - pattern: Net::HTTP.post_form($U, ...)
+              - pattern: Net::HTTP.start($U, ...)
+              - pattern: URI.open($U, ...)
+              - pattern: HTTParty.get($U, ...)
+              - pattern: HTTParty.post($U, ...)
+              - pattern: Faraday.get($U, ...)
+              - pattern: Faraday.post($U, ...)
+              - pattern: Faraday.new($U, ...)
+              - pattern: RestClient.get($U, ...)
+              - pattern: RestClient.post($U, ...)
+              - pattern: Excon.get($U, ...)
+              - pattern: Excon.post($U, ...)
+          - focus-metavariable: $U
+
+  - id: achilles.ruby.xss
+    languages: [ruby]
+    severity: ERROR
+    message: >
+      Request data is marked as safe HTML (raw, html_safe) or rendered as a template
+      or HTML (render inline:, render html:), so Rails no longer escapes it and a
+      script in the input runs in the user's browser. Let Rails escape it, or
+      sanitize it with an allow-list (sanitize) if it must contain markup.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: params
+          - pattern: cookies
+          - pattern: request.params
+          - pattern: request.query_parameters
+          - pattern: request.request_parameters
+          - pattern: request.headers
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: sanitize(...)
+          - pattern: h(...)
+          - pattern: ERB::Util.html_escape(...)
+          - pattern: CGI.escapeHTML(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: raw($X)
+              - pattern: $X.html_safe
+              - pattern: 'render(inline: $X, ...)'
+              - pattern: 'render(html: $X, ...)'
+          - focus-metavariable: $X
+
+  - id: achilles.ruby.open-redirect
+    languages: [ruby]
+    severity: WARNING
+    message: >
+      Request data decides where redirect_to sends the user, so a link to this site
+      can forward to any other site (phishing). Redirect only to paths on this site,
+      or to an allowed list of hosts.
+    metadata:
+      cwe: ["CWE-601: URL Redirection to Untrusted Site (Open Redirect)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: params
+          - pattern: cookies
+          - pattern: request.params
+          - pattern: request.query_parameters
+          - pattern: request.referer
+    pattern-sinks:
+      - patterns:
+          - pattern: redirect_to($U, ...)
+          - pattern-not: 'redirect_to($U, ..., allow_other_host: false, ...)'
+          - focus-metavariable: $U
+
+  - id: achilles.ruby.unsafe-deserialization
+    languages: [ruby]
+    severity: ERROR
+    message: >
+      Marshal and YAML.unsafe_load can build any object the application can load,
+      and some of those run code as they are built. Never use them on data from
+      outside the application; use JSON, or YAML.safe_load with the classes you
+      expect.
+    metadata:
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: Marshal.load($X, ...)
+          - pattern: Marshal.restore($X, ...)
+          - pattern: YAML.unsafe_load($X, ...)
+          - pattern: Psych.unsafe_load($X, ...)
+          - pattern: 'Oj.load($X, ..., mode: :object, ...)'
+      # A literal is the program's own data.
+      - pattern-not: Marshal.load("...")
+
+  - id: achilles.ruby.mass-assignment
+    languages: [ruby]
+    severity: ERROR
+    message: >
+      permit! allows every request parameter through strong parameters, so a user
+      can set any attribute of the model, such as admin or role. List the attributes
+      the form may set: params.require(:user).permit(:name, :email).
+    metadata:
+      cwe: ["CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"]
+      category: security
+    pattern-either:
+      - pattern: params.permit!
+      - pattern: params.require(...).permit!
+      - pattern: params[...].permit!
+
+  - id: achilles.ruby.tls-verification-disabled
+    languages: [ruby]
+    severity: ERROR
+    message: >
+      TLS certificate verification is turned off, so anyone on the network path can
+      impersonate the server and read or change the traffic. Remove VERIFY_NONE;
+      to trust a private CA, set ca_file or cert_store instead.
+    metadata:
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      category: security
+    pattern-either:
+      - pattern: OpenSSL::SSL::VERIFY_NONE
+      - pattern: 'Faraday.new(..., ssl: {..., verify: false, ...}, ...)'
+      - pattern: 'HTTParty.$M(..., verify: false, ...)'
+
+  - id: achilles.ruby.weak-hash
+    languages: [ruby]
+    severity: WARNING
+    message: >
+      MD5 and SHA-1 are broken for security use: collisions can be made, and they
+      are far too fast for passwords. For passwords use bcrypt (has_secure_password)
+      or argon2; for integrity use SHA-256 or better. A checksum that guards against
+      accidents, not attackers, can stay.
+    metadata:
+      cwe: ["CWE-328: Use of Weak Hash"]
+      category: security
+    pattern-either:
+      - pattern: Digest::MD5.$F(...)
+      - pattern: Digest::SHA1.$F(...)
+      - pattern: OpenSSL::Digest::MD5.new(...)
+      - pattern: OpenSSL::Digest::SHA1.new(...)
+      - patterns:
+          - pattern: OpenSSL::Digest.new($A, ...)
+          - metavariable-regex:
+              metavariable: $A
+              regex: (?i)^["'](md5|sha1)["']$

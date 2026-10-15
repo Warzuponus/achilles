@@ -77,6 +77,8 @@ type options struct {
 	repoFlag          string
 	strictTools       bool
 	noRepoConfig      bool
+	secretsHistory    bool   // --secrets-history: also scan the git history for credentials
+	withTools         string // --with: opt-in registry tools to run as well, by name
 	settingsPath      string // --settings: a file of flag values chosen by the operator
 	// What the settings files contributed (see settings.go).
 	settings            *settingsUse
@@ -187,6 +189,8 @@ func defineFlags() (*flag.FlagSet, *options) {
 	fs.StringVar(&o.repoFlag, "repo", os.Getenv("GITHUB_REPOSITORY"), "owner/name for GitHub integrations (default $GITHUB_REPOSITORY)")
 	fs.BoolVar(&o.strictTools, "strict-tools", os.Getenv("ACHILLES_STRICT_TOOLS") == "true", "fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan; recommended in containers and CI")
 	fs.BoolVar(&o.noRepoConfig, "no-repo-config", os.Getenv("ACHILLES_NO_REPO_CONFIG") == "true", "do not let the scanned repository configure the scanners: its ignore/config files (.trivyignore, .gitleaks.toml, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. For code you do not trust")
+	fs.BoolVar(&o.secretsHistory, "secrets-history", false, "also scan the git history for credentials: one that was committed and later deleted is in no file, but is still leaked. With --diff, only the commits since that ref. Needs a full (not shallow) clone and the repository root as the target")
+	fs.StringVar(&o.withTools, "with", "", "comma-separated opt-in scanners to run as well as the profile's: zizmor (GitHub Actions workflows and composite actions; offline). Each must be installed (`achilles tools install NAME`)")
 	fs.StringVar(&o.settingsPath, "settings", os.Getenv("ACHILLES_SETTINGS"), "YAML file of flag values (flag name: value) for flags not given on the command line. The scanned repository's own .achilles.yaml is read as well, but may only shape the scan; see docs/cli-reference.md")
 	fs.StringVar(&o.diagnostics, "diagnostics", "", "write a diagnostics sidecar (tool/parse failures + LLM token usage) to this JSON file")
 	fs.StringVar(&o.sbomOut, "sbom", "", "generate a CycloneDX SBOM of the target (via Syft) and write it to this file")

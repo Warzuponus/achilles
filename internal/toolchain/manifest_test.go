@@ -10,7 +10,7 @@ import (
 )
 
 func TestManifestCompleteForPrimaryPlatforms(t *testing.T) {
-	want := []string{"opengrep", "gosec", "osv-scanner", "trivy", "gitleaks"}
+	want := []string{"opengrep", "gosec", "osv-scanner", "trivy", "gitleaks", "zizmor"}
 	for _, name := range want {
 		tool, err := Lookup(name)
 		if err != nil {
@@ -29,6 +29,17 @@ func TestManifestCompleteForPrimaryPlatforms(t *testing.T) {
 	}
 	if len(Tools()) != len(want) {
 		t.Errorf("manifest has %d tools, want %d", len(Tools()), len(want))
+	}
+	// What `achilles doctor` requires and the default scan runs: adding to it changes
+	// what every user must install, so it is spelled out.
+	var required []string
+	for _, tool := range Tools() {
+		if tool.Default {
+			required = append(required, tool.Name)
+		}
+	}
+	if got := strings.Join(required, " "); got != "gitleaks gosec opengrep osv-scanner trivy" {
+		t.Errorf("default tools = %s", got)
 	}
 }
 
@@ -144,8 +155,11 @@ func TestManifestMatchesRepoPins(t *testing.T) {
 		if strings.Contains(action, tool.Version) {
 			t.Errorf("%s: action.yml hard-codes the scanner version %s; the manifest is the only pin", tool.Name, tool.Version)
 		}
-		if v := dockerV[tool.Name]; v != tool.Version {
+		// An opt-in tool is not in the image, so the Dockerfile has no pin for it.
+		if v, bundled := dockerV[tool.Name]; tool.Default && v != tool.Version {
 			t.Errorf("%s: manifest %s != Dockerfile %s", tool.Name, tool.Version, v)
+		} else if !tool.Default && bundled {
+			t.Errorf("%s is not a default tool but the Dockerfile pins it", tool.Name)
 		}
 		// Opengrep has no image in tools.yaml; every other tool must have one.
 		if _, ok := images[tool.Name]; !ok && tool.Name != "opengrep" {

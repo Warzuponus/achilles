@@ -97,57 +97,114 @@ the AI review cost. It is real model spend, twice per target.
 
 ## The committed baseline
 
-`evals/detect/baseline.json` was generated on the maintainer's machine with
-`opengrep`, `gosec`, `gitleaks` and `osv-scanner` installed and **`trivy` not
-installed** (3 runs; no entry flapped):
+`evals/detect/baseline.json` was generated on the maintainer's machine with all five
+default scanners installed (`opengrep`, `gosec`, `gitleaks`, `osv-scanner`, `trivy`)
+and **`--mode commercial`**, so only the built-in Achilles rules were loaded, not the
+community pack (3 runs; no entry flapped):
 
 | | Recall |
 |---|---|
-| **Overall** | **45.8%** (11 of 24) |
-| injection | 62.5% (5 of 8) |
-| path-traversal | 50.0% (1 of 2) |
-| weak-crypto | 50.0% (1 of 2) |
-| ssrf | 50.0% (1 of 2) |
-| hardcoded-secret | 20.0% (1 of 5) |
-| vulnerable-dependency | 100% (2 of 2) |
-| xss, authz, deserialization | 0% (0 of 3) |
+| **Overall** | **91.7%** (22 of 24) |
+| injection | 87.5% (7 of 8) |
+| hardcoded-secret | 100% (5 of 5) |
+| path-traversal, ssrf, weak-crypto, vulnerable-dependency | 100% (2 of 2 each) |
+| xss, deserialization | 100% (1 of 1 each) |
+| authz | 0% (0 of 1) |
 
 | Target | Recall |
 |---|---|
-| go-service | 83% (5 of 6) |
+| go-service | 100% (6 of 6) |
 | deps-manifest | 100% (2 of 2) |
-| secrets-config | 33% (1 of 3) |
-| py-webapp | 25% (2 of 8) |
-| js-express | 20% (1 of 5) |
+| secrets-config | 100% (3 of 3) |
+| py-webapp | 88% (7 of 8) |
+| js-express | 80% (4 of 5) |
 
-Loss points of the 13 misses: `not-detected` 8, `tool-missing` 4, `noise-filter` 1.
+Loss points of the 2 misses: `not-detected` 1 (`JS-IDOR-1`), `noise-filter` 1
+(`PY-THIRDPARTY-EVAL-1`).
+
+The previous baseline, with only three built-in rules, was 45.8% (11 of 24); the
+community pack took it to 75%. The rules in `configs/rules/achilles-*.yaml` account
+for the difference, and every finding they added is on a labeled issue: the count of
+findings in labeled files that matched no label did not grow. The scan surfaces 61
+findings: 37 on a labeled issue and 24 elsewhere in the labeled files (unlabeled, not
+necessarily false; see the precision proxy above). Before Achilles dropped repeated
+scanner results (osv-scanner reports some advisories several times) and the two
+credential rules were tightened, the same scan counted 85.
 
 How to read it honestly:
 
-- **Python and JavaScript recall is low because the baseline rule pack is thin.**
-  `configs/rules` has three rules (Python `eval`, Python `subprocess(shell=True)`,
-  JavaScript `eval`), and those are the only detections in those languages. Every
-  other Python/JavaScript miss is a plain `not-detected`. Go is strong because gosec
-  is a real type-aware analyzer. The community rule pack (`achilles tools install`)
-  would change this and was not installed for the baseline; measure it separately.
-- **Four `tool-missing` misses are all hard-coded secrets** that `trivy` also
-  covers. `gitleaks` ran and reported nothing near them (it found only the one
-  token-shaped value). With `trivy` installed these would resolve to a detection or
-  to `not-detected`; the baseline cannot say which, which is exactly why they are
-  labeled `tool-missing`.
+- **The new rules were written with these fixtures in view.** They target the
+  vulnerability classes in the fixtures, and the rule tests
+  (`internal/config/testdata/rules/`) hold their own true and false cases, but a
+  benchmark the rules were tuned on overstates what they catch elsewhere. Treat 91.7%
+  as "the classes in the benchmark are covered", not as an estimate of real-world
+  recall; external targets (below) are the stronger evidence.
 - **The `noise-filter` miss is deliberate**: a `third_party/` file the default noise
   filter drops, kept to exercise that loss point.
-- **One entry (`JS-IDOR-1`) is a business-logic flaw** no pattern scanner is
-  expected to find.
+- **`JS-IDOR-1` is a business-logic flaw** (no ownership check) that no pattern
+  scanner is expected to find. The AI review and the research agents are the parts
+  of Achilles that can.
 - **24 entries is small.** One entry is 4.2 points, which is why the gate tolerance
   is 2 points: any lost entry fails it. It catches regressions in rules and tool
   wiring; it cannot rank two scanners that differ by a few points.
 - The fixtures were written and labeled **before** looking at scanner output, but
-  by the people who maintain the scanners. Treat the absolute numbers as a
-  regression baseline, not a claim about real-world recall; external targets
-  (below) are the stronger evidence.
+  by the people who maintain the scanners.
 - `deps-manifest` depends on live OSV advisory data. The two labeled advisories are
   long-standing, but a future database change could still move that target.
+
+## Precision of the built-in rules on real code
+
+The benchmark measures recall on code written to be vulnerable. To see what the
+built-in rules (`configs/rules/achilles-*.yaml`) report on code nobody wrote for
+them, they were run on their own, with no other scanner and no AI review, over a Go
+module cache: 98,048 files of third-party code (the Azure, AWS and Google Cloud SDKs,
+Kubernetes and kind, Envoy's control plane, goreleaser, the Go toolchain's own
+sources, golang.org/x/tools and others), mostly Go, with JavaScript, Python, YAML and
+JSON alongside. The files are what `go mod download` fetched for this repository's
+tools; the run was on 2026-10-14 with Opengrep 1.25.0.
+
+| | First run | After the fixes |
+|---|---|---|
+| Findings outside test paths | 349 | 86 |
+| ...of which not what the rule is for | about 260 | 2 |
+| Findings in test paths (`_test.go`, `testdata/`, `fixtures/`, ...) | 101 | 97 |
+
+"Test paths" is a path heuristic. The 86 that remain outside it are mostly sample
+secrets in test helpers it does not catch (gosec's own `testutils/g101_samples.go`
+accounts for 43, webhook libraries' test keys for 9). Then come credentials in CI and
+docker-compose files, `new Function()` and `localStorage`-to-`innerHTML` in
+golang.org/x/tools' slide viewer, `exec()` of generated validator code, and code
+compiled at runtime inside a vendored jQuery. The two wrong ones are an example
+access token in a doc comment and a URL in a comment. (A third, the string of
+value names Go's `stringer` writes into a `_<type>_name` constant, is now excluded
+too.) The hits in test paths are mostly cryptographic test
+vectors (private keys and shared secrets in the Go toolchain's `testdata/`), which
+the secret rule is right about and which are not secrets anyone needs to rotate.
+Achilles does not drop test code by default, since a real credential can sit there.
+
+What the first run found, all fixed and pinned by `ok:` cases in
+`internal/config/testdata/rules/`:
+
+- `dom-xss` flagged every `innerHTML` assigned from a variable. Pages build their own
+  HTML all the time, so it is now a taint rule: only data from the URL, referrer,
+  cookies, `window.name`, web storage or `postMessage` counts.
+- `hardcoded-secret` flagged identifiers that only look like secrets: enum values
+  (`"ClientSecretCredential"`), header names (`"X-Amz-Security-Token"`), paths and
+  gRPC method names, dotted names, `__Placeholder__` values, truncated examples,
+  public key tokens, and Swagger example values. The first version of the fix also
+  dropped the benchmark's `"hunter2-admin-pass"`, which the benchmark gate caught:
+  the identifier exclusion now needs an upper-case letter, a `/` or a `.` in the
+  value, as every identifier it was written for had.
+- `credentials-in-url` flagged documentation of the URL syntax
+  (`[username[:password]@]`) and `REDACTED:REDACTED`.
+- One exclusion pattern backtracked past PCRE's limit on a long string such as
+  `"application/vnd.github.giant-sentry-fist-preview+json"`, and Opengrep then
+  dropped that exclusion for the whole file. It is rewritten with unambiguous,
+  possessive quantifiers, and the test file carries the string that set it off.
+
+This is precision only on code like this: no Ruby, PHP or Java application was in
+the set, and a module cache has little web-request handling, so the taint rules
+were barely exercised. It says nothing about recall.
 
 ## External targets
 

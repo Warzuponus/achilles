@@ -36,6 +36,9 @@ func TestAdvise(t *testing.T) {
 	scan := model.Scan{Findings: []model.Finding{
 		{Tool: "govulncheck", RuleID: "GO-2021-0113", Severity: model.SeverityHigh, Message: "x/text BidiRule panic"},
 		{Tool: "gosec", RuleID: "G404", Severity: model.SeverityMedium, Message: "weak rand"}, // not SCA → excluded from prompt
+		// Trivy names itself "Trivy": its advisories go in, its misconfigurations do not.
+		{Tool: "Trivy", Scanner: "trivy", RuleID: "CVE-2021-23337", Severity: model.SeverityHigh, Message: "lodash command injection"},
+		{Tool: "Trivy", Scanner: "trivy", RuleID: "DS002", Severity: model.SeverityHigh, Message: "image runs as root"},
 	}}
 
 	a, err := eng.Advise(context.Background(), "run1", inv, scan)
@@ -55,8 +58,11 @@ func TestAdvise(t *testing.T) {
 	if !strings.Contains(prompt, "golang.org/x/text@v0.3.5 [go]") || !strings.Contains(prompt, "lodash@4.17.21") {
 		t.Errorf("deps missing from prompt:\n%s", prompt)
 	}
-	if !strings.Contains(prompt, "GO-2021-0113") {
+	if !strings.Contains(prompt, "GO-2021-0113") || !strings.Contains(prompt, "CVE-2021-23337") {
 		t.Errorf("SCA finding missing from prompt:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "DS002") {
+		t.Errorf("a Trivy misconfiguration reached the dependency advisor:\n%s", prompt)
 	}
 	if strings.Contains(prompt, "G404") {
 		t.Errorf("non-SCA finding (gosec G404) should not be in the advisor prompt:\n%s", prompt)

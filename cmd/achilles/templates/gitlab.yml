@@ -1,0 +1,41 @@
+# Written by `achilles init`. Add it to the pipeline in .gitlab-ci.yml:
+#
+#   include:
+#     - local: .gitlab/achilles.yml
+#
+# It scans merge requests and the default branch and publishes the results where
+# GitLab shows them. The job fails only on findings at or above the severity in
+# .achilles.yaml (`fail-on`) that are not in the committed baseline
+# (.achilles/baseline.json). See
+# https://github.com/Warzuponus/achilles/blob/main/docs/ci-and-hub.md#gitlab-ci
+
+achilles:
+  stage: test
+  image: ghcr.io/warzuponus/achilles:__IMAGE_TAG__
+  variables:
+    GIT_DEPTH: "0" # the merge request diff needs the target branch
+  script:
+    # The image runs as its own user, and git will not read a checkout another user
+    # owns until it is told this one is expected.
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+    - DIFF=""
+    - if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"; DIFF="--diff origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"; fi
+    - >-
+      achilles $DIFF
+      --gitlab-sast gl-sast-report.json
+      --gitlab-secret-detection gl-secret-detection-report.json
+      --gitlab-code-quality gl-code-quality-report.json
+      --html-report achilles-report.html
+      .
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - achilles-report.html
+    reports:
+      sast: gl-sast-report.json
+      secret_detection: gl-secret-detection-report.json
+      codequality: gl-code-quality-report.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

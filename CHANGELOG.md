@@ -6,6 +6,155 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Files marked as generated are left out like vendored ones.** A file whose header
+  says a tool wrote it (Go's `// Code generated ... DO NOT EDIT.`, or `@generated` in
+  a comment near the top) joins the built-in noise filter, so findings in stringer,
+  mockgen, sqlc, protobuf and similar output no longer reach triage or the gate. The
+  header is the scanned repository's say-so: it never hides a credential, a
+  dependency advisory or a finding in commit history, and `--no-repo-config` (or
+  `--no-default-excludes`) ignores it.
+- **Built-in rules for Ruby and PHP.** 24 more Achilles Opengrep rules, Apache-2.0 like
+  the rest. Ruby (Rails, Sinatra): SQL injection through ActiveRecord (`where`, `order`,
+  `find_by_sql` and the rest) and SQL built by interpolation, command injection
+  (including backticks and `Kernel#open`), code injection (`eval`, `send`,
+  `constantize`), path traversal, SSRF, XSS (`raw`, `html_safe`, `render inline:`),
+  open redirects, `Marshal`/`YAML.unsafe_load`, `permit!`, `VERIFY_NONE`, and MD5/SHA-1.
+  PHP (plain PHP, Laravel, Symfony): SQL injection (mysqli, PDO, `DB::` and the `*Raw`
+  builder methods), command and code injection, file inclusion, path traversal, SSRF,
+  XSS, header injection and open redirects, `unserialize`, `extract`/`parse_str`
+  variable overwrite, disabled TLS checks, and fast password hashes. Each rule has
+  cases that must fire and near misses that must not.
+- **The terminal report summarizes a long scan by rule.** Above the per-finding detail,
+  a scan with more than 10 findings lists how many each rule produced and in how many
+  files, most severe and most frequent first (up to 15 rules), since a few rules usually
+  account for most of a report.
+- **Built-in rules for Python, JavaScript/TypeScript and Java.** 35 new Achilles
+  Opengrep rules (Apache-2.0, so they load in every mode, `--mode commercial`
+  included) for SQL, command and code injection, path traversal, SSRF, XSS, open
+  redirects, template injection, unsafe deserialization, XXE, weak crypto, disabled TLS
+  checks, Flask debug and Spring CSRF, plus two generic credential rules (credentials in
+  a connection URL; a secret-looking value assigned to a secret-named variable). Each
+  rule has test cases that must fire and near misses that must not, and CI runs them
+  with the real Opengrep. On the detection benchmark, recall with the built-in rules
+  went from 45.8% to 91.7%, with no new findings outside the labeled issues; the rules
+  were written with that benchmark in view, so see `docs/benchmarking.md` for what the
+  number does and does not show.
+- **`achilles init`: set a repository up in one step.** It writes `.achilles.yaml` (fail
+  on high, use the baseline), a CI workflow for GitHub or GitLab (detected; it needs no
+  secret, scans pull requests and the default branch, and pins the Achilles action to
+  this release's commit), adds the Evidence Vault to `.gitignore`, and, when the default
+  scanners are installed, scans once to seed the baseline so CI fails only on new
+  findings. Existing files are kept unless `--force`; `--dry-run` shows what it would do.
+- **`--with zizmor`: GitHub Actions workflows.** An opt-in scanner,
+  [zizmor](https://docs.zizmor.sh), audits workflows and composite actions (template
+  injection, credential persistence, cache poisoning, unpinned actions). It is not
+  part of the default set or the container image: install it with `achilles tools
+  install zizmor` (pinned by sha256 like the others) and name it with `--with`, or with
+  the GitHub Action's new `with` input, which installs it too. It always runs offline.
+  The repository's `zizmor.yml` is honoured and named, and `--no-repo-config` makes
+  zizmor ignore it. `achilles tools install` with no names installs the five default
+  scanners as before.
+- **Inline suppressions.** A comment `achilles:ignore RULE -- reason` on a finding's line,
+  or alone on the line above, suppresses that finding: it does not gate, is not sent to
+  the model and files no issue. It is never hidden: every report lists suppressed
+  findings with their reasons (SARIF as `inSource` suppressions), a suppression the
+  change under review adds is flagged under `--diff`, and `--no-repo-config` honours
+  none. A comment with no rule or no reason is not honoured, and credential findings,
+  dependency advisories and history findings cannot be suppressed this way. The MCP
+  server reports the reason too (`status: suppressed`).
+- **MCP server.** `achilles mcp` serves the Evidence Vault to an assistant that speaks the
+  Model Context Protocol, over stdio: `list_scans`, `list_findings`, `get_finding` and
+  `rule_health`. It is read-only by construction (no tool writes, and its handle on the
+  vault refuses writes), serves credential findings without their matched text, marks
+  every result's text as data copied from scanned code, and bounds the size of its
+  answers. No new dependency. See `docs/mcp.md`.
+- **Fix suggestions are cached too.** With `--remediate`, a suggestion made for the same
+  finding, code, position, fix hint, prompt and model is reused instead of asked for
+  again, under the same `--verdict-cache-days` limit and the same signing key as cached
+  verdicts. A moved line means a new request, since a patch is written against lines.
+  The re-scan that verifies a patch still runs in every scan. Reused suggestions are
+  marked (`reusedFrom` in the JSON report) and counted on stderr.
+- **Credentials in the git history.** `--secrets-history` scans the commits as well as the
+  files, so a credential that was committed and later deleted is reported: it is in no
+  file, but it is in every clone. With `--diff` only the commits since that ref are read,
+  and a finding in them is kept even when the net diff no longer contains the file (a
+  secret added in one commit of a pull request and removed in the next). A credential
+  still in a file is reported once, as the finding in the file; repeats across commits
+  are folded into the earliest. A shallow clone, a subdirectory target, a checkout git
+  cannot read or a `--diff` ref that does not resolve makes the history scan incomplete
+  or failed, never clean: gitleaks itself exits 0 with an empty report in those cases.
+  A repository can turn it on for itself with `secrets-history: true` in `.achilles.yaml`.
+
+### Security
+- **Achilles' own workflows are hardened, and checked by zizmor in the self-scan.** The
+  release workflow no longer lets `setup-go` restore a build cache (a poisoned cache
+  could have reached the signed archives); every checkout, here and in the example
+  workflows, sets `persist-credentials: false`; Dependabot waits seven days before
+  proposing a new release. The self-scan now runs zizmor over the workflows and
+  `action.yml`, so a change that weakens them fails CI.
+
+
+### Fixed
+- **The built-in rules were measured on real code, and fixed where they were wrong.**
+  Run on their own over 98,048 files of third-party code (a Go module cache: cloud SDKs,
+  Kubernetes, Envoy, goreleaser, the Go sources), they reported 349 findings outside
+  test paths, about 260 of them not what the rule is for. After the fixes: 86, of
+  which 2. `dom-xss` is now a taint rule from the URL, referrer, cookies,
+  `window.name`, web storage and `postMessage`, rather than any variable written to
+  `innerHTML`. `hardcoded-secret` no longer reports identifiers, header names, paths,
+  gRPC method names, placeholders or public key tokens, and `credentials-in-url` no
+  longer reports documentation of the URL syntax. A pattern that backtracked past
+  PCRE's limit, which made Opengrep drop an exclusion for a whole file, is rewritten.
+  See `docs/benchmarking.md`.
+- **A run in which no scanner could run passed.** With every scanner missing (a first
+  run before `achilles tools install`, or a CI job without them), Achilles reported 0
+  findings, warned, and exited 0, so a CI job passed on a scan that looked at nothing.
+  It now exits 2 with "nothing was scanned", whatever `--strict-tools` says. A partial
+  scan, where at least one scanner ran, still exits 0 with the warning unless
+  `--strict-tools`. Scanners that are not installed are named on one line with the
+  command that installs them, instead of an "executable file not found" error each.
+- **The same finding was reported several times.** osv-scanner repeats some advisories
+  word for word (CVE-2020-14343 for PyYAML 5.3.1 came four times), and each copy was
+  triaged, counted, gated and filed on its own. A finding a scanner repeats exactly,
+  same rule, place and message, is now kept once. Scanning this repository went from 413
+  findings to 388.
+- **gosec could not analyze Go 1.27 code that imports `math/rand/v2`.** gosec
+  type-checks with the standard library of the Go it was built with, and upstream's
+  v2.27.1 binary is built with Go 1.26, which cannot read Go 1.27's `math/rand/v2`; every
+  package importing it was reported incomplete, and the report did not say why. With
+  `go` on PATH, `achilles tools install` now builds gosec from source with that Go
+  (pinned version, every module checked against the Go checksum database, refused under
+  `GOSUMDB=off`) and falls back to the prebuilt binary, saying why, if that fails;
+  `--prebuilt` downloads it as before. A managed gosec built with an older Go is rebuilt
+  without `--force`, `achilles doctor` flags one, and a scan that gosec could not
+  complete names it as the likely cause. The GitHub Action installs the scanners with
+  the Go the job has on PATH, so it gets a gosec that matches it too (a cold build took
+  about 30 seconds here).
+- **Fix verification skipped every Opengrep and Trivy finding.** It looked a finding's
+  scanner up by the name the scanner gives itself in its report (`Opengrep OSS`,
+  `Trivy`), which is not the scanner's id, so `--remediate` (which verifies fixes by default) reported those
+  fixes as skipped instead of re-scanning them. Findings now record the scanner that
+  produced them (`scanner` in the JSON), and verification uses it. The same mismatch
+  kept Trivy's dependency advisories out of the upgrade advisor, and, more seriously,
+  meant a rule mined (`--mine-rules`) from a community-pack finding was not marked as
+  derived from that pack, so it could load under `--mode commercial`, which the
+  pack's Commons Clause rules out. Such rules are now marked and left out. A rule mined
+  before this fix carries no mark: if you scan in commercial mode and have mined rules
+  with the community pack installed, review `.achilles/generated-rules` (each rule's
+  provenance names the finding it came from) and remove those from community findings.
+- **`achilles doctor` listed zizmor with the default scanners.** Opt-in scanners have
+  their own section now, and a missing one is offered as an install, not as a fix.
+- Findings in Achilles' own output were reported as findings in the project. The Evidence
+  Vault (by default `.achilles/vault.jsonl` inside the scanned directory) and the reports
+  quote the code around each finding, so a scanner that reads every file found the same
+  issue again in them, one more time on every run. Findings in `.achilles/`, the vault and
+  the run's own report files are now always left out.
+- A scanner that says there is nothing for it to scan (osv-scanner on a tree with no
+  dependency manifests, exit code 128) was reported as incomplete because of that exit
+  code, which failed the scan under `--strict-tools`. It is a finished run with no
+  results.
+
 ## [0.1.0] - 2026-10-12
 
 First public release.

@@ -97,8 +97,8 @@ read the repository. Achilles refuses to do so in a public repository unless you
 
 Scanners read ignore lists and configuration from the repository they scan:
 `.gitleaks.toml` and `.gitleaksignore`, `.trivyignore` and `trivy.yaml`,
-`.semgrepignore`, `osv-scanner.toml`, and inline comments such as `#nosec`,
-`nosemgrep` and `gitleaks:allow`. That is how a team records "we looked at this and
+`.semgrepignore`, `osv-scanner.toml`, `zizmor.yml`, and inline comments such as
+`#nosec`, `nosemgrep` and `gitleaks:allow`. That is how a team records "we looked at this and
 it is fine". It also means a pull request can add a secret and the allowlist entry
 that hides it in the same change.
 
@@ -111,7 +111,9 @@ What Achilles does about it:
 - `--no-repo-config` refuses them: files Achilles would pass to a scanner are not
   passed, and a scanner that reads one on its own (most do) is reported as
   **incomplete**, which fails a `--strict-tools` run. Its findings still count; its
-  silence is not treated as evidence.
+  silence is not treated as evidence. A scanner that has a switch for ignoring its
+  own configuration (zizmor's `--no-config`) is given it instead, and its result is
+  then complete.
 
 The repository's own Achilles settings file, `.achilles.yaml`, is held to the same
 rules and to a tighter one. It can set only the flags that shape the scan of that
@@ -138,13 +140,23 @@ change them with the code.
   vault it is named in the output and the reports, and `--no-repo-config` turns both
   off for the run. Keeping the vault outside the repository (`--vault`, or the
   PostgreSQL backend) avoids the question.
-- Cached verdicts are not affected: each is signed with a key kept in the Achilles
-  home directory, so an entry that arrives with a repository is ignored.
+- Cached verdicts and cached fix suggestions are not affected: each is signed with a key
+  kept in the Achilles home directory, so an entry that arrives with a repository is
+  ignored. For fixes this is what stops a planted entry from being shown as a suggested
+  patch, or applied to a branch by `--fix-pr`.
 
-What it does not do: `--no-repo-config` does not neutralize inline suppression
-comments, and it cannot make a scanner ignore a file it loads by itself. If you gate
-code from authors you do not trust, review changes to those files and comments as
-part of the change, or scan a checkout from which they have been removed.
+Achilles' own inline suppression, `achilles:ignore RULE -- reason`, follows the same
+rules. A suppressed finding is moved to its own list in every report with the reason
+given, a suppression that the change under review adds is flagged, a comment with no
+rule or no reason is not honoured, credential findings cannot be suppressed this way,
+and `--no-repo-config` honours none of them.
+
+What it does not do: `--no-repo-config` does not neutralize the scanners' own inline
+suppression comments (`#nosec`, `nosemgrep`, `gitleaks:allow`), and it cannot make a
+scanner ignore a file it loads by itself. Those take effect inside the scanner, before
+Achilles sees a finding. If you gate code from authors you do not trust, review
+changes to those files and comments as part of the change, or scan a checkout from
+which they have been removed.
 
 ## Deploying safely
 

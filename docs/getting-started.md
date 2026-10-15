@@ -59,7 +59,7 @@ achilles tools list         # pinned versions and what is installed
 | Tool | Covers | Notes |
 |------|--------|-------|
 | Opengrep | multi-language patterns | upstream publishes no checksums; the pinned digests were computed at pin time |
-| gosec | Go SAST | needs `go` on PATH to type-check packages. No gosec release can yet read what Go 1.27.2 and newer produce: with such a `go` first on PATH, gosec skips its type-based analysis and Achilles reports it as **incomplete** rather than clean. Until gosec catches up, scan Go code with Go 1.27.1 on PATH and `GOTOOLCHAIN=local` |
+| gosec | Go SAST | needs `go` on PATH to type-check packages. With `go` on PATH, `tools install` **builds gosec from source with that Go** (pinned version; every module checked against the Go checksum database; `--prebuilt` downloads upstream's binary instead). gosec can only read the standard library of the Go it was built with: upstream's v2.27.1 binary, built with Go 1.26, cannot type-check a Go 1.27 package that imports `math/rand/v2`. `achilles doctor` flags a gosec built with an older Go than yours. Separately, no gosec release can yet read what Go 1.27.2 and newer produce: with such a `go` first on PATH, gosec skips its type-based analysis and Achilles reports it as **incomplete** rather than clean. Until gosec catches up, scan Go code with Go 1.27.1 on PATH and `GOTOOLCHAIN=local` |
 | osv-scanner | dependency CVEs (SCA) | needs network access to the OSV database |
 | Trivy | IaC / misconfig / secrets / SCA | needs network access on first use for its vulnerability database and misconfiguration checks |
 | Gitleaks | secret scanning | |
@@ -72,7 +72,12 @@ manual install or the Docker image.
 
 **Rules.** Opengrep's `-f` rules are, in order: the `rules:` directory from your tool
 config if it exists on disk (a repo checkout uses `configs/rules`), otherwise the
-baseline rules embedded in the binary (materialized into your user cache). The
+built-in rules embedded in the binary (materialized into your user cache): about 60
+Achilles-authored rules for injection, path traversal, SSRF, XSS, unsafe
+deserialization, weak crypto, disabled TLS checks and hard-coded credentials in
+Python, JavaScript and TypeScript, Java, Ruby (Rails, Sinatra) and PHP (plain PHP,
+Laravel, Symfony), and any language for credentials. They are Apache-2.0 like the rest
+of Achilles, so they load in every mode. The
 community rule pack from `achilles tools install rules`
 ([opengrep-rules](https://github.com/opengrep/opengrep-rules), pinned commit, security
 rules for the main languages only, in `~/.achilles/rules/`) is loaded **in addition**
@@ -103,11 +108,31 @@ Write a shareable report instead of (or as well as) the terminal output:
 achilles --html-report report.html /path/to/code   # open report.html in a browser
 ```
 
+### Set the repository up for CI
+
+```bash
+achilles init
+```
+
+One command for what the rest of this guide explains piece by piece: it writes
+`.achilles.yaml` (the gate and the baseline), a CI workflow for GitHub
+(`.github/workflows/achilles.yml`) or GitLab (`.gitlab/achilles.yml`, to include
+from `.gitlab-ci.yml`), adds the Evidence Vault to `.gitignore`, and, when the
+default scanners are installed, scans once to seed `.achilles/baseline.json` so that
+CI fails only on findings that are new. It never overwrites a file without
+`--force`, and `--dry-run` shows what it would do. `--ci github|gitlab|none` overrides
+the detection.
+
 ## 4. The core knobs
 
 - **`--profile default|full`** — `default` is the five baseline tools above.
   `full` adds the heavy per-language analyzers (JVM/PHP/.NET/C++), which need
   their prebuilt images + language prerequisites (see `deployments/<tool>/`).
+- **`--with zizmor`** — run an opt-in scanner as well. [zizmor](https://docs.zizmor.sh)
+  audits GitHub Actions workflows and composite actions (template injection,
+  credential persistence, cache poisoning, unpinned actions). It is not one of the
+  five, so install it by name first: `achilles tools install zizmor`. Achilles
+  always runs it offline.
 - **`--mode oss|commercial`** — the license gate. `commercial` (the strict one)
   refuses any tool not marked `commercialSafe`, so you can safely run on customer
   code. `oss` allows everything. Default is `oss`.

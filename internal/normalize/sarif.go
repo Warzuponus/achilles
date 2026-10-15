@@ -60,6 +60,7 @@ func FromSARIF(fallbackTool string, data []byte) ([]model.Finding, error) {
 			f.Severity = severityFor(res, rules[res.RuleID], f.IsSecret())
 			f.ID = model.ComputeID(tool, res.RuleID, loc)
 			f.Fingerprint = fingerprintFor(res, tool, loc.File, snippet)
+			inHistory(&f, res, loc)
 			if raw, err := json.Marshal(res); err == nil {
 				f.Raw = raw
 			}
@@ -67,6 +68,36 @@ func FromSARIF(fallbackTool string, data []byte) ([]model.Finding, error) {
 		}
 	}
 	return findings, nil
+}
+
+var (
+	commitSHA  = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
+	commitDate = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}`)
+)
+
+// inHistory marks a finding that a scanner made in a commit rather than in the
+// working tree. gitleaks' history mode says so by naming the commit in the
+// result's partial fingerprints (in directory mode the same keys are empty).
+//
+// Its identity includes the commit, so the same file and line in two commits are
+// two findings. Its fingerprint does not: it is the fingerprint the working-tree
+// finding for the same credential has, which is how the two are recognized as one.
+// The message is rewritten to say what a reader most needs to know and what the
+// scanner's own message does not: deleting the line does not undo the leak.
+func inHistory(f *model.Finding, res model.SarifResult, loc model.Location) {
+	sha := strings.ToLower(strings.TrimSpace(res.PartialFingerprints["commitSha"]))
+	if !commitSHA.MatchString(sha) {
+		return
+	}
+	f.Commit = sha
+	f.ID = model.ComputeID(f.Tool, res.RuleID+"@"+sha, loc)
+	when := ""
+	if d := strings.TrimSpace(res.PartialFingerprints["date"]); commitDate.MatchString(d) {
+		f.CommitDate = d
+		when = " on " + d[:10]
+	}
+	f.Message = fmt.Sprintf("%s: a credential was committed in %s%s. It is in the git history, and stays there even where the file no longer contains it: revoke and replace it.",
+		res.RuleID, sha[:7], when)
 }
 
 func indexRules(rules []model.SarifRule) map[string]model.SarifRule {

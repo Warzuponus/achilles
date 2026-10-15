@@ -1,0 +1,263 @@
+# Achilles rules for Java - original, written for this project (Apache-2.0; not
+# derived from the Semgrep registry), so they load in every license mode. Each rule
+# is tested by internal/config/testdata/rules/achilles-java.java (opengrep --test).
+# Keep this file ASCII-only: Opengrep reads rule files as ASCII.
+#
+# Request sources: Servlet request accessors and Spring MVC handler parameters.
+rules:
+  - id: achilles.java.sql-injection
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >
+      Request data is concatenated into SQL. Use a PreparedStatement with ? parameters
+      (or named parameters in JPA/JdbcTemplate) and bind the value.
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
+      category: security
+    pattern-sources:
+      - pattern: (HttpServletRequest $R).$GET(...)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestHeader(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestBody $T $X, ...) { ... }
+          - pattern: $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (java.sql.Statement $S).$EXEC($SQL, ...)
+              - pattern: (java.sql.Connection $C).prepareStatement($SQL, ...)
+              - pattern: (java.sql.Connection $C).prepareCall($SQL, ...)
+              - pattern: $JDBC.queryForObject($SQL, ...)
+              - pattern: $JDBC.queryForList($SQL, ...)
+              - pattern: $JDBC.update($SQL, ...)
+              - pattern: (javax.persistence.EntityManager $EM).createQuery($SQL, ...)
+              - pattern: (javax.persistence.EntityManager $EM).createNativeQuery($SQL, ...)
+              - pattern: (jakarta.persistence.EntityManager $EM).createQuery($SQL, ...)
+              - pattern: (jakarta.persistence.EntityManager $EM).createNativeQuery($SQL, ...)
+          - focus-metavariable: $SQL
+
+  - id: achilles.java.sql-string-building
+    languages: [java]
+    severity: WARNING
+    message: >
+      SQL is built by concatenation and executed. Any part of it that comes from
+      input can change the query. Use a PreparedStatement with ? parameters.
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
+      category: security
+    pattern-either:
+      - pattern: (java.sql.Statement $S).$EXEC("..." + $X, ...)
+      - pattern: (java.sql.Statement $S).$EXEC("..." + $X + $Y, ...)
+      - pattern: (java.sql.Statement $S).$EXEC(String.format(...), ...)
+      - pattern: (java.sql.Connection $C).prepareStatement("..." + $X, ...)
+      - pattern: (java.sql.Connection $C).prepareStatement("..." + $X + $Y, ...)
+
+  - id: achilles.java.command-injection
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >
+      Request data reaches a process command. Pass a fixed program and an argument
+      array to ProcessBuilder, never a command line built from input, and never run it
+      through a shell.
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)"]
+      category: security
+    pattern-sources:
+      - pattern: (HttpServletRequest $R).$GET(...)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable $T $X, ...) { ... }
+          - pattern: $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Runtime.getRuntime().exec($CMD, ...)
+              - pattern: (Runtime $RT).exec($CMD, ...)
+              - pattern: new ProcessBuilder($CMD, ...)
+          - focus-metavariable: $CMD
+
+  - id: achilles.java.path-traversal
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >
+      A file path is built from request data. "../" in it reaches files outside the
+      intended directory. Normalize the path and check that it stays under the base
+      directory (base.resolve(name).normalize().startsWith(base)).
+    metadata:
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory (Path Traversal)"]
+      category: security
+    pattern-sources:
+      - pattern: (HttpServletRequest $R).$GET(...)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable $T $X, ...) { ... }
+          - pattern: $X
+    pattern-sanitizers:
+      - pattern: FilenameUtils.getName(...)
+      - pattern: (java.nio.file.Path $P).getFileName()
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new File($PATH, ...)
+              - pattern: new File($DIR, $PATH)
+              - pattern: new FileInputStream($PATH, ...)
+              - pattern: new FileOutputStream($PATH, ...)
+              - pattern: new FileReader($PATH, ...)
+              - pattern: Paths.get($PATH, ...)
+              - pattern: Path.of($PATH, ...)
+          - focus-metavariable: $PATH
+
+  - id: achilles.java.ssrf
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >
+      An outgoing request goes to a URL taken from the incoming request. An attacker
+      can point it at internal services or cloud metadata endpoints. Allow only known
+      hosts.
+    metadata:
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      category: security
+    pattern-sources:
+      - pattern: (HttpServletRequest $R).$GET(...)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+          - pattern: $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new URL($U)
+              - pattern: URI.create($U)
+              - pattern: new URI($U)
+              - pattern: (RestTemplate $RT).$CALL($U, ...)
+          - focus-metavariable: $U
+
+  - id: achilles.java.unsafe-deserialization
+    languages: [java]
+    severity: WARNING
+    message: >
+      Java native deserialization (ObjectInputStream.readObject) of data from outside
+      can run code through gadget classes on the classpath. Use a data format such as
+      JSON, or an ObjectInputFilter allow-list.
+    metadata:
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      category: security
+    patterns:
+      - pattern: (ObjectInputStream $IN).readObject()
+      - pattern-not-inside: |
+          $IN.setObjectInputFilter(...);
+          ...
+
+  - id: achilles.java.xxe
+    languages: [java]
+    severity: ERROR
+    message: >
+      An XML parser is created without disabling DOCTYPE declarations, so a document
+      can read local files or reach internal hosts through external entities. Call
+      setFeature("http://apache.org/xml/features/disallow-doctype-decl", true).
+    metadata:
+      cwe: ["CWE-611: Improper Restriction of XML External Entity Reference"]
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: DocumentBuilderFactory.newInstance()
+          - pattern: SAXParserFactory.newInstance()
+          - pattern: XMLInputFactory.newInstance()
+          - pattern: XMLInputFactory.newFactory()
+      - pattern-not-inside: |
+          $F = $FACTORY.$NEW();
+          ...
+          $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+      - pattern-not-inside: |
+          $F = $FACTORY.$NEW();
+          ...
+          $F.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+      - pattern-not-inside: |
+          $T $F = $FACTORY.$NEW();
+          ...
+          $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+      - pattern-not-inside: |
+          $T $F = $FACTORY.$NEW();
+          ...
+          $F.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+
+  - id: achilles.java.weak-crypto
+    languages: [java]
+    severity: WARNING
+    message: >
+      A broken algorithm is used: MD5 or SHA-1 for hashing, or DES, RC4 or ECB mode
+      (which plain "AES" defaults to) for encryption. Use SHA-256 or better, a password
+      hash for passwords, and AES/GCM/NoPadding for encryption.
+    metadata:
+      cwe: ["CWE-327: Use of a Broken or Risky Cryptographic Algorithm"]
+      category: security
+    pattern-either:
+      - patterns:
+          - pattern: MessageDigest.getInstance($ALG, ...)
+          - metavariable-regex:
+              metavariable: $ALG
+              regex: (?i)^"(md2|md4|md5|sha|sha1|sha-1)"$
+      - patterns:
+          - pattern: Cipher.getInstance($ALG, ...)
+          - metavariable-regex:
+              metavariable: $ALG
+              regex: (?i)^"(des|desede|rc2|rc4|arcfour|blowfish)(/.*)?"$|(?i)^"aes"$|(?i)^".*/ecb/.*"$
+
+  - id: achilles.java.trust-all-certificates
+    languages: [java]
+    severity: ERROR
+    message: >
+      TLS certificate or host name checks are disabled: any certificate, or any host,
+      is accepted, so anyone on the network path can impersonate the server.
+    metadata:
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      category: security
+    pattern-either:
+      - pattern: |
+          public void checkServerTrusted($CHAIN, $AUTH) {}
+      - pattern: |
+          public void checkServerTrusted($CHAIN, $AUTH) throws $E {}
+      - pattern: |
+          public boolean verify(String $HOST, SSLSession $SESSION) { return true; }
+
+  - id: achilles.java.spring-csrf-disabled
+    languages: [java]
+    severity: WARNING
+    message: >
+      CSRF protection is turned off. That is right only for an API that no browser
+      sends cookies to; for anything with a session cookie it lets other sites act as
+      the user.
+    metadata:
+      cwe: ["CWE-352: Cross-Site Request Forgery (CSRF)"]
+      category: security
+    pattern-either:
+      - pattern: $HTTP.csrf().disable()
+      - pattern: $HTTP.csrf($C -> $C.disable())
+      - pattern: $HTTP.csrf(AbstractHttpConfigurer::disable)

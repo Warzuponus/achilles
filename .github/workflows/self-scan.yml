@@ -26,6 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
           fetch-depth: 0
       # 1.27.1 exactly, with GOTOOLCHAIN=local so go.mod cannot pull in a newer one:
       # this is the toolchain gosec type-checks with, and Go 1.27.2 changed the
@@ -39,6 +40,10 @@ jobs:
         run: go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
       - name: Build achilles
         run: go build -o bin/achilles ./cmd/achilles
+      # zizmor reads the workflows and action.yml (configs/selfscan.yaml). Installed
+      # from the pinned manifest and verified by sha256, as users get it.
+      - name: Install zizmor (pinned)
+        run: ./bin/achilles tools install zizmor
       - name: Self-scan (gate on new findings)
         run: |
           export PATH="$(go env GOPATH)/bin:$PATH"
@@ -49,8 +54,8 @@ jobs:
           # never built or shipped; `make eval-gate` is what checks them.
           # --exclude examples: examples/quickstart is a deliberately vulnerable
           # sample for the compose quickstart (separate module, never shipped).
-          # --strict-tools: this job has one scanner. If it cannot analyze the
-          # code, "no new findings" means nothing and the job must fail.
+          # --strict-tools: if gosec cannot analyze the code, or zizmor cannot read a
+          # workflow, "no new findings" means nothing and the job must fail.
           ./bin/achilles --config configs/selfscan.yaml --strict-tools \
             --baseline .achilles/baseline.json --exclude evals,examples \
             --sarif-report achilles.sarif --github --fail-on high .

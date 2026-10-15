@@ -1,0 +1,436 @@
+# Achilles rules for PHP - original, written for this project (Apache-2.0; not
+# derived from the Semgrep registry), so they load in every license mode. Each rule
+# is tested by internal/config/testdata/rules/achilles-php.php (opengrep --test).
+# Keep this file ASCII-only: Opengrep reads rule files as ASCII.
+#
+# Request sources are PHP's superglobals, the raw request body, and the request
+# objects of Laravel and Symfony ($request->input(), $request->query->get()).
+# YAML anchors are not supported by Opengrep, so each taint rule lists them in full.
+rules:
+  - id: achilles.php.sql-injection
+    languages: [php]
+    severity: ERROR
+    message: >
+      Request data reaches an SQL string, so the input can change the query. Use a
+      prepared statement with placeholders ($pdo->prepare("... WHERE id = ?") then
+      execute([$id])), or the query builder's bound parameters.
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_FILES
+          - pattern: $_SERVER['QUERY_STRING']
+          - pattern: $_SERVER['REQUEST_URI']
+          - pattern: file_get_contents('php://input')
+          - pattern: $request->input(...)
+          - pattern: $request->query(...)
+          - pattern: $request->post(...)
+          - pattern: $request->get(...)
+          - pattern: $request->all(...)
+          - pattern: $request->cookie(...)
+          - pattern: $request->header(...)
+          - pattern: $request->query->get(...)
+          - pattern: $request->request->get(...)
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: intval(...)
+          - pattern: floatval(...)
+          - pattern: (int) $X
+          - pattern: (float) $X
+          - pattern: $DB->quote(...)
+          - pattern: mysqli_real_escape_string(...)
+          - pattern: $DB->real_escape_string(...)
+          - pattern: pg_escape_string(...)
+          - pattern: pg_escape_literal(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: mysqli_query($C, $Q, ...)
+              - pattern: mysqli_multi_query($C, $Q)
+              - pattern: mysqli_prepare($C, $Q)
+              - pattern: mysql_query($Q, ...)
+              - pattern: pg_query($C, $Q)
+              - pattern: pg_query($Q)
+              - pattern: sqlite_query($C, $Q, ...)
+              - pattern: $DB->query($Q, ...)
+              - pattern: $DB->exec($Q)
+              - pattern: $DB->prepare($Q, ...)
+              - pattern: $DB->multi_query($Q)
+              - pattern: DB::select($Q, ...)
+              - pattern: DB::statement($Q, ...)
+              - pattern: DB::unprepared($Q)
+              - pattern: DB::raw($Q)
+              - pattern: $B->whereRaw($Q, ...)
+              - pattern: $B->orWhereRaw($Q, ...)
+              - pattern: $B->havingRaw($Q, ...)
+              - pattern: $B->orderByRaw($Q, ...)
+              - pattern: $B->selectRaw($Q, ...)
+              - pattern: $B->groupByRaw($Q, ...)
+          - focus-metavariable: $Q
+
+  - id: achilles.php.command-injection
+    languages: [php]
+    severity: ERROR
+    message: >
+      Request data reaches a shell command (system, exec, shell_exec, passthru,
+      popen, proc_open or backticks), so it can run other commands. Avoid the shell
+      (proc_open with an argument array), or quote each argument with
+      escapeshellarg().
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_FILES
+          - pattern: $_SERVER['QUERY_STRING']
+          - pattern: $_SERVER['REQUEST_URI']
+          - pattern: file_get_contents('php://input')
+          - pattern: $request->input(...)
+          - pattern: $request->query(...)
+          - pattern: $request->post(...)
+          - pattern: $request->get(...)
+          - pattern: $request->all(...)
+          - pattern: $request->cookie(...)
+          - pattern: $request->header(...)
+          - pattern: $request->query->get(...)
+          - pattern: $request->request->get(...)
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: escapeshellarg(...)
+          - pattern: intval(...)
+          - pattern: (int) $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: system($CMD, ...)
+              - pattern: exec($CMD, ...)
+              - pattern: shell_exec($CMD)
+              - pattern: passthru($CMD, ...)
+              - pattern: popen($CMD, ...)
+              - pattern: pcntl_exec($CMD, ...)
+              - patterns:
+                  - pattern: proc_open($CMD, ...)
+                  # With an array, proc_open runs the program directly, no shell.
+                  - pattern-not: proc_open([...], ...)
+          - focus-metavariable: $CMD
+      - pattern: '`...`'
+
+  - id: achilles.php.code-injection
+    languages: [php]
+    severity: ERROR
+    message: >
+      Request data is evaluated as PHP (eval, assert with a string, create_function)
+      or names the function to call, so the input can run code. Map the input to an
+      allowed list of functions instead.
+    metadata:
+      cwe: ["CWE-94: Improper Control of Generation of Code (Code Injection)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: file_get_contents('php://input')
+          - pattern: $request->input(...)
+          - pattern: $request->query(...)
+          - pattern: $request->post(...)
+          - pattern: $request->get(...)
+          - pattern: $request->query->get(...)
+          - pattern: $request->request->get(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($X)
+              - pattern: assert($X, ...)
+              - pattern: create_function($A, $X)
+              - pattern: call_user_func($X, ...)
+              - pattern: call_user_func_array($X, ...)
+          - focus-metavariable: $X
+      # A variable function: $fn() calls whatever function $fn names.
+      - patterns:
+          - pattern: $X(...)
+          - metavariable-regex:
+              metavariable: $X
+              regex: ^\$\w+$
+          - focus-metavariable: $X
+
+  - id: achilles.php.file-inclusion
+    languages: [php]
+    severity: ERROR
+    message: >
+      Request data decides which file include or require loads and runs as PHP. With
+      "../" or a stream wrapper (php://, data://, or a URL when allow_url_include is
+      on) it can run code of the attacker's choosing. Map the input to a fixed list
+      of files.
+    metadata:
+      cwe: ["CWE-98: Improper Control of Filename for Include/Require Statement in PHP Program (PHP Remote File Inclusion)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $request->input(...)
+          - pattern: $request->query(...)
+          - pattern: $request->get(...)
+    pattern-sanitizers:
+      - pattern: basename(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: include $X;
+          - pattern: include_once $X;
+          - pattern: require $X;
+          - pattern: require_once $X;
+
+  - id: achilles.php.path-traversal
+    languages: [php]
+    severity: ERROR
+    message: >
+      Request data is used as a file path. "../" in it reaches files outside the
+      directory you meant, and in file_get_contents or fopen a URL or stream wrapper
+      makes the server fetch it (SSRF). Keep only the file name (basename) and check
+      the resolved path (realpath) is still inside the directory.
+    metadata:
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory (Path Traversal)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $request->input(...)
+          - pattern: $request->query(...)
+          - pattern: $request->get(...)
+          - pattern: $request->query->get(...)
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: basename(...)
+          - pattern: intval(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: file_get_contents($P, ...)
+              - pattern: file_put_contents($P, ...)
+              - pattern: fopen($P, ...)
+              - pattern: file($P, ...)
+              - pattern: readfile($P, ...)
+              - pattern: unlink($P, ...)
+              - pattern: copy($P, ...)
+              - pattern: rename($P, ...)
+              - pattern: rmdir($P, ...)
+              - pattern: mkdir($P, ...)
+              - pattern: is_file($P)
+              - pattern: SplFileObject($P, ...)
+              - pattern: new SplFileObject($P, ...)
+              - pattern: response()->download($P, ...)
+              - pattern: response()->file($P, ...)
+              - pattern: Storage::get($P)
+          - focus-metavariable: $P
+
+  - id: achilles.php.ssrf
+    languages: [php]
+    severity: ERROR
+    message: >
+      Request data decides where the server sends a request. It can point the server
+      at internal services or the cloud metadata endpoint. Allow only known hosts,
+      or build the URL from a fixed base and validated parts.
+    metadata:
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $request->input(...)
+          - pattern: $request->query(...)
+          - pattern: $request->get(...)
+          - pattern: $request->query->get(...)
+    pattern-sanitizers:
+      # Encoded into a query string or path segment, input cannot change the host.
+      - pattern-either:
+          - pattern: urlencode(...)
+          - pattern: rawurlencode(...)
+          - pattern: http_build_query(...)
+          - pattern: intval(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: curl_init($U)
+              - pattern: curl_setopt($C, CURLOPT_URL, $U)
+              - pattern: Http::get($U, ...)
+              - pattern: Http::post($U, ...)
+              - pattern: $CLIENT->request($M, $U, ...)
+              - pattern: $CLIENT->get($U, ...)
+              - pattern: $CLIENT->post($U, ...)
+          - focus-metavariable: $U
+
+  - id: achilles.php.xss
+    languages: [php]
+    severity: ERROR
+    message: >
+      Request data is written into the page without HTML escaping, so a script in
+      the input runs in the user's browser. Escape it with htmlspecialchars($x,
+      ENT_QUOTES) or let the template engine (Blade {{ }}, Twig) do it.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_SERVER['PHP_SELF']
+          - pattern: $_SERVER['QUERY_STRING']
+          - pattern: $_SERVER['REQUEST_URI']
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: htmlspecialchars(...)
+          - pattern: htmlentities(...)
+          - pattern: strip_tags(...)
+          - pattern: intval(...)
+          - pattern: (int) $X
+          - pattern: e(...)
+          - pattern: json_encode(...)
+          - pattern: urlencode(...)
+          - pattern: rawurlencode(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: echo ...;
+          - pattern: print(...)
+          - pattern: printf(...)
+          - pattern: vprintf(...)
+
+  - id: achilles.php.open-redirect
+    languages: [php]
+    severity: WARNING
+    message: >
+      Request data goes into a response header. In a Location header it sends the
+      user to any site (open redirect); elsewhere it can add headers. Redirect only
+      to paths on this site or to an allowed list of hosts.
+    metadata:
+      cwe: ["CWE-601: URL Redirection to Untrusted Site (Open Redirect)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $request->input(...)
+          - pattern: $request->query(...)
+          - pattern: $request->get(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: header($H, ...)
+              - pattern: redirect($H, ...)
+              - pattern: redirect()->to($H, ...)
+              - pattern: redirect()->away($H, ...)
+              - pattern: Redirect::to($H, ...)
+              - pattern: Redirect::away($H, ...)
+          - focus-metavariable: $H
+
+  - id: achilles.php.unsafe-deserialization
+    languages: [php]
+    severity: ERROR
+    message: >
+      unserialize() on request data can build any class the application can load,
+      and their __wakeup and __destruct methods run as it does (PHP object
+      injection). Use json_decode(), or unserialize($x, ['allowed_classes' => false]).
+    metadata:
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: file_get_contents('php://input')
+          - pattern: $request->input(...)
+          - pattern: $request->getContent(...)
+          - pattern: $request->cookie(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: unserialize($X, ...)
+          - pattern-not: "unserialize($X, ['allowed_classes' => false])"
+          - focus-metavariable: $X
+
+  - id: achilles.php.variable-overwrite
+    languages: [php]
+    severity: ERROR
+    message: >
+      extract() or parse_str() without a target array turns request parameters into
+      local variables, so the request can overwrite any variable in scope, such as
+      $is_admin. Read the parameters you need by name, or parse_str($s, $out) into
+      an array.
+    metadata:
+      cwe: ["CWE-621: Variable Extraction Error"]
+      category: security
+    pattern-either:
+      - pattern: extract($_GET, ...)
+      - pattern: extract($_POST, ...)
+      - pattern: extract($_REQUEST, ...)
+      - pattern: extract($_COOKIE, ...)
+      - pattern: parse_str($X)
+
+  - id: achilles.php.tls-verification-disabled
+    languages: [php]
+    severity: ERROR
+    message: >
+      TLS certificate verification is turned off, so anyone on the network path can
+      impersonate the server and read or change the traffic. Remove the option; to
+      trust a private CA, set CURLOPT_CAINFO or the 'cafile' context option.
+    metadata:
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      category: security
+    pattern-either:
+      - pattern: curl_setopt($C, CURLOPT_SSL_VERIFYPEER, false)
+      - pattern: curl_setopt($C, CURLOPT_SSL_VERIFYPEER, 0)
+      - pattern: curl_setopt($C, CURLOPT_SSL_VERIFYHOST, false)
+      - pattern: curl_setopt($C, CURLOPT_SSL_VERIFYHOST, 0)
+      - pattern: "['verify_peer' => false, ...]"
+      - pattern: "['verify' => false, ...]"
+
+  - id: achilles.php.weak-password-hash
+    languages: [php]
+    severity: ERROR
+    message: >
+      A password is hashed with a fast, unsalted hash (md5, sha1, or hash()), so a
+      leaked hash is cracked quickly by brute force. Use password_hash() and
+      password_verify().
+    metadata:
+      cwe: ["CWE-916: Use of Password Hash With Insufficient Computational Effort"]
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: md5($X, ...)
+          - pattern: sha1($X, ...)
+          - pattern: hash($ALG, $X, ...)
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i).*(pass|pwd)

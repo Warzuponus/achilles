@@ -34,6 +34,8 @@ jobs:
       ACHILLES_TEST_POSTGRES_DSN: postgres://postgres:test@localhost:5432/vaulttest?sslmode=disable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27'
@@ -58,6 +60,15 @@ jobs:
       # case. Refresh the baseline deliberately with `make eval-baseline`.
       - name: Eval — triage context coverage (no regression)
         run: make eval-gate
+      # The built-in Opengrep rules (configs/rules/achilles-*.yaml) against their
+      # test cases, with the real opengrep, installed by its pinned checksum. Every
+      # rule must have a case that fires; ACHILLES_REQUIRE_OPENGREP=1 turns a missing
+      # opengrep into a failure instead of a skip.
+      - name: Rules (opengrep --test)
+        run: |
+          go build -o bin/achilles ./cmd/achilles
+          ./bin/achilles tools install opengrep
+          ACHILLES_REQUIRE_OPENGREP=1 go test -count=1 -tags integration -run TestRules ./internal/config
       # Integration tests need the real tools (opengrep, git); they self-skip when absent.
       - name: Test (integration, best-effort)
         run: go test -tags integration ./... || true
@@ -71,8 +82,10 @@ jobs:
       GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       - name: Run the action against the bundled sample
-        uses: ./
+        uses: ./ # achilles:ignore zizmor:self-repository -- this job tests the action in this checkout, on purpose
         with:
           version: source # build from this checkout, not a published release
           # The Go that gosec scans with: 1.27.2 is not readable by any gosec
@@ -81,6 +94,10 @@ jobs:
           go-version: "1.27.1"
           target: examples/quickstart
           upload-report: "false"
+          # An opt-in scanner too: installs it by its pinned checksum and runs it.
+          # The sample has no workflows, which zizmor must report as nothing to
+          # scan, not as a failure (--strict-tools would fail the job).
+          with: zizmor
           args: --strict-tools
 
   # Known vulnerabilities in the Go standard library and in dependencies, limited to
@@ -91,6 +108,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27'
@@ -107,6 +126,8 @@ jobs:
       GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.1'
@@ -130,6 +151,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no step pushes with git; keep the token out of .git/config
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27'

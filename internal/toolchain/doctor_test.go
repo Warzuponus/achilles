@@ -207,3 +207,31 @@ func TestDoctorReportsCommunityRules(t *testing.T) {
 		t.Error("inconsistent")
 	}
 }
+
+// An opt-in scanner (zizmor) that is not installed is listed apart from the default
+// profile, offered as an install rather than a fix, and does not fail the doctor.
+func TestDoctorOptInScannerIsNotAProblem(t *testing.T) {
+	have := map[string]string{"go": "go1.27.1"}
+	for _, tool := range Tools() {
+		if tool.Default {
+			have[tool.Bin] = tool.Version
+		}
+	}
+	r := fakeDoctor(have, nil).Diagnose(context.Background())
+	if r.Failed() {
+		t.Fatal("a missing opt-in scanner failed the doctor")
+	}
+	var buf bytes.Buffer
+	r.Write(&buf)
+	out := buf.String()
+	defaults, optIn, ok := strings.Cut(out, "Opt-in scanners")
+	if !ok {
+		t.Fatalf("no opt-in section:\n%s", out)
+	}
+	if strings.Contains(defaults, "zizmor") {
+		t.Errorf("zizmor is listed with the default profile:\n%s", out)
+	}
+	if !strings.Contains(optIn, "install: achilles tools install zizmor") || strings.Contains(optIn, "fix: achilles tools install zizmor") {
+		t.Errorf("a missing opt-in scanner should be offered as an install, not a fix:\n%s", out)
+	}
+}

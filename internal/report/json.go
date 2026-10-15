@@ -32,6 +32,7 @@ func WriteJSON(w io.Writer, s model.Scan) error {
 	out := s
 	out.Findings = maskSecrets(s.Findings)
 	out.Dismissed = maskSecrets(s.Dismissed)
+	out.Suppressed = maskSecrets(s.Suppressed)
 	// Empty arrays, not null: consumers iterate without a nil check.
 	if out.Findings == nil {
 		out.Findings = []model.Finding{}

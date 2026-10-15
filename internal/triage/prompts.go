@@ -249,6 +249,11 @@ func gatesLine(g *model.Gates) string {
 	}, "; ")
 }
 
+// RemediationPromptVersion identifies the fix prompt below. It is part of the
+// key a cached fix proposal is stored under, so change it whenever the prompt
+// changes: a proposal made by the old prompt is then not reused for the new one.
+const RemediationPromptVersion = "remediation/v1"
+
 func remediationMessages(f model.Finding, codeContext string) []llm.Message {
 	system := untrustedRule +
 		"You are a security engineer proposing a fix for a confirmed vulnerability.\n\n" +

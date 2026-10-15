@@ -11,7 +11,7 @@
 # IMPORTANT — bytecode, not source: SpotBugs analyzes COMPILED .class/.jar files.
 # Build the Java/Kotlin/Scala project first (mvn/gradle), then scan the tree that
 # contains the build output. Scanning un-built source yields zero findings.
-FROM eclipse-temurin:21-jre-jammy@sha256:f04fb34e053148344e83317976114ec3f37e4b830ec8bdab5a2fe3cecd7d010b
+FROM eclipse-temurin:25-jre-jammy@sha256:25777acfabf927084b7ef46d8bc786b6203c8c344f56541054238b8c4fe73db9
 # Pinned by digest so a rebuild gets the same base; Dependabot proposes updates.
 
 ARG FSB_VERSION=1.14.0

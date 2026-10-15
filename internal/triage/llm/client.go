@@ -1,8 +1,7 @@
-// Package llm is Achilles's OpenAI-compatible LLM client. The interface is
-// deliberately narrow (one Complete method) so any endpoint speaking the OpenAI
-// Chat Completions schema works — OpenAI, Azure, vLLM/Ollama, gateways — and a
-// non-compatible provider can be added as another Client implementation without
-// touching triage logic (DESIGN.md §7).
+// Package llm is Achilles's LLM client. The interface is deliberately narrow (one
+// Complete method): any endpoint speaking the OpenAI Chat Completions schema works
+// (OpenAI, Azure, vLLM/Ollama, gateways) through OpenAIClient, and Anthropic's
+// Messages API through AnthropicClient, without touching triage logic (DESIGN.md §7).
 package llm
 
 import (

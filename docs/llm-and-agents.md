@@ -25,13 +25,31 @@ achilles --ai --llm-provider openrouter --llm-model <model> /path/to/code
 | Ollama (local) | `ollama` | `http://localhost:11434/v1` | none |
 | Anthropic (experimental) | `anthropic` | `https://api.anthropic.com/v1` | required |
 
-**The `anthropic` preset is experimental.** It uses Anthropic's OpenAI-compatibility
-endpoint, which Anthropic offers for trying its models rather than for production use.
-Achilles leaves `temperature` out of requests to it (current Claude models reject an
-explicit value), and that endpoint does not enforce a JSON schema, so replies are
-validated and repaired the way they are for any model without JSON mode. This project's
-tests have not run against the live Anthropic API. For Claude models today, OpenRouter
-(`--llm-provider openrouter --llm-model anthropic/<model>`) is the exercised path.
+**The `anthropic` preset uses Anthropic's Messages API natively**, with a small client
+of Achilles' own (no SDK, no new dependency), for any `--llm-base-url` on
+`api.anthropic.com`. What that changes over an OpenAI-compatible endpoint:
+
+- The JSON schema of each verdict is enforced (structured outputs), instead of asked
+  for in the prompt and repaired.
+- The system prompt, which is the same for every finding in a run, is cached, so after
+  the first call it is billed at the cached-input rate. Achilles' cost meter still
+  counts those tokens at the full input price, so `--max-cost` errs on the safe side.
+- Replies are streamed, so a long thinking phase does not trip a proxy's idle timeout.
+  The output budget defaults to 16,000 tokens (`ACHILLES_LLM_MAX_TOKENS`), since
+  current Claude models think before they answer and the thinking counts against it.
+- No `temperature` is sent; current Claude models fix their sampling.
+- A refusal (`stop_reason: refusal`) is an error for that finding, not an empty
+  verdict.
+- Overload (529), rate limits (429, honouring `Retry-After`), server errors and a stream
+  that drops before it finishes are retried, `ACHILLES_LLM_MAX_RETRIES` times (2 by
+  default). A partial answer is never used.
+- The key is `ACHILLES_LLM_API_KEY`, sent as `x-api-key`. `ANTHROPIC_API_KEY`,
+  `ANTHROPIC_BASE_URL` and the like are not read, so they cannot redirect the key
+  Achilles has checked.
+
+It is still marked experimental: its tests run against a fake of the Messages API,
+not the live service. OpenRouter (`--llm-provider openrouter --llm-model
+anthropic/<model>`) remains an exercised path for Claude models.
 
 Anything else (vLLM, LiteLLM, Azure OpenAI, a gateway) is `--llm-base-url`. An
 explicit `--llm-base-url` always wins over a provider preset. There is deliberately

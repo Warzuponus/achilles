@@ -7,6 +7,16 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Claude through Anthropic's Messages API, natively.** `--llm-provider anthropic` (any
+  `--llm-base-url` on `api.anthropic.com`) now talks to the Messages API directly,
+  instead of through Anthropic's OpenAI-compatibility endpoint. Verdict schemas are
+  enforced (structured outputs) rather than repaired. The run's shared system prompt is
+  cached. Replies are streamed, with a 16,000-token default budget, since thinking
+  counts against it. Overload (529), rate limits and a stream that drops early are
+  retried. A refusal is an error, not an empty verdict. The client is hand-written over
+  `net/http`, with no new dependency; `ANTHROPIC_*` environment variables are not read,
+  so nothing but `ACHILLES_LLM_API_KEY` and the checked base URL is used. Still
+  experimental: tested against a fake of the API, not the live service.
 - **Taint is followed between functions in the same file.** Opengrep runs with
   `--taint-intrafile`, so request data handed to a helper that builds and runs a query,
   a file path or a URL is found: on OWASP WebGoat, ten SQL-injection lessons, Zip Slip

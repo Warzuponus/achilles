@@ -124,7 +124,7 @@ Needs `--llm-model` and an API key in `ACHILLES_LLM_API_KEY` (or `OPENAI_API_KEY
 |------|---------|-------------|
 | `--ai` | `false` | one-flag AI scan: `--triage --remediate --review --sca-advice`, and write `report.html`, `report.md`, `achilles.sarif` into `--report-dir` |
 | `--report-dir` | `achilles-report` | where `--ai` writes its reports (an explicit `--html-report`/`--markdown`/`--sarif-report` wins) |
-| `--llm-provider` | `$ACHILLES_LLM_PROVIDER` | endpoint preset: `openai`, `openrouter`, `ollama`, `anthropic` (experimental). Sets `--llm-base-url`; `ollama` also sets `--llm-auth none` |
+| `--llm-provider` | `$ACHILLES_LLM_PROVIDER` | endpoint preset: `openai`, `openrouter`, `ollama`, `anthropic` (experimental; Anthropic's Messages API, natively). Sets `--llm-base-url`; `ollama` also sets `--llm-auth none` |
 | `--llm-budget` | `45m` | time allowed for all AI phases combined (separate from `--timeout`, which bounds the scanners) |
 | `--llm-concurrency` | `4` | findings triaged in parallel, most severe first |
 | `--llm-no-code` | `false` | privacy mode: send the model only rule, message and location, never source. The AI then never dismisses findings |

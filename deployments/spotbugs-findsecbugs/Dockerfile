@@ -12,7 +12,11 @@
 # Build the Java/Kotlin/Scala project first (mvn/gradle), then scan the tree that
 # contains the build output. Scanning un-built source yields zero findings.
 FROM eclipse-temurin:21-jre-jammy@sha256:f04fb34e053148344e83317976114ec3f37e4b830ec8bdab5a2fe3cecd7d010b
-# Pinned by digest so a rebuild gets the same base; Dependabot proposes updates.
+# Pinned by digest so a rebuild gets the same base. Dependabot refreshes the digest
+# but is told not to move to a new Java major (.github/dependabot.yml): on the Java
+# 25 runtime, SpotBugs 4.9.3 + find-sec-bugs 1.14.0 report nothing on the sample
+# that Java 21 flags, which Tier-2 verify caught on 2026-10-15. Move it together with
+# a SpotBugs that supports the newer runtime, and check with Tier-2 verify.
 
 ARG FSB_VERSION=1.14.0
 ARG FSB_SHA256=ff546e16e596ade5b6534a6da87881e569429bf46dfd8faed63ca63cdd69b4f8

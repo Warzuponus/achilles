@@ -16,7 +16,10 @@
 # Build:
 #   docker build -t achilles/railroader:4.3.8 deployments/railroader
 FROM ruby:2.7-slim@sha256:39f68389fd3fe8c04ed896b10cc90ba4553a42e555ae18b37b41ea8c3ce965fd
-# Pinned by digest so a rebuild gets the same base; Dependabot proposes updates.
+# Pinned by digest so a rebuild gets the same base. Dependabot refreshes the digest
+# but is told not to move Ruby to a new version (.github/dependabot.yml): on Ruby
+# 3.2, Railroader 4.3.8 crashes in its parser (SexpTypeError) and reports nothing,
+# which Tier-2 verify caught on 2026-10-15.
 
 # Pin the FULL set of Railroader 4.3.8's direct dependencies to known-good
 # versions (captured from a working install). Railroader is unmaintained: on a

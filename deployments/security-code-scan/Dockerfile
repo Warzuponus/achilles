@@ -14,7 +14,7 @@
 #     writable workdir before restoring/scanning,
 #   * needs a real .NET project as the target (not a bare directory) -> the wrapper
 #     discovers the .sln/.csproj.
-FROM mcr.microsoft.com/dotnet/sdk:8.0@sha256:ec9c0a0dc5f60adc2065762050638dd5ed5facfc53716d4580a42d86027c8e80
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa
 # Pinned by digest so a rebuild gets the same base; Dependabot proposes updates.
 
 ARG SCS_VERSION=5.6.7

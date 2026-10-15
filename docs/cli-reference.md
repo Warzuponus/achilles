@@ -96,7 +96,7 @@ you set there wins over the repository's file.
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--exclude` | — | extra noise patterns, comma-separated (path segment like `tests`, or glob like `*.gen.go`) |
-| `--no-default-excludes` | `false` | disable the built-in vendored/generated/minified filter |
+| `--no-default-excludes` | `false` | disable the built-in vendored/generated/minified filter, including files whose header marks them as generated (`// Code generated ... DO NOT EDIT.`, `@generated`) |
 | `--no-correlate` | `false` | disable cross-tool correlation (triage every duplicate report separately) |
 | `--with` | — | comma-separated opt-in scanners to run as well as the profile's. `zizmor`: GitHub Actions workflows and composite actions, always offline (no token is used and no request is made, so its online audits do not run); install it with `achilles tools install zizmor`. A name the registry does not offer is an error. In the GitHub Action, use the `with` input, which also installs the scanner |
 | `--secrets-history` | `false` | also scan the git history for credentials: one that was committed and later deleted is in no file, but is still leaked. With `--diff`, only the commits since that ref. Needs a full clone and the repository root as the target; a shallow clone or a checkout git cannot read is reported as incomplete or failed, never as clean. See [Reports & Gating](reports-and-gating.md#credentials-in-the-git-history) |
@@ -182,7 +182,7 @@ Full walkthrough: [LLM Triage & Agents](llm-and-agents.md).
 | `--sbom` | — | generate a CycloneDX SBOM (via Syft) to this file |
 | `--diagnostics` | — | write a diagnostics sidecar (tool/parse failures + LLM token usage) |
 | `--strict-tools` | `$ACHILLES_STRICT_TOOLS` | fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan. On in the container image — see [Running in containers](containers.md). Without it, a run in which no scanner could run at all still fails (exit 2): nothing was scanned |
-| `--no-repo-config` | `$ACHILLES_NO_REPO_CONFIG` | do not let the scanned repository configure the scanners. Its ignore and config files (`.trivyignore`, `.gitleaks.toml`, `.semgrepignore`, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. Without the flag such files are applied, and named in the output and reports. For code you do not trust; see [SECURITY.md](../SECURITY.md) for what it does not cover. Also ignores the repository's `.achilles.yaml`, and its `achilles:ignore` comments, and turns `--calibrate` and `--rag` off when the Evidence Vault they would read is committed in that repository |
+| `--no-repo-config` | `$ACHILLES_NO_REPO_CONFIG` | do not let the scanned repository configure the scanners. Its ignore and config files (`.trivyignore`, `.gitleaks.toml`, `.semgrepignore`, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. Without the flag such files are applied, and named in the output and reports. For code you do not trust; see [SECURITY.md](../SECURITY.md) for what it does not cover. Also ignores the repository's `.achilles.yaml`, its `achilles:ignore` comments and its generated-file headers, and turns `--calibrate` and `--rag` off when the Evidence Vault they would read is committed in that repository |
 
 ## GitHub integrations (outward-facing, opt-in)
 

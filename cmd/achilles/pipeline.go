@@ -278,6 +278,18 @@ func filterFindings(o *options, ev vault.Store, runID, absTarget string, scan *m
 		recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta, Source: "noise"},
 			map[string]any{"excluded": len(excluded)})
 	}
+	// Files whose header says a tool wrote them ("// Code generated ... DO NOT
+	// EDIT.", "@generated"). The header is the scanned repository's say-so, so
+	// --no-repo-config ignores it, and noise.Generated never drops credentials,
+	// advisories or history findings on its word.
+	if !o.noDefaultExcludes && !o.noRepoConfig {
+		if kept, excluded := noise.Generated(absTarget, scan.Findings); len(excluded) > 0 {
+			scan.Findings = kept
+			fmt.Fprintf(os.Stderr, "achilles: excluded %d finding(s) in files marked as generated (\"Code generated ... DO NOT EDIT.\" or @generated; --no-default-excludes to keep them)\n", len(excluded))
+			recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta, Source: "noise-generated"},
+				map[string]any{"excluded": len(excluded)})
+		}
+	}
 
 	// --- diff-aware: keep only findings in changed files ---
 	if o.diffRef != "" {

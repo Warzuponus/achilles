@@ -113,8 +113,13 @@ what matters — they stack.
 
 ### 1. Noise filter (on by default)
 
-Vendored / generated / minified files are dropped before findings are counted.
-Add your own patterns or turn it off:
+Vendored / generated / minified files are dropped before findings are counted:
+vendored directories (`vendor`, `node_modules`, `third_party`, ...), minified assets,
+`*.pb.go` and `*_pb2.py`, and any file whose header says a tool wrote it (Go's
+`// Code generated ... DO NOT EDIT.` line, or an `@generated` marker in a comment near
+the top). That header is the scanned repository's say-so, so it never hides a
+credential, a dependency advisory or a finding in commit history, and
+`--no-repo-config` ignores it. Add your own patterns or turn it off:
 
 ```bash
 achilles --exclude 'tests,*.gen.go' .     # extra patterns (path segment or glob)

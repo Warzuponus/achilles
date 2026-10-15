@@ -7,6 +7,13 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Files marked as generated are left out like vendored ones.** A file whose header
+  says a tool wrote it (Go's `// Code generated ... DO NOT EDIT.`, or `@generated` in
+  a comment near the top) joins the built-in noise filter, so findings in stringer,
+  mockgen, sqlc, protobuf and similar output no longer reach triage or the gate. The
+  header is the scanned repository's say-so: it never hides a credential, a
+  dependency advisory or a finding in commit history, and `--no-repo-config` (or
+  `--no-default-excludes`) ignores it.
 - **Built-in rules for Ruby and PHP.** 24 more Achilles Opengrep rules, Apache-2.0 like
   the rest. Ruby (Rails, Sinatra): SQL injection through ActiveRecord (`where`, `order`,
   `find_by_sql` and the rest) and SQL built by interpolation, command injection
@@ -92,8 +99,8 @@ All notable changes to this project are recorded here. The format follows
 - **The built-in rules were measured on real code, and fixed where they were wrong.**
   Run on their own over 98,048 files of third-party code (a Go module cache: cloud SDKs,
   Kubernetes, Envoy, goreleaser, the Go sources), they reported 349 findings outside
-  test paths, about 260 of them not what the rule is for. After the fixes: 87, of
-  which 3. `dom-xss` is now a taint rule from the URL, referrer, cookies,
+  test paths, about 260 of them not what the rule is for. After the fixes: 86, of
+  which 2. `dom-xss` is now a taint rule from the URL, referrer, cookies,
   `window.name`, web storage and `postMessage`, rather than any variable written to
   `innerHTML`. `hardcoded-secret` no longer reports identifiers, header names, paths,
   gRPC method names, placeholders or public key tokens, and `credentials-in-url` no

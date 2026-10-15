@@ -77,6 +77,8 @@ example = {"identitytoken": "9cbaf023786cd7..."}
 manifest = {"publicKeyToken": "1A5B54EDA918C422ABCD"}
 # ok: achilles.generic.hardcoded-secret
 headerAmzSessionToken = "x-amz-s3session-token"
+# ok: achilles.generic.hardcoded-secret
+_tokenkind_name = "niltokenerrtokeneoftokenidenttokeninttoken2floattoken"
 # A human password shaped like words is still a password.
 # ruleid: achilles.generic.hardcoded-secret
 adminPassword = "hunter2-admin-pass"

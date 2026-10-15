@@ -131,7 +131,7 @@ positives, so the `ok:` cases matter as much as the `ruleid:` ones.
 
 ```bash
 achilles tools install opengrep
-go test -tags integration -run TestRules ./internal/config
+go test -count=1 -tags integration -run TestRules ./internal/config   # -count=1: the cache cannot see the test files
 ```
 
 The test fails on a wrong match and on a rule with no case at all; CI runs it with the

@@ -78,29 +78,68 @@ rules:
               regex: ^(res|response)$
           - focus-metavariable: $BODY
 
+  # A taint rule: HTML a page builds itself is the common case and is not flagged
+  # (the earlier "any variable into innerHTML" version flagged every such line in
+  # golang.org/x/tools); data an attacker can put in the page is.
   - id: achilles.javascript.dom-xss
+    mode: taint
     languages: [javascript, typescript]
-    severity: WARNING
+    severity: ERROR
     message: >
-      HTML is assigned from a variable. If any of it comes from the URL, storage or
-      another user, scripts in it run. Use textContent, or sanitize with DOMPurify.
+      Data from the URL, the referrer, a cookie, window.name, web storage or a
+      postMessage is written into the page as HTML, so a script in it runs. Use
+      textContent, or sanitize the HTML with DOMPurify.
     metadata:
       cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
       category: security
-    pattern-either:
+    pattern-sources:
+      - pattern-either:
+          - pattern: location.$P
+          - pattern: window.location.$P
+          - pattern: document.location.$P
+          - pattern: document.URL
+          - pattern: document.documentURI
+          - pattern: document.baseURI
+          - pattern: document.referrer
+          - pattern: document.cookie
+          - pattern: window.name
+          - pattern: localStorage.getItem(...)
+          - pattern: sessionStorage.getItem(...)
+          - pattern: new URLSearchParams(...)
+          - pattern: new URL(...)
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $W.addEventListener("message", function ($E) { ... })
+              - pattern-inside: |
+                  $W.addEventListener("message", ($E) => { ... })
+              - pattern-inside: |
+                  $W.onmessage = function ($E) { ... }
+          - pattern: $E.data
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: DOMPurify.sanitize(...)
+          - pattern: encodeURIComponent(...)
+          - pattern: encodeURI(...)
+          - pattern: parseInt(...)
+          - pattern: Number(...)
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)(escape|sanitiz)
+    pattern-sinks:
       - patterns:
           - pattern-either:
               - pattern: $EL.innerHTML = $X
               - pattern: $EL.outerHTML = $X
-          - pattern-not: $EL.innerHTML = "..."
-          - pattern-not: $EL.outerHTML = "..."
-          - pattern-not: $EL.innerHTML = DOMPurify.sanitize(...)
-      - patterns:
-          - pattern: document.write($X)
-          - pattern-not: document.write("...")
-      - patterns:
-          - pattern: $EL.insertAdjacentHTML($POS, $X)
-          - pattern-not: $EL.insertAdjacentHTML($POS, "...")
+              - pattern: $EL.innerHTML += $X
+              - pattern: document.write($X)
+              - pattern: document.writeln($X)
+              - pattern: $EL.insertAdjacentHTML($POS, $X)
+              - pattern: $J(...).html($X)
+              - pattern: $J(...).append($X)
+          - focus-metavariable: $X
 
   - id: achilles.javascript.sql-injection
     mode: taint

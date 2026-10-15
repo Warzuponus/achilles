@@ -6,7 +6,7 @@
 // annotation there must hold.
 //
 //	achilles tools install opengrep   # or have opengrep on PATH
-//	go test -tags integration ./internal/config -run TestRules
+//	go test -count=1 -tags integration ./internal/config -run TestRules
 //
 // Skips when opengrep is not installed, unless ACHILLES_REQUIRE_OPENGREP=1 (CI).
 package config

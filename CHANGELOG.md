@@ -89,6 +89,17 @@ All notable changes to this project are recorded here. The format follows
 
 
 ### Fixed
+- **The built-in rules were measured on real code, and fixed where they were wrong.**
+  Run on their own over 98,048 files of third-party code (a Go module cache: cloud SDKs,
+  Kubernetes, Envoy, goreleaser, the Go sources), they reported 349 findings outside
+  test paths, about 260 of them not what the rule is for. After the fixes: 87, of
+  which 3. `dom-xss` is now a taint rule from the URL, referrer, cookies,
+  `window.name`, web storage and `postMessage`, rather than any variable written to
+  `innerHTML`. `hardcoded-secret` no longer reports identifiers, header names, paths,
+  gRPC method names, placeholders or public key tokens, and `credentials-in-url` no
+  longer reports documentation of the URL syntax. A pattern that backtracked past
+  PCRE's limit, which made Opengrep drop an exclusion for a whole file, is rewritten.
+  See `docs/benchmarking.md`.
 - **A run in which no scanner could run passed.** With every scanner missing (a first
   run before `achilles tools install`, or a CI job without them), Achilles reported 0
   findings, warned, and exited 0, so a CI job passed on a scan that looked at nothing.

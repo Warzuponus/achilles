@@ -68,7 +68,7 @@ jobs:
         run: |
           go build -o bin/achilles ./cmd/achilles
           ./bin/achilles tools install opengrep
-          ACHILLES_REQUIRE_OPENGREP=1 go test -tags integration -run TestRules ./internal/config
+          ACHILLES_REQUIRE_OPENGREP=1 go test -count=1 -tags integration -run TestRules ./internal/config
       # Integration tests need the real tools (opengrep, git); they self-skip when absent.
       - name: Test (integration, best-effort)
         run: go test -tags integration ./... || true

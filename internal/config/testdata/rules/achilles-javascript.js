@@ -46,15 +46,39 @@ app.get("/hello-json", (req, res) => {
 });
 
 function render(el, html, name) {
-  // ruleid: achilles.javascript.dom-xss
+  // HTML the page builds itself is not flagged.
+  // ok: achilles.javascript.dom-xss
   el.innerHTML = html;
-  // ruleid: achilles.javascript.dom-xss
+  // ok: achilles.javascript.dom-xss
   document.write("<p>" + name + "</p>");
   // ok: achilles.javascript.dom-xss
   el.innerHTML = "<b>static</b>";
   // ok: achilles.javascript.dom-xss
   el.textContent = name;
 }
+
+function fromTheUrl(el) {
+  // ruleid: achilles.javascript.dom-xss
+  el.innerHTML = decodeURIComponent(location.hash.slice(1));
+  const q = new URLSearchParams(window.location.search).get("q");
+  // ruleid: achilles.javascript.dom-xss
+  el.innerHTML = "<h2>Results for " + q + "</h2>";
+  // ruleid: achilles.javascript.dom-xss
+  document.write(document.referrer);
+  // ruleid: achilles.javascript.dom-xss
+  $("#greeting").html(localStorage.getItem("name"));
+  // ok: achilles.javascript.dom-xss
+  el.innerHTML = DOMPurify.sanitize(location.hash);
+  // ok: achilles.javascript.dom-xss
+  el.textContent = q;
+  // ok: achilles.javascript.dom-xss
+  el.innerHTML = "<a href='/search?q=" + encodeURIComponent(q) + "'>again</a>";
+}
+
+window.addEventListener("message", (event) => {
+  // ruleid: achilles.javascript.dom-xss
+  document.getElementById("out").innerHTML = event.data.html;
+});
 
 app.get("/users", async (req, res) => {
   // ruleid: achilles.javascript.sql-injection

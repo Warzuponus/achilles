@@ -20,6 +20,10 @@ COMPOSE_DSN = "postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-dev-only}@p
 # ok: achilles.generic.credentials-in-url
 TEST_DSN = "postgres://postgres:test@localhost:5432/testdb?sslmode=disable"
 # ok: achilles.generic.credentials-in-url
+SYNTAX = "postgresql://[username[:password]@][host][:port][/dbname]"
+# ok: achilles.generic.credentials-in-url
+SANITIZED = "https://REDACTED:REDACTED@www.example.com/"
+# ok: achilles.generic.credentials-in-url
 LOOPBACK = "redis://cache:Zq8vLp2xWn4RtYs7@127.0.0.1:6379/0"
 # ruleid: achilles.generic.credentials-in-url
 NOT_LOCAL = "redis://cache:Zq8vLp2xWn4RtYs7@localhost.attacker.example:6379/0"
@@ -50,5 +54,40 @@ ClassHardcodedSecret = "hardcoded-secret"
 EnvMaxTokens = "ACHILLES_LLM_MAX_TOKENS"
 # ruleid: achilles.generic.hardcoded-secret
 AWS_SECRET_ACCESS_KEY = "AKIAQ3EGVZ7KDEXAMPL3"
-# ruleid: achilles.generic.hardcoded-secret
+# A single word of letters cannot be told from an identifier, so it is not flagged.
+# ok: achilles.generic.hardcoded-secret
 DB_PASSWORD = "correcthorsebatterystaple"
+# ok: achilles.generic.hardcoded-secret
+credNameSecret = "ClientSecretCredential"
+# ok: achilles.generic.hardcoded-secret
+AmzSecurityTokenKey = "X-Amz-Security-Token"
+# ok: achilles.generic.hardcoded-secret
+computeTokenURI = "instance/service-accounts/default/token"
+# ok: achilles.generic.hardcoded-secret
+SecretDiscoveryService_FetchSecrets_FullMethodName = "/envoy.service.secret.v3.SecretDiscoveryService/FetchSecrets"
+# ok: achilles.generic.hardcoded-secret
+oauth2TokenSourceKey = "oauth2.google.tokenSource"
+# ok: achilles.generic.hardcoded-secret
+GitHubToken = "~/.config/goreleaser/github_token"
+# ok: achilles.generic.hardcoded-secret
+snapshot = {"clientSecret": "__ClientSecret__"}
+# ok: achilles.generic.hardcoded-secret
+example = {"identitytoken": "9cbaf023786cd7..."}
+# ok: achilles.generic.hardcoded-secret
+manifest = {"publicKeyToken": "1A5B54EDA918C422ABCD"}
+# ok: achilles.generic.hardcoded-secret
+headerAmzSessionToken = "x-amz-s3session-token"
+# A human password shaped like words is still a password.
+# ruleid: achilles.generic.hardcoded-secret
+adminPassword = "hunter2-admin-pass"
+# ruleid: achilles.generic.hardcoded-secret
+GITLAB_TOKEN = "glpat-ACCTEST1234567890123"
+# ruleid: achilles.generic.hardcoded-secret
+signing = {"secret": "whsec_C2FVsBQIhrscChlQIMV+b5sSYspob7oD"}
+# ruleid: achilles.generic.hardcoded-secret
+JOIN_TOKEN = "SWMTKN-1-3pu6hszjas19xyp7ghgosyx9k8atbfcr8p2is99znpy26u2lkl-7p73s1dx5in4tatdymyhg9hu2"
+
+# A long near miss for the identifier exclusion. An ambiguous version of that
+# pattern backtracked past PCRE's limit on it, and the exclusion then failed for
+# every line of the file (the identifier cases above would be reported).
+MEDIA_TYPE_BLOCK_USERS = "application/vnd.github.giant-sentry-fist-preview+json"

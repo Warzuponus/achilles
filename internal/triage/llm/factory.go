@@ -53,5 +53,13 @@ func NewFactory(mode string) (func(baseURL, model string) Client, error) {
 	case ModeNone:
 		opts.AuthHeader = AuthNone
 	}
-	return func(b, m string) Client { return NewOpenAI(b, apiKey, m).Apply(opts) }, nil
+	// Anthropic's own API gets the native Messages client; everything else speaks
+	// the OpenAI Chat Completions schema. Both take the key from the same place
+	// (ACHILLES_LLM_API_KEY), which CheckEndpoint has already vetted for this host.
+	return func(b, m string) Client {
+		if IsAnthropicBaseURL(b) {
+			return NewAnthropic(b, apiKey, m, opts)
+		}
+		return NewOpenAI(b, apiKey, m).Apply(opts)
+	}, nil
 }

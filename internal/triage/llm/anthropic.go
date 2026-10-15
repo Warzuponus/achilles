@@ -1,89 +1,111 @@
 package llm
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
-// AnthropicClient talks to Anthropic's Messages API through the official SDK.
-// It replaces the OpenAI-compatibility endpoint for --llm-provider anthropic:
-// that endpoint is meant for trying Claude out, ignores response_format, and
-// rejects the sampling parameters triage used to send.
+// AnthropicClient talks to Anthropic's Messages API directly, over net/http. It
+// replaces the OpenAI-compatibility endpoint for --llm-provider anthropic: that
+// endpoint is meant for trying Claude out, ignores response_format, and
+// rejected the sampling parameters triage used to send.
+//
+// It is hand-written rather than built on Anthropic's Go SDK on purpose: the
+// SDK added eleven modules and grew the release binary by two thirds, for the
+// one request this client makes.
 type AnthropicClient struct {
-	BaseURL string
+	BaseURL string // ends in /v1
+	APIKey  string
 	Model   string
 	Opts    Options
-	client  anthropic.Client
+	HTTP    *http.Client
+
+	sleep func(context.Context, time.Duration) error // tests: no real waiting between retries
 }
 
 const (
+	// anthropicVersion is the API version header the Messages API requires.
+	anthropicVersion = "2023-06-01"
 	// anthropicDefaultMaxTokens is the output budget when ACHILLES_LLM_MAX_TOKENS
 	// is unset. Current Claude models think before they answer, and the thinking
 	// counts against max_tokens, so it is well above what a verdict needs.
 	anthropicDefaultMaxTokens = 16000
-	// anthropicDefaultTimeout bounds one call (stream included) when
+	// anthropicDefaultTimeout bounds one attempt (stream included) when
 	// ACHILLES_LLM_TIMEOUT is unset.
 	anthropicDefaultTimeout = 10 * time.Minute
+	// anthropicMaxReply bounds what one streamed reply may add up to.
+	anthropicMaxReply = 32 << 20
 )
 
 // IsAnthropicBaseURL reports whether baseURL is Anthropic's own API, which
-// NewFactory then serves with the native client.
+// NewFactory then serves with this client.
 func IsAnthropicBaseURL(baseURL string) bool {
 	u, err := url.Parse(baseURL)
 	return err == nil && strings.EqualFold(u.Hostname(), "api.anthropic.com")
 }
 
-// NewAnthropic returns a Messages API client. baseURL may carry the /v1 suffix
-// the OpenAI-style presets use; the SDK adds its own.
-//
-// The SDK's environment defaults (ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, its
-// config files) are switched off: the key and the endpoint come from Achilles'
-// own flags and environment, which check.go has already vetted, so a stray
-// ANTHROPIC_BASE_URL cannot send the key somewhere else.
+// NewAnthropic returns a Messages API client. baseURL may or may not carry the
+// /v1 suffix the OpenAI-style presets use. The key, the endpoint and the extra
+// headers come from Achilles' own flags and environment, which CheckEndpoint
+// has vetted; nothing is read from ANTHROPIC_* variables.
 func NewAnthropic(baseURL, apiKey, model string, o Options) *AnthropicClient {
-	base := strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/v1") + "/"
-	retries := o.MaxRetries
-	switch {
-	case retries == 0:
-		retries = defaultRetries
-	case retries < 0:
-		retries = 0
+	base := strings.TrimRight(baseURL, "/")
+	if !strings.HasSuffix(base, "/v1") {
+		base += "/v1"
 	}
 	timeout := o.Timeout
 	if timeout <= 0 {
 		timeout = anthropicDefaultTimeout
 	}
-	opts := []option.RequestOption{
-		option.WithoutEnvironmentDefaults(),
-		option.WithBaseURL(base),
-		option.WithMaxRetries(retries),
-		option.WithRequestTimeout(timeout),
-	}
-	if o.AuthHeader != AuthNone && apiKey != "" {
-		opts = append(opts, option.WithAPIKey(apiKey))
-	}
-	for k, v := range o.Headers {
-		opts = append(opts, option.WithHeader(k, v))
-	}
-	for k, vs := range o.Query {
-		for _, v := range vs {
-			opts = append(opts, option.WithQueryAdd(k, v))
-		}
-	}
-	return &AnthropicClient{BaseURL: base, Model: model, Opts: o, client: anthropic.NewClient(opts...)}
+	return &AnthropicClient{BaseURL: base, APIKey: apiKey, Model: model, Opts: o, HTTP: &http.Client{Timeout: timeout}}
 }
 
-// Complete sends one request and waits for the whole reply. It streams under
-// the hood: a long thinking phase on a non-streaming request can outlast
-// proxies' idle timeouts.
+type anthropicRequest struct {
+	Model        string                 `json:"model"`
+	MaxTokens    int                    `json:"max_tokens"`
+	System       []anthropicText        `json:"system,omitempty"`
+	Messages     []anthropicMessage     `json:"messages"`
+	Stream       bool                   `json:"stream"`
+	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
+}
+
+type anthropicText struct {
+	Type         string          `json:"type"`
+	Text         string          `json:"text"`
+	CacheControl *anthropicCache `json:"cache_control,omitempty"`
+}
+
+type anthropicCache struct {
+	Type string `json:"type"`
+}
+
+type anthropicMessage struct {
+	Role    string          `json:"role"`
+	Content []anthropicText `json:"content"`
+}
+
+type anthropicOutputConfig struct {
+	Format anthropicFormat `json:"format"`
+}
+
+type anthropicFormat struct {
+	Type   string          `json:"type"`
+	Schema json.RawMessage `json:"schema"`
+}
+
+// Complete sends one request and waits for the whole reply. The reply is
+// streamed: a long thinking phase on a plain request can outlast a proxy's idle
+// timeout. Rate limits, overload and transport failures are retried like the
+// OpenAI client's.
 func (c *AnthropicClient) Complete(ctx context.Context, req Request) (Response, error) {
 	model := req.Model
 	if model == "" {
@@ -96,85 +118,257 @@ func (c *AnthropicClient) Complete(ctx context.Context, req Request) (Response, 
 	if maxTokens <= 0 {
 		maxTokens = anthropicDefaultMaxTokens
 	}
-	params := anthropic.MessageNewParams{
-		Model:     anthropic.Model(model),
-		MaxTokens: int64(maxTokens),
-	}
 	// No temperature: current Claude models fix their sampling, and an explicit
 	// one is rejected.
-	var system []anthropic.TextBlockParam
+	body := anthropicRequest{Model: model, MaxTokens: maxTokens, Stream: true}
 	for _, m := range req.Messages {
+		block := anthropicText{Type: "text", Text: m.Content}
 		switch m.Role {
 		case RoleSystem:
-			system = append(system, anthropic.TextBlockParam{Text: m.Content})
+			body.System = append(body.System, block)
 		case RoleAssistant:
-			params.Messages = append(params.Messages, anthropic.NewAssistantMessage(anthropic.NewTextBlock(m.Content)))
+			body.Messages = append(body.Messages, anthropicMessage{Role: "assistant", Content: []anthropicText{block}})
 		default:
-			params.Messages = append(params.Messages, anthropic.NewUserMessage(anthropic.NewTextBlock(m.Content)))
+			body.Messages = append(body.Messages, anthropicMessage{Role: "user", Content: []anthropicText{block}})
 		}
 	}
-	if len(system) > 0 {
+	if n := len(body.System); n > 0 {
 		// The system prompt is the same for every finding of a run, so it is
 		// cached: later calls read it at a fraction of the input price.
-		system[len(system)-1].CacheControl = anthropic.NewCacheControlEphemeralParam()
-		params.System = system
+		body.System[n-1].CacheControl = &anthropicCache{Type: "ephemeral"}
 	}
 	if req.Schema != nil {
-		var schema map[string]any
-		if err := json.Unmarshal(req.Schema.Definition, &schema); err != nil {
-			return Response{}, fmt.Errorf("llm: schema %s: %w", req.Schema.Name, err)
-		}
-		params.OutputConfig = anthropic.OutputConfigParam{Format: anthropic.JSONOutputFormatParam{Schema: schema}}
+		// Structured outputs: the reply is held to the schema.
+		body.OutputConfig = &anthropicOutputConfig{Format: anthropicFormat{Type: "json_schema", Schema: req.Schema.Definition}}
 	}
 	// req.JSON has no Messages API equivalent short of a schema; the prompts ask
 	// for JSON and callers extract it.
-
-	stream := c.client.Messages.NewStreaming(ctx, params)
-	msg := anthropic.Message{}
-	for stream.Next() {
-		if err := msg.Accumulate(stream.Current()); err != nil {
-			_ = stream.Close()
-			return Response{}, fmt.Errorf("llm: reading the reply: %w", err)
-		}
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return Response{}, err
 	}
-	if err := stream.Err(); err != nil {
-		return Response{}, asHTTPError(err)
+	endpoint := c.BaseURL + "/messages"
+	if len(c.Opts.Query) > 0 {
+		endpoint += "?" + c.Opts.Query.Encode()
 	}
 
-	if msg.StopReason == anthropic.StopReasonRefusal {
-		return Response{}, fmt.Errorf("llm: the model declined to answer (refusal, category %q)", msg.StopDetails.Category)
+	retries := c.Opts.MaxRetries
+	switch {
+	case retries == 0:
+		retries = defaultRetries
+	case retries < 0:
+		retries = 0
 	}
-	var text strings.Builder
-	for _, block := range msg.Content {
-		if t, ok := block.AsAny().(anthropic.TextBlock); ok {
-			text.WriteString(t.Text)
+	for attempt := 0; ; attempt++ {
+		resp, err := c.attempt(ctx, endpoint, buf)
+		if err == nil || attempt >= retries || ctx.Err() != nil {
+			return resp, err
+		}
+		var (
+			he   *HTTPError
+			te   *transportError
+			wait time.Duration
+		)
+		switch {
+		case errors.As(err, &he) && retryableStatus(he.Status):
+			wait = backoff(attempt, he.RetryAfter)
+			if he.RetryAfter <= 0 {
+				wait = jitter(wait)
+			}
+		case errors.As(err, &te):
+			wait = jitter(backoff(attempt, 0))
+		default:
+			return resp, err
+		}
+		if serr := c.wait(ctx, wait); serr != nil {
+			return Response{}, serr
 		}
 	}
-	u := msg.Usage
-	prompt := int(u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens)
-	return Response{
-		Content: text.String(),
-		Model:   string(msg.Model),
-		Usage: Usage{
-			PromptTokens:     prompt,
-			CompletionTokens: int(u.OutputTokens),
-			TotalTokens:      prompt + int(u.OutputTokens),
-		},
-		Truncated: msg.StopReason == anthropic.StopReasonMaxTokens,
-	}, nil
 }
 
-// asHTTPError turns the SDK's API error into the HTTPError the rest of Achilles
-// understands, so a rejected key or exhausted credit (401, 402) still stops the
-// run and a rejected schema (400) still falls back to plain JSON.
-func asHTTPError(err error) error {
-	var ae *anthropic.Error
-	if errors.As(err, &ae) {
-		body := ae.RawJSON()
-		if body == "" {
-			body = ae.Error()
-		}
-		return &HTTPError{Status: ae.StatusCode, Body: body}
+func (c *AnthropicClient) wait(ctx context.Context, d time.Duration) error {
+	if c.sleep != nil {
+		return c.sleep(ctx, d)
 	}
-	return err
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+// attempt performs one request and reads its event stream to the end.
+func (c *AnthropicClient) attempt(ctx context.Context, endpoint string, buf []byte) (Response, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(buf))
+	if err != nil {
+		return Response{}, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	httpReq.Header.Set("Anthropic-Version", anthropicVersion)
+	for k, v := range c.Opts.Headers {
+		httpReq.Header.Set(k, v)
+	}
+	if c.Opts.AuthHeader != AuthNone && c.APIKey != "" {
+		httpReq.Header.Set("X-Api-Key", c.APIKey)
+	}
+
+	resp, err := c.HTTP.Do(httpReq)
+	if err != nil {
+		return Response{}, &transportError{fmt.Errorf("llm request: %w", err)}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return Response{}, &HTTPError{
+			Status: resp.StatusCode, Body: strings.TrimSpace(string(data)),
+			RetryAfter: retryAfter(resp.Header.Get("Retry-After"), time.Now()),
+		}
+	}
+	return readAnthropicStream(io.LimitReader(resp.Body, anthropicMaxReply))
+}
+
+// anthropicEvent is the union of the stream events this client reads. Every
+// field it does not need is ignored, so new event types and fields pass by.
+type anthropicEvent struct {
+	Type    string `json:"type"`
+	Message struct {
+		Model string         `json:"model"`
+		Usage anthropicUsage `json:"usage"`
+	} `json:"message"`
+	Index        int `json:"index"`
+	ContentBlock struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content_block"`
+	Delta struct {
+		Type        string `json:"type"`
+		Text        string `json:"text"`
+		StopReason  string `json:"stop_reason"`
+		StopDetails struct {
+			Category string `json:"category"`
+		} `json:"stop_details"`
+	} `json:"delta"`
+	Usage anthropicUsage `json:"usage"`
+	Error struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+// anthropicErrorStatus is the HTTP status the Messages API uses for an error
+// type.
+func anthropicErrorStatus(errType string) int {
+	switch errType {
+	case "invalid_request_error":
+		return http.StatusBadRequest
+	case "authentication_error":
+		return http.StatusUnauthorized
+	case "billing_error":
+		return http.StatusPaymentRequired
+	case "permission_error":
+		return http.StatusForbidden
+	case "not_found_error":
+		return http.StatusNotFound
+	case "request_too_large":
+		return http.StatusRequestEntityTooLarge
+	case "rate_limit_error":
+		return http.StatusTooManyRequests
+	case "overloaded_error":
+		return 529
+	default: // api_error, and anything new
+		return http.StatusInternalServerError
+	}
+}
+
+type anthropicUsage struct {
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+}
+
+// readAnthropicStream reads server-sent events up to message_stop and returns
+// the reply: the text blocks joined (thinking blocks are not part of it), the
+// stop reason, and the usage.
+func readAnthropicStream(r io.Reader) (Response, error) {
+	br := bufio.NewReader(r)
+	var (
+		text       strings.Builder
+		textBlocks = map[int]bool{}
+		usage      anthropicUsage
+		model      string
+		stop       string
+		category   string
+		stopped    bool
+	)
+	for !stopped {
+		line, err := br.ReadString('\n')
+		if data, ok := strings.CutPrefix(strings.TrimRight(line, "\r\n"), "data:"); ok {
+			var ev anthropicEvent
+			if jerr := json.Unmarshal([]byte(strings.TrimSpace(data)), &ev); jerr != nil {
+				return Response{}, fmt.Errorf("llm: unreadable stream event: %w", jerr)
+			}
+			switch ev.Type {
+			case "message_start":
+				model = ev.Message.Model
+				usage = ev.Message.Usage
+			case "content_block_start":
+				if ev.ContentBlock.Type == "text" {
+					textBlocks[ev.Index] = true
+					text.WriteString(ev.ContentBlock.Text)
+				}
+			case "content_block_delta":
+				if ev.Delta.Type == "text_delta" && textBlocks[ev.Index] {
+					text.WriteString(ev.Delta.Text)
+				}
+			case "message_delta":
+				if ev.Delta.StopReason != "" {
+					stop = ev.Delta.StopReason
+				}
+				if ev.Delta.StopDetails.Category != "" {
+					category = ev.Delta.StopDetails.Category
+				}
+				// Output tokens in message_delta are the running total.
+				if ev.Usage.OutputTokens > 0 {
+					usage.OutputTokens = ev.Usage.OutputTokens
+				}
+			case "message_stop":
+				stopped = true
+			case "error":
+				// An error after the 200, such as overload mid-stream. It gets the
+				// status the same error has before a stream, so it is retried (or
+				// not) the same way.
+				return Response{}, &HTTPError{Status: anthropicErrorStatus(ev.Error.Type), Body: ev.Error.Type + ": " + ev.Error.Message}
+			}
+		}
+		if err != nil {
+			if stopped {
+				break
+			}
+			// The stream ended, or dropped, before message_stop: the answer may be
+			// cut short anywhere, so it is not used.
+			return Response{}, &transportError{fmt.Errorf("llm: reply stream ended before message_stop: %w", err)}
+		}
+	}
+	if stop == "refusal" {
+		if category != "" {
+			return Response{}, fmt.Errorf("llm: the model declined to answer (refusal, category %q)", category)
+		}
+		return Response{}, fmt.Errorf("llm: the model declined to answer (refusal)")
+	}
+	prompt := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
+	return Response{
+		Content: text.String(),
+		Model:   model,
+		Usage: Usage{
+			PromptTokens:     prompt,
+			CompletionTokens: usage.OutputTokens,
+			TotalTokens:      prompt + usage.OutputTokens,
+		},
+		Truncated: stop == "max_tokens",
+	}, nil
 }

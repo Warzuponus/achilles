@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeMessages is a Messages API that streams the reply the test sets. It
@@ -24,6 +25,10 @@ type fakeMessages struct {
 	status int
 	// text is streamed as the answer; stop is the stop reason.
 	text, stop string
+	// overloaded answers this many requests with 529 before streaming.
+	overloaded int
+	// cut ends the stream before message_stop; midError sends an error event.
+	cut, midError bool
 }
 
 func (f *fakeMessages) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -35,12 +40,22 @@ func (f *fakeMessages) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.headers = append(f.headers, r.Header.Clone())
 	f.paths = append(f.paths, r.URL.Path)
 	status, text, stop := f.status, f.text, f.stop
+	if f.overloaded > 0 {
+		f.overloaded--
+		status = 529
+	}
+	cut, midError := f.cut, f.midError
 	f.mu.Unlock()
 
 	if status != 0 && status != http.StatusOK {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		fmt.Fprintf(w, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`)
+		return
+	}
+	if midError {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"bad\"}}\n\n")
 		return
 	}
 	if stop == "" {
@@ -57,6 +72,9 @@ func (f *fakeMessages) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	event("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`)
 	event("content_block_delta", fmt.Sprintf(`{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":%s}}`, textJSON))
 	event("content_block_stop", `{"type":"content_block_stop","index":1}`)
+	if cut {
+		return // the connection ends here, without message_stop
+	}
 	event("message_delta", fmt.Sprintf(`{"type":"message_delta","delta":{"stop_reason":%q,"stop_sequence":null},"usage":{"output_tokens":42}}`, stop))
 	event("message_stop", `{"type":"message_stop"}`)
 }
@@ -65,7 +83,9 @@ func newFakeAnthropic(t *testing.T, f *fakeMessages, o Options) *AnthropicClient
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
-	return NewAnthropic(srv.URL+"/v1", "sk-ant-test-key", "claude-test", o)
+	c := NewAnthropic(srv.URL+"/v1", "sk-ant-test-key", "claude-test", o)
+	c.sleep = func(context.Context, time.Duration) error { return nil }
+	return c
 }
 
 func TestAnthropic_Complete(t *testing.T) {
@@ -100,6 +120,9 @@ func TestAnthropic_Complete(t *testing.T) {
 	}
 	if got := f.headers[0].Get("X-Api-Key"); got != "sk-ant-test-key" {
 		t.Errorf("x-api-key = %q", got)
+	}
+	if got := f.headers[0].Get("Anthropic-Version"); got != "2023-06-01" {
+		t.Errorf("anthropic-version = %q", got)
 	}
 	body := f.bodies[0]
 	if body["model"] != "claude-test" || body["max_tokens"] != float64(anthropicDefaultMaxTokens) || body["stream"] != true {
@@ -175,9 +198,9 @@ func TestAnthropic_AuthErrorIsAnHTTPError(t *testing.T) {
 	}
 }
 
-// The SDK's own environment (ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY) must not
-// redirect the request or replace the key Achilles vetted.
-func TestAnthropic_IgnoresTheSDKEnvironment(t *testing.T) {
+// Anthropic's own environment variables (ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY,
+// ANTHROPIC_AUTH_TOKEN) must not redirect the request or add a credential.
+func TestAnthropic_IgnoresTheAnthropicEnvironment(t *testing.T) {
 	stray := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("request went to ANTHROPIC_BASE_URL: %s", r.URL.Path)
 		w.WriteHeader(http.StatusTeapot)
@@ -195,6 +218,38 @@ func TestAnthropic_IgnoresTheSDKEnvironment(t *testing.T) {
 	}
 	if got := f.headers[0].Get("Authorization"); got != "" {
 		t.Errorf("a second credential from the environment was sent: Authorization = %q", got)
+	}
+}
+
+// Overload (529) and a stream that ends early are retried; an error event that
+// is not overload is not.
+func TestAnthropic_Retries(t *testing.T) {
+	ctx := context.Background()
+	msgs := []Message{{Role: RoleUser, Content: "x"}}
+
+	f := &fakeMessages{text: "ok", overloaded: 2}
+	resp, err := newFakeAnthropic(t, f, Options{}).Complete(ctx, Request{Messages: msgs})
+	if err != nil || resp.Content != "ok" || len(f.bodies) != 3 {
+		t.Errorf("after two 529s: content %q, err %v, %d requests; want ok after 3", resp.Content, err, len(f.bodies))
+	}
+
+	f = &fakeMessages{text: "ok", overloaded: 5}
+	_, err = newFakeAnthropic(t, f, Options{MaxRetries: 1}).Complete(ctx, Request{Messages: msgs})
+	var he *HTTPError
+	if !errors.As(err, &he) || he.Status != 529 || len(f.bodies) != 2 {
+		t.Errorf("past the retry limit: err %v, %d requests; want 529 after 2", err, len(f.bodies))
+	}
+
+	f = &fakeMessages{text: "partial", cut: true}
+	_, err = newFakeAnthropic(t, f, Options{}).Complete(ctx, Request{Messages: msgs})
+	if err == nil || !strings.Contains(err.Error(), "message_stop") || len(f.bodies) != 3 {
+		t.Errorf("cut stream: err %v, %d requests; want a cut-off error after 3 tries (a partial answer is never used)", err, len(f.bodies))
+	}
+
+	f = &fakeMessages{midError: true}
+	_, err = newFakeAnthropic(t, f, Options{}).Complete(ctx, Request{Messages: msgs})
+	if err == nil || !strings.Contains(err.Error(), "invalid_request_error") || len(f.bodies) != 1 {
+		t.Errorf("error event: err %v, %d requests; want the error, not retried", err, len(f.bodies))
 	}
 }
 

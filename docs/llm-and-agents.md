@@ -25,9 +25,9 @@ achilles --ai --llm-provider openrouter --llm-model <model> /path/to/code
 | Ollama (local) | `ollama` | `http://localhost:11434/v1` | none |
 | Anthropic (experimental) | `anthropic` | `https://api.anthropic.com/v1` | required |
 
-**The `anthropic` preset uses Anthropic's Messages API natively**, through the official
-Go SDK, for any `--llm-base-url` on `api.anthropic.com`. What that changes over an
-OpenAI-compatible endpoint:
+**The `anthropic` preset uses Anthropic's Messages API natively**, with a small client
+of Achilles' own (no SDK, no new dependency), for any `--llm-base-url` on
+`api.anthropic.com`. What that changes over an OpenAI-compatible endpoint:
 
 - The JSON schema of each verdict is enforced (structured outputs), instead of asked
   for in the prompt and repaired.
@@ -40,9 +40,12 @@ OpenAI-compatible endpoint:
 - No `temperature` is sent; current Claude models fix their sampling.
 - A refusal (`stop_reason: refusal`) is an error for that finding, not an empty
   verdict.
-- The key is `ACHILLES_LLM_API_KEY`, sent as `x-api-key`. The SDK's own environment
-  (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, its config files) is ignored, so it cannot
-  redirect the key Achilles has checked.
+- Overload (529), rate limits (429, honouring `Retry-After`), server errors and a stream
+  that drops before it finishes are retried, `ACHILLES_LLM_MAX_RETRIES` times (2 by
+  default). A partial answer is never used.
+- The key is `ACHILLES_LLM_API_KEY`, sent as `x-api-key`. `ANTHROPIC_API_KEY`,
+  `ANTHROPIC_BASE_URL` and the like are not read, so they cannot redirect the key
+  Achilles has checked.
 
 It is still marked experimental: its tests run against a fake of the Messages API,
 not the live service. OpenRouter (`--llm-provider openrouter --llm-model

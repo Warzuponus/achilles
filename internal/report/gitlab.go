@@ -159,6 +159,37 @@ type glFixRef struct {
 	ID string `json:"id"`
 }
 
+// gitlabScanHeader is the scan object every GitLab security report starts with.
+func gitlabScanHeader(s model.Scan, meta GitLabMeta, scanType string) glScan {
+	version := strings.TrimPrefix(strings.TrimSpace(meta.Version), "v")
+	if version == "" {
+		version = "0.0.0"
+	}
+	tool := glTool{ID: "achilles", Name: "Achilles", URL: gitlabProjectURL, Version: version, Vendor: glVendor{Name: "Achilles"}}
+	start, end := meta.Start, meta.End
+	if end.IsZero() {
+		end = time.Now()
+	}
+	if start.IsZero() || start.After(end) {
+		start = end
+	}
+	scan := glScan{
+		Analyzer: tool, Scanner: tool, Type: scanType,
+		StartTime: start.UTC().Format("2006-01-02T15:04:05"),
+		EndTime:   end.UTC().Format("2006-01-02T15:04:05"),
+		Status:    "success",
+	}
+	// A scanner that did not run leaves the report incomplete, and the report says
+	// so in the two places the format has for it.
+	for _, t := range s.FailedTools {
+		scan.Status = "failure"
+		scan.Messages = append(scan.Messages, glMessage{
+			Level: "warn", Value: gitlabText(t, 200) + " failed to run or its output could not be read; results are incomplete",
+		})
+	}
+	return scan
+}
+
 // WriteGitLabSAST writes the findings in code as a GitLab SAST report. Credential
 // findings and dependency advisories are left out: they belong to other reports.
 func WriteGitLabSAST(w io.Writer, s model.Scan, meta GitLabMeta) error {
@@ -174,40 +205,15 @@ func WriteGitLabSecretDetection(w io.Writer, s model.Scan, meta GitLabMeta) erro
 }
 
 func writeGitLabSecurity(w io.Writer, s model.Scan, meta GitLabMeta, scanType string, include func(model.Finding) bool) error {
-	version := strings.TrimPrefix(strings.TrimSpace(meta.Version), "v")
-	if version == "" {
-		version = "0.0.0"
-	}
-	tool := glTool{ID: "achilles", Name: "Achilles", URL: gitlabProjectURL, Version: version, Vendor: glVendor{Name: "Achilles"}}
-	start, end := meta.Start, meta.End
-	if end.IsZero() {
-		end = time.Now()
-	}
-	if start.IsZero() || start.After(end) {
-		start = end
-	}
 	schemaFile := "sast-report-format.json"
 	if scanType == "secret_detection" {
 		schemaFile = "secret-detection-report-format.json"
 	}
 	doc := glReport{
-		Version: GitLabSchemaVersion,
-		Schema:  gitlabSchemaBase + schemaFile,
-		Scan: glScan{
-			Analyzer: tool, Scanner: tool, Type: scanType,
-			StartTime: start.UTC().Format("2006-01-02T15:04:05"),
-			EndTime:   end.UTC().Format("2006-01-02T15:04:05"),
-			Status:    "success",
-		},
+		Version:         GitLabSchemaVersion,
+		Schema:          gitlabSchemaBase + schemaFile,
+		Scan:            gitlabScanHeader(s, meta, scanType),
 		Vulnerabilities: []glVuln{}, // an array even when empty: null does not validate
-	}
-	// A scanner that did not run leaves the report incomplete, and the report says
-	// so in the two places the format has for it.
-	for _, t := range s.FailedTools {
-		doc.Scan.Status = "failure"
-		doc.Scan.Messages = append(doc.Scan.Messages, glMessage{
-			Level: "warn", Value: gitlabText(t, 200) + " failed to run or its output could not be read; results are incomplete",
-		})
 	}
 
 	seen := map[string]int{}

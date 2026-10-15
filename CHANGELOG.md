@@ -7,6 +7,14 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **`--gitlab-dependency-scanning`: dependency advisories in GitLab.** The GitLab SAST
+  report leaves dependency advisories out, so GitLab never showed what osv-scanner and
+  Trivy found. This writes them as a dependency scanning report
+  (`artifacts:reports:dependency_scanning`). Each one carries its package, version and
+  manifest, taken from the scanner's message, plus Trivy's fixed version as the
+  solution. An advisory that names no package is still reported, as `unknown`. Checked
+  against GitLab's published schemas 15.0.0 and 15.2.5; like the other GitLab reports,
+  not yet exercised on a GitLab instance.
 - **Claude through Anthropic's Messages API, natively.** `--llm-provider anthropic` (any
   `--llm-base-url` on `api.anthropic.com`) now talks to the Messages API directly,
   instead of through Anthropic's OpenAI-compatibility endpoint. Verdict schemas are

@@ -12,7 +12,7 @@ write a file (they compose — ask for several at once):
 | `--html-report f.html` | self-contained HTML | humans — open in a browser; findings + AI review, upgrade advice, and threat model in one page |
 | `--sarif-report f.sarif` | SARIF 2.1.0 | GitHub code scanning, other SARIF consumers |
 | `--json-report f.json` | JSON | scripts and dashboards: the whole scan in Achilles' own shape, with a `schemaVersion` and a `complete` flag |
-| `--gitlab-sast f.json`, `--gitlab-secret-detection f.json` | GitLab security reports | GitLab's security widget and vulnerability report (see [GitLab CI](ci-and-hub.md#gitlab-ci)) |
+| `--gitlab-sast f.json`, `--gitlab-secret-detection f.json`, `--gitlab-dependency-scanning f.json` | GitLab security reports | GitLab's security widget and vulnerability report (see [GitLab CI](ci-and-hub.md#gitlab-ci)) |
 | `--gitlab-code-quality f.json` | GitLab Code Quality | findings in the merge request widget on every GitLab tier |
 | `--junit f.xml` | JUnit XML | CI test panels |
 | `--markdown f.md` | Markdown table | pasting into a PR/issue |

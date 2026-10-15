@@ -150,6 +150,7 @@ achilles:
       achilles
       --gitlab-sast gl-sast-report.json
       --gitlab-secret-detection gl-secret-detection-report.json
+      --gitlab-dependency-scanning gl-dependency-scanning-report.json
       --gitlab-code-quality gl-code-quality-report.json
       --fail-on high
       .
@@ -158,6 +159,7 @@ achilles:
     reports:
       sast: gl-sast-report.json
       secret_detection: gl-secret-detection-report.json
+      dependency_scanning: gl-dependency-scanning-report.json
       codequality: gl-code-quality-report.json
 ```
 
@@ -165,6 +167,7 @@ achilles:
 |------|---------------|-------|-----------------------|
 | `--gitlab-sast` | `artifacts:reports:sast` | findings in code | merge request security widget, pipeline Security tab, vulnerability report (Ultimate) |
 | `--gitlab-secret-detection` | `artifacts:reports:secret_detection` | credential findings, never the matched text | the same places (Ultimate) |
+| `--gitlab-dependency-scanning` | `artifacts:reports:dependency_scanning` | dependency advisories (osv-scanner, Trivy, govulncheck), each with its package, version and manifest; Trivy's fixed version as the solution | the same places (Ultimate) |
 | `--gitlab-code-quality` | `artifacts:reports:codequality` | every finding, credential messages masked | merge request widget and diff, on every tier |
 
 What to know:

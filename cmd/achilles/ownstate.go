@@ -36,7 +36,7 @@ func ownOutputs(o *options, absTarget string) (dirs, files map[string]bool) {
 		add(o.reportDir, true)
 	}
 	for _, p := range []string{o.sarifReport, o.jsonReport, o.junitOut, o.markdownOut, o.htmlReport, o.diagnostics,
-		o.sbomOut, o.threatModelOut, o.gitlabSAST, o.gitlabSecrets, o.gitlabCodeQuality, o.writeBl} {
+		o.sbomOut, o.threatModelOut, o.gitlabSAST, o.gitlabSecrets, o.gitlabDeps, o.gitlabCodeQuality, o.writeBl} {
 		add(p, false)
 	}
 	if o.sarifOut != "" {

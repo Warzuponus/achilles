@@ -17,7 +17,7 @@ Without `cosign` it says the signature was not checked; set
 curl -fsSLO https://raw.githubusercontent.com/Warzuponus/achilles/main/scripts/install.sh
 less install.sh                                   # read it first
 sh install.sh                                     # latest -> ~/.local/bin
-VERSION=v0.1.0 INSTALL_DIR=/usr/local/bin sh install.sh
+VERSION=v0.2.0 INSTALL_DIR=/usr/local/bin sh install.sh
 ```
 
 **Release binary** — download `achilles_<version>_<os>_<arch>.tar.gz` (`.zip` on
@@ -30,7 +30,7 @@ Windows) and `checksums.txt` from the
 (see [Running in containers](containers.md)).
 
 **`go install`** — `go install github.com/Warzuponus/achilles/cmd/achilles@latest`
-(or `@v0.1.0`; `achilles --version` reports the module version).
+(or `@v0.2.0`; `achilles --version` reports the module version).
 
 **From source** — `git clone https://github.com/Warzuponus/achilles.git && cd achilles && make build`
 (binary at `bin/achilles`). *Homebrew and Scoop packages are planned; they need a tap

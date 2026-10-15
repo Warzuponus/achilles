@@ -36,7 +36,7 @@ to `.github/workflows/`:
 permissions: { contents: read, issues: write }
 steps:
   - uses: actions/checkout@v4
-  - uses: Warzuponus/achilles@v0.1.0
+  - uses: Warzuponus/achilles@v0.2.0
     with:
       llm-api-key: ${{ secrets.LLM_API_KEY }}
       llm-provider: openrouter     # or openai | ollama
@@ -110,9 +110,10 @@ yet? `make run` feeds a sample SARIF file through the normalize and report steps
 
 ### Stable and experimental
 
-**Stable in v0.1.0:** the `achilles` CLI, the five default scanners, `--ai` (review
-plus adversarial judge), the HTML, Markdown and SARIF reports, baseline and diff
-gating, the GitHub Action, issue filing, `achilles tools install` and `achilles doctor`.
+**Stable in v0.2.0:** the `achilles` CLI, the five default scanners and the built-in
+rules, `--ai` (review plus adversarial judge), the HTML, Markdown and SARIF reports,
+baseline and diff gating, inline suppressions (`achilles:ignore`), the GitHub Action,
+issue filing, `achilles init`, `achilles tools install` and `achilles doctor`.
 
 **Experimental** (they work and are tested, but have had less real-world use, and
 their flags or behavior may change): `--fix-pr`, `--deep-verify`, `--llm-samples`,

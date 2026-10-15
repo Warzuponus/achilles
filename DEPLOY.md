@@ -120,7 +120,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }        # for --diff against the base ref
-      - uses: Warzuponus/achilles@v0.1.0
+      - uses: Warzuponus/achilles@v0.2.0
         with:
           fail-on: high
           upload-sarif: "true"

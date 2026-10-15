@@ -34,7 +34,7 @@ jobs:
         with:
           persist-credentials: false # no step pushes with git; keep the token out of .git/config
           fetch-depth: 0
-      - uses: Warzuponus/achilles@v0.1.0
+      - uses: Warzuponus/achilles@v0.2.0
         with:
           llm-api-key: ${{ secrets.LLM_API_KEY }}
           llm-provider: openrouter

@@ -9,7 +9,7 @@ branding:
 #   permissions: { contents: read, issues: write }
 #   steps:
 #     - uses: actions/checkout@v4
-#     - uses: Warzuponus/achilles@v0.1.0
+#     - uses: Warzuponus/achilles@v0.2.0
 #       with:
 #         llm-api-key: ${{ secrets.LLM_API_KEY }}
 #         llm-provider: openrouter
@@ -34,7 +34,7 @@ inputs:
     default: "oss"
   version:
     description: >-
-      Achilles release to run: a tag such as v0.1.0, `latest`, or `source` (build from
+      Achilles release to run: a tag such as v0.2.0, `latest`, or `source` (build from
       this action's checkout with Go; for testing the action itself). Empty uses the
       tag you pinned the action at. If you pin the action to a commit SHA, set this
       to the matching release tag, or the latest release is installed.
@@ -192,7 +192,7 @@ runs:
             # Pinned to a commit or a branch: there is no release to match it to, so
             # the binary would silently differ from the action. Say so.
             version="latest"
-            echo "::notice::The action is pinned at '${ACTION_REF:-unknown}', which is not a release tag, so the latest Achilles release is installed. Set the 'version' input (for example v0.1.0) to pin the binary as well."
+            echo "::notice::The action is pinned at '${ACTION_REF:-unknown}', which is not a release tag, so the latest Achilles release is installed. Set the 'version' input (for example v0.2.0) to pin the binary as well."
           fi
         fi
         if [ "$version" = "source" ]; then

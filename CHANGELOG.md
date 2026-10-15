@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-14
+
+Achilles set up in one step (`achilles init`), 62 built-in rules that load in every
+licence mode, inline suppressions, an MCP server, secret scanning of git history, and
+fixes to fix verification, gosec on Go 1.27, duplicate findings and scans that could
+not run.
+
 ### Added
 - **Files marked as generated are left out like vendored ones.** A file whose header
   says a tool wrote it (Go's `// Code generated ... DO NOT EDIT.`, or `@generated` in

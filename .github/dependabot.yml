@@ -22,3 +22,12 @@ updates:
     cooldown: { default-days: 7 } # let a new release age a week before proposing it
     groups:
       docker: { patterns: ["*"] }
+    # Runtimes two tools break on (Tier-2 verify, 2026-10-15): Railroader on Ruby 3,
+    # SpotBugs 4.9.3 on Java 25. Digest updates of the pinned versions still come.
+    # PR CI does not build tool images; run Tier-2 verify on a docker update branch
+    # (Actions -> Tier-2 verify -> Run workflow) before merging it.
+    ignore:
+      - dependency-name: ruby
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: eclipse-temurin
+        update-types: ["version-update:semver-major"]

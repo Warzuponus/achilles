@@ -90,6 +90,14 @@ rules:
           - pattern: $C.exec_query($Q, ...)
           - pattern: $C.select_all($Q, ...)
           - pattern: $C.select_value($Q, ...)
+          - pattern: $M.select($Q, ...)
+          - pattern: $M.pluck($Q, ...)
+          - pattern: $M.from($Q, ...)
+          - pattern: $M.reorder($Q, ...)
+          - pattern: $M.not($Q, ...)
+          - pattern: $M.exists?($Q, ...)
+          - pattern: $M.update_all($Q, ...)
+          - pattern: $M.delete_all($Q, ...)
       # An interpolation converted to a number (#{id.to_i}) cannot change the query.
       - metavariable-regex:
           metavariable: $Q
@@ -353,6 +361,33 @@ rules:
       # A literal is the program's own data.
       - pattern-not: Marshal.load("...")
 
+  - id: achilles.ruby.command-string-building
+    languages: [ruby]
+    severity: WARNING
+    message: >
+      A shell command is built by string interpolation (system or exec with one
+      string, IO.popen, Open3). If any interpolated value comes from outside, even
+      through another method, it can run other commands. Pass the program and its
+      arguments separately, which starts no shell.
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)"]
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: system($CMD)
+          - pattern: exec($CMD)
+          - pattern: spawn($CMD)
+          - pattern: Kernel.system($CMD)
+          - pattern: IO.popen($CMD, ...)
+          - pattern: Open3.capture2($CMD, ...)
+          - pattern: Open3.capture2e($CMD, ...)
+          - pattern: Open3.capture3($CMD, ...)
+          - pattern: Open3.popen3($CMD, ...)
+      # A number, or a value quoted for the shell, cannot add a command.
+      - metavariable-regex:
+          metavariable: $CMD
+          regex: '(?s)^"[^"]*#\{(?![^}]*\.to_[if]\s*\})(?!\s*Shellwords\.(shell)?escape\()(?![^}]*\.shellescape\s*\})'
+
   - id: achilles.ruby.mass-assignment
     languages: [ruby]
     severity: ERROR
@@ -367,6 +402,10 @@ rules:
       - pattern: params.permit!
       - pattern: params.require(...).permit!
       - pattern: params[...].permit!
+      # to_unsafe_h hands over every parameter the same way (RailsGoat's admin).
+      - pattern: params.to_unsafe_h
+      - pattern: params.require(...).to_unsafe_h
+      - pattern: params[...].to_unsafe_h
 
   - id: achilles.ruby.tls-verification-disabled
     languages: [ruby]

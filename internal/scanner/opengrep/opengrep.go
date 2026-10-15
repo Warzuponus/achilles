@@ -80,6 +80,10 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 			// here temp) rules-dir path — otherwise ruleIds, and the
 			// fingerprints derived from them, would vary by machine and by run.
 			"--no-rewrite-rule-ids",
+			// Follow taint from one function to another in the same file. Request
+			// data handed to a helper (WebGoat's SQL lessons, Zip Slip, SSRF) is
+			// otherwise lost at the call. About 55% more time on WebGoat.
+			"--taint-intrafile",
 			"--sarif-output={out}/results.sarif",
 			"-f", "{rules}",
 			"{src}",

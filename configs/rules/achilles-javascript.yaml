@@ -276,12 +276,33 @@ rules:
       - patterns:
           - pattern: new Function(..., $BODY)
           - pattern-not: new Function(..., "...")
+          - pattern-not: Function(..., "...")
       - patterns:
           - pattern-either:
               - pattern: vm.runInNewContext($CODE, ...)
               - pattern: vm.runInThisContext($CODE, ...)
               - pattern: vm.runInContext($CODE, ...)
           - pattern-not: vm.$RUN("...", ...)
+
+  - id: achilles.javascript.nosql-where-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      A MongoDB $where clause is built from a variable. $where runs its string as
+      JavaScript on the database server, so input in it can read or change any
+      document, or tie up the server. Use ordinary query operators ($eq, $gt) with
+      the values as data instead.
+    metadata:
+      cwe: ["CWE-943: Improper Neutralization of Special Elements in Data Query Logic"]
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: '{..., $where: $V, ...}'
+          - pattern: '{..., "$where": $V, ...}'
+      # A fixed string or function is the application's own query.
+      - pattern-not: '{..., $where: "...", ...}'
+      - pattern-not: '{..., "$where": "...", ...}'
+      - pattern-not: '{..., $where: function (...) { ... }, ...}'
 
   - id: achilles.javascript.unsafe-deserialization
     languages: [javascript, typescript]

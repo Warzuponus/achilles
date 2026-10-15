@@ -22,6 +22,22 @@ class UsersController < ApplicationController
     User.order("created_at DESC")
   end
 
+  # Taint is lost across files (the file object comes from a controller), so
+  # the interpolation itself is flagged (RailsGoat's Benefits.make_backup).
+  def backup(full_file_name, data_path)
+    # ruleid: achilles.ruby.command-string-building
+    system("cp #{full_file_name} #{data_path}/bak")
+    # ok: achilles.ruby.command-string-building
+    system("cp", full_file_name, data_path)
+    # ok: achilles.ruby.command-string-building
+    system("rm -f /tmp/cache-#{id.to_i}")
+  end
+
+  def hits_by_ip(ip, col)
+    # ruleid: achilles.ruby.sql-string-building
+    Analytics.select("#{col}").where(ip_address: ip)
+  end
+
   def report(column)
     # ruleid: achilles.ruby.sql-string-building
     Report.find_by_sql("SELECT #{column} FROM reports")
@@ -31,17 +47,17 @@ class UsersController < ApplicationController
 
   def ping
     host = params[:host]
-    # ruleid: achilles.ruby.command-injection
+    # ruleid: achilles.ruby.command-injection, achilles.ruby.command-string-building
     system("ping -c 1 #{host}")
     # ruleid: achilles.ruby.command-injection
     out = `nslookup #{host}`
-    # ruleid: achilles.ruby.command-injection
+    # ruleid: achilles.ruby.command-injection, achilles.ruby.command-string-building
     Open3.capture2("dig #{params[:domain]}")
     # ruleid: achilles.ruby.command-injection
     open(params[:file]).read
     # ok: achilles.ruby.command-injection
     system("ping", "-c", "1", host)
-    # ok: achilles.ruby.command-injection
+    # ok: achilles.ruby.command-injection, achilles.ruby.command-string-building
     system("ping -c 1 #{Shellwords.escape(host)}")
     # ok: achilles.ruby.command-injection
     system("uptime")
@@ -118,6 +134,8 @@ class UsersController < ApplicationController
     current_user.update(params.require(:user).permit!)
     # ok: achilles.ruby.mass-assignment
     current_user.update(params.require(:user).permit(:name, :email))
+    # ruleid: achilles.ruby.mass-assignment
+    current_user.update(params[:user].to_unsafe_h)
   end
 end
 

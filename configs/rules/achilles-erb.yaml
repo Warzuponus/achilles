@@ -1,0 +1,24 @@
+# Achilles rules for ERB templates (Rails views) - original, written for this
+# project (Apache-2.0), so they load in every license mode. Opengrep has no ERB
+# parser, so these are generic-mode rules limited to *.erb files. Tested by
+# internal/config/testdata/rules/achilles-erb.erb (opengrep --test).
+# Keep this file ASCII-only: Opengrep reads rule files as ASCII.
+rules:
+  - id: achilles.ruby.erb-unescaped-output
+    languages: [generic]
+    severity: WARNING
+    message: >
+      An ERB template writes a value without HTML escaping (raw, html_safe or the
+      double-equals tag), so a script in it runs in the user's browser. Let ERB
+      escape it, or pass it through sanitize if it must contain markup.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    paths:
+      include: ["*.erb"]
+    # Only a value (a variable, attribute or method chain), not a literal: lines
+    # that mark the template's own markup as safe are left alone.
+    pattern-either:
+      - pattern-regex: <%=\s*@?[A-Za-z_][\w.\[\]:@?]*\.html_safe\s*-?%>
+      - pattern-regex: <%=\s*raw[\s(]+@?[A-Za-z_][\w.\[\]:@?]*\s*\)?\s*-?%>
+      - pattern-regex: <%==\s*@?[A-Za-z_][\w.\[\]:@?]*\s*-?%>

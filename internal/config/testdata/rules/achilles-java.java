@@ -52,6 +52,11 @@ public class Demo {
         st.execute("DROP TABLE " + table);
         // ok: achilles.java.sql-string-building
         st.execute("SELECT 1");
+        String query = "SELECT * FROM user_data WHERE last_name = '" + table + "'";
+        // ruleid: achilles.java.sql-string-building
+        st.executeQuery(query);
+        // ok: achilles.java.sql-string-building
+        PreparedStatement split = conn.prepareStatement("SELECT * FROM t WHERE a = ? AND b =" + " ?");
     }
 
     public void command(HttpServletRequest request) throws Exception {
@@ -78,6 +83,13 @@ public class Demo {
         u.openStream();
         // ok: achilles.java.ssrf
         URL fixed = new URL("https://api.example.com/items");
+        // Parsing a URI, or using it as a redirect target, makes no request.
+        // ok: achilles.java.ssrf
+        URI parsed = new URI(request.getParameter("next"));
+        // ok: achilles.java.ssrf
+        URI self = URI.create(request.getRequestURL().toString());
+        // ruleid: achilles.java.ssrf
+        HttpRequest req = HttpRequest.newBuilder(URI.create(request.getParameter("feed"))).build();
     }
 
     public Object read(InputStream in) throws Exception {

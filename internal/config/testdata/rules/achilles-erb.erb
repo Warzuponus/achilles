@@ -1,0 +1,19 @@
+<%# Tests for configs/rules/achilles-erb.yaml (opengrep --test). Never rendered. The
+    annotations are hash comments on their own lines: inside an ERB comment tag,
+    Opengrep would read the closing tag as part of the rule id. %>
+<header>
+  # ruleid: achilles.ruby.erb-unescaped-output
+  <span><%= current_user.first_name.html_safe %></span>
+  # ruleid: achilles.ruby.erb-unescaped-output
+  <div><%= raw @comment.body %></div>
+  # ruleid: achilles.ruby.erb-unescaped-output
+  <p><%== params[:q] %></p>
+  # ok: achilles.ruby.erb-unescaped-output
+  <span><%= current_user.first_name %></span>
+  # ok: achilles.ruby.erb-unescaped-output
+  <%= '<i class="bi bi-check"></i>'.html_safe %>
+  # ok: achilles.ruby.erb-unescaped-output
+  <%= u.admin ? '<i class="bi bi-check"></i>'.html_safe : '' %>
+  # ok: achilles.ruby.erb-unescaped-output
+  <div><%= sanitize @comment.body %></div>
+</header>

@@ -32,7 +32,7 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 			return err
 		}
 	}
-	if o.gitlabSAST != "" || o.gitlabSecrets != "" {
+	if o.gitlabSAST != "" || o.gitlabSecrets != "" || o.gitlabDeps != "" {
 		meta := report.GitLabMeta{Version: currentVersion().Version, Start: o.startedAt, End: time.Now(), Commit: scannedCommit(o)}
 		if o.gitlabSAST != "" {
 			if err := writeToFile(o.gitlabSAST, func(w io.Writer) error { return report.WriteGitLabSAST(w, scan, meta) }); err != nil {
@@ -41,6 +41,11 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 		}
 		if o.gitlabSecrets != "" {
 			if err := writeToFile(o.gitlabSecrets, func(w io.Writer) error { return report.WriteGitLabSecretDetection(w, scan, meta) }); err != nil {
+				return err
+			}
+		}
+		if o.gitlabDeps != "" {
+			if err := writeToFile(o.gitlabDeps, func(w io.Writer) error { return report.WriteGitLabDependencyScanning(w, scan, meta) }); err != nil {
 				return err
 			}
 		}

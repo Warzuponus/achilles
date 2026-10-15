@@ -61,6 +61,7 @@ type options struct {
 	jsonReport        string
 	gitlabSAST        string    // --gitlab-sast: GitLab SAST security report
 	gitlabSecrets     string    // --gitlab-secret-detection: GitLab secret detection security report
+	gitlabDeps        string    // --gitlab-dependency-scanning: GitLab dependency scanning security report
 	gitlabCodeQuality string    // --gitlab-code-quality: GitLab Code Quality report
 	startedAt         time.Time // when this run began; GitLab reports state the scan's start and end
 	junitOut          string
@@ -174,6 +175,7 @@ func defineFlags() (*flag.FlagSet, *options) {
 	fs.StringVar(&o.jsonReport, "json-report", "", "write the scan as one JSON document (findings, verdicts, dismissed findings, coverage) to this file")
 	fs.StringVar(&o.gitlabSAST, "gitlab-sast", "", "write a GitLab SAST report to this file (conventionally gl-sast-report.json); publish it with artifacts:reports:sast")
 	fs.StringVar(&o.gitlabSecrets, "gitlab-secret-detection", "", "write a GitLab secret detection report to this file (gl-secret-detection-report.json; artifacts:reports:secret_detection)")
+	fs.StringVar(&o.gitlabDeps, "gitlab-dependency-scanning", "", "write the dependency advisories as a GitLab dependency scanning report to this file (gl-dependency-scanning-report.json; artifacts:reports:dependency_scanning)")
 	fs.StringVar(&o.gitlabCodeQuality, "gitlab-code-quality", "", "write a GitLab Code Quality report to this file (gl-code-quality-report.json; artifacts:reports:codequality). Shown in the merge request widget on every GitLab tier")
 	fs.StringVar(&o.junitOut, "junit", "", "write a JUnit XML report to this file")
 	fs.StringVar(&o.markdownOut, "markdown", "", "write a Markdown summary to this file")

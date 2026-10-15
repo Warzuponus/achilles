@@ -19,6 +19,7 @@ achilles:
       achilles
       --gitlab-sast gl-sast-report.json
       --gitlab-secret-detection gl-secret-detection-report.json
+      --gitlab-dependency-scanning gl-dependency-scanning-report.json
       --gitlab-code-quality gl-code-quality-report.json
       --html-report achilles-report.html
       --fail-on high
@@ -32,6 +33,7 @@ achilles:
     reports:
       sast: gl-sast-report.json
       secret_detection: gl-secret-detection-report.json
+      dependency_scanning: gl-dependency-scanning-report.json
       codequality: gl-code-quality-report.json
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"

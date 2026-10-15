@@ -4,5 +4,7 @@ function calc(expr) {
   const a = eval(expr);
   // ok: achilles.javascript.dangerous-eval
   const b = JSON.parse(expr);
-  return [a, b];
+  // ok: achilles.javascript.dangerous-eval
+  const crypto = eval("require('crypto')");
+  return [a, b, crypto];
 }

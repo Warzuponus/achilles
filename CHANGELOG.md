@@ -6,6 +6,27 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Taint is followed between functions in the same file.** Opengrep runs with
+  `--taint-intrafile`, so request data handed to a helper that builds and runs a query,
+  a file path or a URL is found: on OWASP WebGoat, ten SQL-injection lessons, Zip Slip
+  and SSRF that were missed before. It costs time (18s to 28s on WebGoat; about 2.5x on
+  a 98,000-file tree).
+- **ERB templates are scanned.** A new rule reports `raw`, `html_safe` and `<%==` on a
+  value in a Rails view.
+- **More cases the rules catch**, each found missing on a real application: SQL built in
+  a variable and run later (Java, Django `objects.raw()`), ActiveRecord `select` and the
+  other query methods in the string-building rule, shell commands built by interpolation
+  in Ruby, `to_unsafe_h` as mass assignment, and MongoDB `$where` clauses built from
+  input.
+
+### Fixed
+- **False positives found by running the rules on five deliberately vulnerable
+  applications** (RailsGoat, DVWA, NodeGoat, PyGoat, WebGoat; 144 findings judged by
+  hand, 136 real, 4 wrong, down from 18 wrong). `java.ssrf` treated building a `URI` as
+  a request; `eval` and `Function` of a string literal, and a SQL statement made of two
+  literals, were reported. See `docs/benchmarking.md`.
+
 ## [0.2.0] - 2026-10-14
 
 Achilles set up in one step (`achilles init`), 62 built-in rules that load in every

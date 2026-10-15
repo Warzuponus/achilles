@@ -51,6 +51,25 @@ rules:
       - pattern: $M.objects.raw(f"...{$X}...", ...)
       - pattern: $M.objects.raw("..." % $X, ...)
       - pattern: $M.objects.raw("..." + $X, ...)
+      # Built first, then passed (pygoat builds the query in a variable).
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $Q = f"...{$X}..."
+                  ...
+              - pattern-inside: |
+                  $Q = "..." + $X
+                  ...
+              - pattern-inside: |
+                  $Q = "..." + $X + $Y
+                  ...
+              - pattern-inside: |
+                  $Q = "..." % $X
+                  ...
+              - pattern-inside: |
+                  $Q = "...".format(...)
+                  ...
+          - pattern: $M.objects.raw($Q, ...)
       - pattern: $M.objects.extra(where=[..., f"...{$X}...", ...], ...)
       - pattern: sqlalchemy.text(f"...{$X}...")
       - pattern: text(f"...{$X}...")

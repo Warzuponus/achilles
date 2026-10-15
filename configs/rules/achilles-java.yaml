@@ -56,12 +56,37 @@ rules:
     metadata:
       cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
       category: security
-    pattern-either:
-      - pattern: (java.sql.Statement $S).$EXEC("..." + $X, ...)
-      - pattern: (java.sql.Statement $S).$EXEC("..." + $X + $Y, ...)
-      - pattern: (java.sql.Statement $S).$EXEC(String.format(...), ...)
-      - pattern: (java.sql.Connection $C).prepareStatement("..." + $X, ...)
-      - pattern: (java.sql.Connection $C).prepareStatement("..." + $X + $Y, ...)
+    patterns:
+      - pattern-either:
+          - pattern: (java.sql.Statement $S).$EXEC("..." + $X, ...)
+          - pattern: (java.sql.Statement $S).$EXEC("..." + $X + $Y, ...)
+          - pattern: (java.sql.Statement $S).$EXEC(String.format(...), ...)
+          - pattern: (java.sql.Connection $C).prepareStatement("..." + $X, ...)
+          - pattern: (java.sql.Connection $C).prepareStatement("..." + $X + $Y, ...)
+          # Built first, then executed (WebGoat's lessons build the query in a variable).
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      $Q = "..." + $X;
+                      ...
+                  - pattern-inside: |
+                      $T $Q = "..." + $X;
+                      ...
+                  - pattern-inside: |
+                      $Q = "..." + $X + $Y;
+                      ...
+                  - pattern-inside: |
+                      $T $Q = "..." + $X + $Y;
+                      ...
+                  - pattern-inside: |
+                      $T $Q = String.format(...);
+                      ...
+              - pattern-either:
+                  - pattern: (java.sql.Statement $S).$EXEC($Q, ...)
+                  - pattern: (java.sql.Connection $C).prepareStatement($Q, ...)
+      # Literals joined together are one constant string.
+      - pattern-not: (java.sql.Connection $C).prepareStatement("..." + "...", ...)
+      - pattern-not: (java.sql.Statement $S).$EXEC("..." + "...", ...)
 
   - id: achilles.java.command-injection
     mode: taint
@@ -153,10 +178,18 @@ rules:
     pattern-sinks:
       - patterns:
           - pattern-either:
+              # Where a request is made, not where a URI is built: WebGoat builds
+              # URIs from input to parse them and to set Location headers, and
+              # none of those fetch anything.
               - pattern: new URL($U)
-              - pattern: URI.create($U)
-              - pattern: new URI($U)
               - pattern: (RestTemplate $RT).$CALL($U, ...)
+              - pattern: HttpRequest.newBuilder($U)
+              - pattern: (HttpRequest.Builder $B).uri($U)
+              - pattern: WebClient.create($U)
+              - pattern: Jsoup.connect($U)
+              - pattern: new HttpGet($U)
+              - pattern: new HttpPost($U)
+              - pattern: (Client $C).target($U)
           - focus-metavariable: $U
 
   - id: achilles.java.unsafe-deserialization

@@ -206,6 +206,70 @@ This is precision only on code like this: no Ruby, PHP or Java application was i
 the set, and a module cache has little web-request handling, so the taint rules
 were barely exercised. It says nothing about recall.
 
+## The built-in rules on deliberately vulnerable applications
+
+The module cache above says little about web code. For that, the built-in rules
+were run on their own, with Opengrep's intra-file taint on as Achilles runs it, over
+five public training applications, shallow clones of their default branches on
+2026-10-14:
+
+| Application | Language | Commit |
+|---|---|---|
+| [OWASP RailsGoat](https://github.com/OWASP/railsgoat) | Ruby on Rails | `f5951f1` |
+| [DVWA](https://github.com/digininja/DVWA) | PHP | `068d974` |
+| [OWASP NodeGoat](https://github.com/OWASP/NodeGoat) | Node.js | `c5cb68a` |
+| [PyGoat](https://github.com/adeyosemanputra/pygoat) | Python (Django, Flask) | `19d17cc` |
+| [OWASP WebGoat](https://github.com/WebGoat/WebGoat) | Java (Spring) | `e7b1313` |
+
+Every finding was read and judged by hand: a real flaw in the application, wrong
+(the rule's claim does not hold), or in a vendored minified library or a test.
+
+| | First run | After the fixes below |
+|---|---|---|
+| Findings | 134 | 144 |
+| Real flaws | 112 | 136 |
+| Wrong | 18 | 4 |
+| In vendored minified code or tests | 4 | 4 |
+
+The four still wrong: DVWA's "impossible" command-injection level, which validates
+each octet of the address in branches the rule cannot follow (2); a DVWA page that
+looks a file up in its own table by the requested key; and an `api_key` in a comment
+in a vendored JavaScript gallery in RailsGoat.
+
+What the first run got wrong or missed, and what changed:
+
+- `java.ssrf` treated building a `URI` as making a request. WebGoat builds URIs from
+  input to parse them and to set `Location` headers; 11 of its 12 findings were
+  that. The sinks are now the calls that fetch (`new URL`, `HttpRequest`,
+  `RestTemplate`, `WebClient`, Jsoup, Apache HttpClient, JAX-RS).
+- WebGoat's SQL lessons pass the request parameter to a helper that builds and runs
+  the query, and taint stopped at the call. Achilles now runs Opengrep with
+  `--taint-intrafile`, which follows taint between functions in the same file: ten
+  SQL-injection lessons, Zip Slip and the SSRF lesson were found that were not
+  before. It costs time: 18s to 28s on WebGoat, and 192s to 481s on the 98,048-file
+  module cache.
+- Queries built in a variable and run later (WebGoat, PyGoat's `objects.raw()`), a
+  RailsGoat `select("#{col}")`, a shell command interpolated in a Rails model from a
+  value passed in by a controller, `params[:user].to_unsafe_h`, and NodeGoat's
+  MongoDB `$where` were all missed; each now has a rule or pattern.
+- Views were not scanned at all. An ERB rule now reports `raw`, `html_safe` and
+  `<%==` on a value (RailsGoat's annotated header XSS and cookie XSS).
+- `eval("...")` and `Function("...")` of a string literal, and a `prepareStatement`
+  of two literals joined, were reported.
+
+Still missed, and why: DVWA builds its XSS and file-inclusion output in one file and
+echoes or includes it in another, and the rules follow taint within a file only.
+DVWA's medium SQL-injection level escapes the input with `mysqli_real_escape_string`
+but uses it unquoted, and the rule takes the escape as a fix. Its high level reads
+the input from the session. RailsGoat's DOM XSS lives in inline scripts in ERB
+templates. Business-logic flaws (access control, IDOR, CSRF, password reset logic),
+ReDoS and vulnerable dependencies are for the AI review, the dependency scanners or
+nobody: no pattern rule finds them.
+
+None of these applications has a complete list of its flaws in a form that can be
+scored, so this gives no recall figure. It shows what the rules report on real
+application code, and that what they report is almost always right.
+
 ## External targets
 
 Point the benchmark at pinned commits of public intentionally-vulnerable apps (OWASP

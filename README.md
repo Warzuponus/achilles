@@ -132,7 +132,7 @@ report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/
   [SECURITY.md](SECURITY.md).
 - **Coverage depends on the scanners.** The default set covers Go, dependencies, IaC
   and secrets well. Code-level coverage for Python, JavaScript, Java, Ruby and PHP comes
-  mostly from Opengrep rules: Achilles ships about 60 of its own for Python,
+  mostly from Opengrep rules: Achilles ships about 65 of its own for Python,
   JavaScript and TypeScript, Java, Ruby, PHP and credentials (Apache-2.0, loaded in
   every mode), and `achilles tools install` adds the community rules (a Commons Clause
   licence applies; they are skipped under `--mode commercial`, see

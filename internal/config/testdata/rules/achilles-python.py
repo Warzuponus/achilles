@@ -41,6 +41,12 @@ def orm(User, term):
     User.objects.raw(f"SELECT * FROM app_user WHERE name = '{term}'")
     # ok: achilles.python.sql-injection-orm-raw
     User.objects.raw("SELECT * FROM app_user WHERE name = %s", [term])
+    sql_query = "SELECT * FROM app_user WHERE name='" + term + "' AND active=1"
+    # ruleid: achilles.python.sql-injection-orm-raw
+    User.objects.raw(sql_query)
+    fixed_query = "SELECT * FROM app_user WHERE active = 1"
+    # ok: achilles.python.sql-injection-orm-raw
+    User.objects.raw(fixed_query)
 
 
 def commands(host):

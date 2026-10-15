@@ -13,7 +13,10 @@ rules:
     metadata:
       cwe: ["CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (Eval Injection)"]
       category: security
-    pattern: eval(...)
+    patterns:
+      - pattern: eval(...)
+      # A string literal is the program's own code.
+      - pattern-not: eval("...", ...)
 
   - id: achilles.python.subprocess-shell-true
     languages: [python]
@@ -36,4 +39,8 @@ rules:
     metadata:
       cwe: ["CWE-95: Eval Injection"]
       category: security
-    pattern: eval(...)
+    patterns:
+      - pattern: eval(...)
+      # A string literal is the program's own code (DVWA evaluates a constant
+      # require() call this way).
+      - pattern-not: eval("...")

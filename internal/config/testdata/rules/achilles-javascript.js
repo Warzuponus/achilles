@@ -149,10 +149,21 @@ function compile(src) {
   vm.runInNewContext(src, {});
   // ok: achilles.javascript.code-injection
   const g = new Function("x", "return x * 2");
-  return [f, g];
+  // ok: achilles.javascript.code-injection
+  const root = Function("return this")();
+  return [f, g, root];
 }
 
 app.post("/profile", (req, res) => {
+  // NodeGoat's allocations: input in a $where clause runs on the database.
+  // ruleid: achilles.javascript.nosql-where-injection
+  allocations.find({ $where: `this.userId == ${userId} && this.stocks > '${threshold}'` });
+  // ruleid: achilles.javascript.nosql-where-injection
+  allocations.find({ "$where": "this.userId == '" + userId + "'" });
+  // ok: achilles.javascript.nosql-where-injection
+  allocations.find({ $where: "this.stocks > 0" });
+  // ok: achilles.javascript.nosql-where-injection
+  allocations.find({ userId: userId, stocks: { $gt: threshold } });
   // ruleid: achilles.javascript.unsafe-deserialization
   const profile = serialize.unserialize(req.cookies.profile);
   // ok: achilles.javascript.unsafe-deserialization

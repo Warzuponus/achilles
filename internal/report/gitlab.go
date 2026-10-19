@@ -114,8 +114,30 @@ type glVuln struct {
 	Solution    string              `json:"solution,omitempty"`
 	Location    glLocation          `json:"location"`
 	Identifiers []glIdentifier      `json:"identifiers"`
+	Tracking    *glTracking         `json:"tracking,omitempty"`
 	Flags       []glFlag            `json:"flags,omitempty"`
 	Details     map[string]glDetail `json:"details,omitempty"`
+}
+
+// glTracking lets GitLab follow a vulnerability as the code around it moves, so a
+// finding that shifts lines keeps its history (status, comments, issue) instead of
+// being closed and reported again. GitLab uses it on Ultimate, where the
+// vulnerability report lives.
+type glTracking struct {
+	Type  string           `json:"type"`
+	Items []glTrackingItem `json:"items"`
+}
+
+type glTrackingItem struct {
+	File       string        `json:"file,omitempty"`
+	StartLine  int           `json:"start_line,omitempty"`
+	EndLine    int           `json:"end_line,omitempty"`
+	Signatures []glSignature `json:"signatures"`
+}
+
+type glSignature struct {
+	Algorithm string `json:"algorithm"`
+	Value     string `json:"value"`
 }
 
 type glLocation struct {
@@ -217,11 +239,13 @@ func writeGitLabSecurity(w io.Writer, s model.Scan, meta GitLabMeta, scanType st
 	}
 
 	seen := map[string]int{}
+	tracked := map[string]int{}
 	for _, f := range s.Findings {
 		if f.Shadow || !include(f) {
 			continue
 		}
 		v := gitlabVuln(f, seen)
+		v.Tracking = gitlabTracking(f, v.Location, tracked)
 		if scanType == "secret_detection" {
 			// A finding made in the history names its own commit; one made in the
 			// files names the commit that was scanned.
@@ -350,6 +374,31 @@ func gitlabRemediation(f model.Finding, id string) (glRemediation, bool) {
 // every run over unchanged code. It has the shape of a UUID, as the schema
 // recommends, in the custom (version 8) layout: the bits are a SHA-256, not a
 // timestamp or a namespace hash.
+// gitlabTracking gives the vulnerability a signature that does not depend on its
+// line: Achilles' fingerprint, which hashes the matched code (see
+// model.ComputeFingerprint, or the scanner's own line-independent fingerprint),
+// with the tool, rule and file. A second identical match in the same file gets
+// its own signature by occurrence, so the two are never merged. Without a
+// fingerprint there is nothing line-independent to offer, and no tracking.
+func gitlabTracking(f model.Finding, loc glLocation, seen map[string]int) *glTracking {
+	if strings.TrimSpace(f.Fingerprint) == "" {
+		return nil
+	}
+	basis := strings.Join([]string{f.Tool, f.RuleID, loc.File, f.Fingerprint}, "\x00")
+	n := seen[basis]
+	seen[basis] = n + 1
+	if n > 0 {
+		basis += "\x00" + strconv.Itoa(n)
+	}
+	sum := sha256.Sum256([]byte("achilles/gitlab-tracking/v1\x00" + basis))
+	return &glTracking{Type: "source", Items: []glTrackingItem{{
+		File:       loc.File,
+		StartLine:  loc.StartLine,
+		EndLine:    loc.EndLine,
+		Signatures: []glSignature{{Algorithm: "hash", Value: hex.EncodeToString(sum[:])}},
+	}}}
+}
+
 func gitlabID(f model.Finding, seen map[string]int) string {
 	basis := strings.Join([]string{f.ID, f.Fingerprint, f.Tool, f.RuleID, f.Location.File, strconv.Itoa(f.Location.Region.StartLine)}, "\x00")
 	n := seen[basis]

@@ -39,6 +39,14 @@ achilles:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+# To post a summary note on each merge request (every tier), store a project access
+# token with the api scope as a masked CI/CD variable named ACHILLES_GITLAB_TOKEN and
+# add to the command, in merge request pipelines:
+#
+#   --gitlab-mr-comment $CI_MERGE_REQUEST_IID
+#
+# The note is updated in place on later runs, not posted again.
+
 # To add the AI review, store the key as a masked CI/CD variable named
 # ACHILLES_LLM_API_KEY and add to the command, for example:
 #

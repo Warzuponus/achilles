@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-19
+
+Achilles' own rules measured against the OWASP Benchmark and rebuilt from what it
+showed (Java 4.7 to 69.7, Python 19.5 to 50.3), the GitLab integration run on
+gitlab.com (reports read, a merge request note that updates in place, tracking
+signatures), and fixes for scans that silently read nothing on long Windows paths
+and for the container image reporting its version as `dev`.
+
 ### Added
 - **Python rules, from the OWASP Benchmark for Python.** Out of sample, Achilles' own
   Python rules scored 19.5 on its 1,230 Flask cases. New rules for LDAP and XPath

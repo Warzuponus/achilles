@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-18
+
+A first recall figure on real code (270 documented vulnerabilities in five vulnerable
+apps) and eleven rules from what it missed, taint followed between functions in a
+file, ERB templates, Claude through Anthropic's Messages API natively, dependency
+advisories in GitLab, and a fix for a `configs/rules` folder in the working
+directory silently replacing the built-in rules.
+
 ### Added
 - **Recall measured on real applications.** `evals/detect/real-apps/` labels 270
   documented vulnerabilities in DVWA, NodeGoat, PyGoat, RailsGoat and WebGoat, pinned to

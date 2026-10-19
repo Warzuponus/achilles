@@ -17,7 +17,7 @@ Without `cosign` it says the signature was not checked; set
 curl -fsSLO https://raw.githubusercontent.com/Warzuponus/achilles/main/scripts/install.sh
 less install.sh                                   # read it first
 sh install.sh                                     # latest -> ~/.local/bin
-VERSION=v0.2.0 INSTALL_DIR=/usr/local/bin sh install.sh
+VERSION=v0.3.0 INSTALL_DIR=/usr/local/bin sh install.sh
 ```
 
 **Release binary** — download `achilles_<version>_<os>_<arch>.tar.gz` (`.zip` on
@@ -30,7 +30,7 @@ Windows) and `checksums.txt` from the
 (see [Running in containers](containers.md)).
 
 **`go install`** — `go install github.com/Warzuponus/achilles/cmd/achilles@latest`
-(or `@v0.2.0`; `achilles --version` reports the module version).
+(or `@v0.3.0`; `achilles --version` reports the module version).
 
 **From source** — `git clone https://github.com/Warzuponus/achilles.git && cd achilles && make build`
 (binary at `bin/achilles`). *Homebrew and Scoop packages are planned; they need a tap
@@ -73,7 +73,7 @@ manual install or the Docker image.
 **Rules.** Opengrep's `-f` rules are the built-in rules embedded in the binary
 (materialized into your user cache), unless a tool config you pass with `--config`
 names a `rules:` directory that exists on disk (a `configs/rules` folder in the working
-directory is never picked up on its own). The built-in rules are about 65
+directory is never picked up on its own). The built-in rules are about 75
 Achilles-authored rules for injection, path traversal, SSRF, XSS, unsafe
 deserialization, weak crypto, disabled TLS checks and hard-coded credentials in
 Python, JavaScript and TypeScript, Java, Ruby (Rails and its ERB views, Sinatra) and PHP (plain PHP,

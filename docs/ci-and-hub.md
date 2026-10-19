@@ -15,7 +15,7 @@ permissions:
   issues: write
 steps:
   - uses: actions/checkout@v4
-  - uses: Warzuponus/achilles@v0.2.0
+  - uses: Warzuponus/achilles@v0.3.0
     with:
       llm-api-key: ${{ secrets.LLM_API_KEY }}
       llm-provider: openrouter          # or openai | ollama | anthropic, or llm-base-url
@@ -60,7 +60,7 @@ on pull requests, annotates the diff, and fails only on newly introduced
 high-severity findings. It needs no secret, so it works on fork PRs:
 
 ```yaml
-- uses: Warzuponus/achilles@v0.2.0
+- uses: Warzuponus/achilles@v0.3.0
   with:
     fail-on: high
     args: --diff origin/${{ github.base_ref }} --baseline .achilles/baseline.json

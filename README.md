@@ -36,7 +36,7 @@ to `.github/workflows/`:
 permissions: { contents: read, issues: write }
 steps:
   - uses: actions/checkout@v4
-  - uses: Warzuponus/achilles@v0.2.0
+  - uses: Warzuponus/achilles@v0.3.0
     with:
       llm-api-key: ${{ secrets.LLM_API_KEY }}
       llm-provider: openrouter     # or openai | ollama
@@ -110,7 +110,7 @@ yet? `make run` feeds a sample SARIF file through the normalize and report steps
 
 ### Stable and experimental
 
-**Stable in v0.2.0:** the `achilles` CLI, the five default scanners and the built-in
+**Stable in v0.3.0:** the `achilles` CLI, the five default scanners and the built-in
 rules, `--ai` (review plus adversarial judge), the HTML, Markdown and SARIF reports,
 baseline and diff gating, inline suppressions (`achilles:ignore`), the GitHub Action,
 issue filing, `achilles init`, `achilles tools install` and `achilles doctor`.
@@ -132,7 +132,7 @@ report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/
   [SECURITY.md](SECURITY.md).
 - **Coverage depends on the scanners.** The default set covers Go, dependencies, IaC
   and secrets well. Code-level coverage for Python, JavaScript, Java, Ruby and PHP comes
-  mostly from Opengrep rules: Achilles ships about 65 of its own for Python,
+  mostly from Opengrep rules: Achilles ships about 75 of its own for Python,
   JavaScript and TypeScript, Java, Ruby, PHP and credentials (Apache-2.0, loaded in
   every mode), and `achilles tools install` adds the community rules (a Commons Clause
   licence applies; they are skipped under `--mode commercial`, see

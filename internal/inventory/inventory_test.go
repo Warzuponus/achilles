@@ -3,6 +3,7 @@ package inventory
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -69,5 +70,31 @@ func TestScan_SkipsVendorDirs(t *testing.T) {
 		if l == "python" {
 			t.Error("should not detect python from node_modules")
 		}
+	}
+}
+
+func TestScanCountsPathsAtWindowsLimit(t *testing.T) {
+	root := t.TempDir()
+	abs, _ := filepath.Abs(root)
+	short := filepath.Join(abs, "short.py")
+	if err := os.WriteFile(short, []byte("x = 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A directory name long enough that a file in it reaches MAX_PATH. Go opens
+	// long paths on every platform, so the test can create it.
+	dir := filepath.Join(abs, strings.Repeat("d", MaxPathChars-len(abs)))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Skipf("cannot create a long path here: %v", err)
+	}
+	long := filepath.Join(dir, "deep.py")
+	if err := os.WriteFile(long, []byte("x = 2\n"), 0o600); err != nil {
+		t.Skipf("cannot create a long path here: %v", err)
+	}
+	inv, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.LongPaths != 1 || inv.LongPathExample != long {
+		t.Errorf("LongPaths = %d (%q); want 1 (%q)", inv.LongPaths, inv.LongPathExample, long)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -143,7 +144,8 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 	// when its language isn't present (language-agnostic tools declare "generic"
 	// and always run). Fail open — if detection errors, Languages stays empty and
 	// every tool runs.
-	if inv, ierr := inventoryOf(absTarget); ierr == nil {
+	inv, ierr := inventoryOf(absTarget)
+	if ierr == nil {
 		tgt.Languages = inv.Languages
 	}
 
@@ -211,6 +213,10 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 				fmt.Fprintf(os.Stderr, "achilles: %s sarif-out write failed: %v\n", r.id, err)
 			}
 		}
+	}
+	if d, ok := longPathDiag(runtime.GOOS, inv, scan.Tools); ok {
+		fmt.Fprintf(os.Stderr, "achilles: %s ran but could not analyze all of the target, so its results are INCOMPLETE: %s\n", d.Tool, d.Error)
+		diags = append(diags, d)
 	}
 	if len(notInstalled) > 0 {
 		// One line with the fix, not one "executable file not found" per tool: on a

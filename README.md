@@ -122,7 +122,9 @@ agents (`--research`, `--mine-rules`), the `anthropic` provider preset, the War 
 (`achillesd`), the fleet dispatcher (`achilles-fleet`), `--profile full` with its
 per-language tool images, the MCP server (`achilles mcp`), and the GitLab report outputs (`--gitlab-sast`,
 `--gitlab-secret-detection`, `--gitlab-dependency-scanning`, `--gitlab-code-quality`: checked against GitLab's published
-report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/README.md) cover each of them.
+report schemas; GitLab's CI lint accepts the example pipeline, but no pipeline has yet uploaded them to a GitLab
+instance). `--gitlab-mr-comment` has been run against gitlab.com: it posts the note and updates it in place. The
+[User Guides](docs/README.md) cover each of them.
 
 ## Know the limits
 

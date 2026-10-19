@@ -127,7 +127,7 @@ rules:
           - pattern: $F(...)
           - metavariable-regex:
               metavariable: $F
-              regex: (?i)(escape|sanitiz)
+              regex: (?i).*(escape|sanitiz)
     pattern-sinks:
       - patterns:
           - pattern-either:

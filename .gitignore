@@ -15,3 +15,8 @@
 # goreleaser output
 /dist/
 /achilles
+# `go build ./cmd/...` in the repository root
+/achilles-eval
+/achilles-fleet
+/achillesd
+*.exe

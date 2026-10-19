@@ -97,17 +97,40 @@ rules:
           - pattern-not: commands.getstatusoutput("...")
 
   - id: achilles.python.code-injection-exec
+    mode: taint
     languages: [python]
     severity: ERROR
     message: >
-      exec() runs a string as Python code. If any of it comes from input, that input
-      can run anything. Parse the data instead of executing it.
+      Request data is run as Python code (exec, eval or compile), so the input can
+      run anything. Parse the data instead of executing it (ast.literal_eval for
+      Python literals, json.loads for JSON).
     metadata:
-      cwe: ["CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (Eval Injection)"]
+      cwe:
+        - "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code (Eval Injection)"
+        - "CWE-94: Improper Control of Generation of Code (Code Injection)"
       category: security
-    patterns:
-      - pattern: exec($CODE, ...)
-      - pattern-not: exec("...", ...)
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: exec($CODE, ...)
+              - pattern: eval($CODE, ...)
+              - pattern: compile($CODE, ...)
+              - pattern: builtins.exec($CODE, ...)
+              - pattern: builtins.eval($CODE, ...)
+          - focus-metavariable: $CODE
 
   - id: achilles.python.path-traversal
     mode: taint
@@ -143,13 +166,17 @@ rules:
           - pattern-either:
               - pattern: open($PATH, ...)
               - pattern: io.open($PATH, ...)
+              - pattern: codecs.open($PATH, ...)
+              - pattern: os.open($PATH, ...)
+              - pattern: $BASE / $PATH
+              - pattern: $BASE.joinpath(..., $PATH, ...)
+              - pattern: pathlib.Path(..., $PATH, ...)
+              - pattern: Path(..., $PATH, ...)
               - pattern: send_file($PATH, ...)
               - pattern: flask.send_file($PATH, ...)
               - pattern: os.remove($PATH)
               - pattern: os.unlink($PATH)
               - pattern: shutil.rmtree($PATH, ...)
-              - pattern: pathlib.Path($PATH)
-              - pattern: Path($PATH)
               - pattern: FileResponse($PATH, ...)
           - focus-metavariable: $PATH
 
@@ -401,6 +428,12 @@ rules:
           - pattern: json.dumps(...)
           - pattern: urllib.parse.quote(...)
           - pattern: quote(...)
+          # A project's own escaping helper (escape_html, escape_for_html, ...).
+          - patterns:
+              - pattern: $ESC(...)
+              - metavariable-regex:
+                  metavariable: $ESC
+                  regex: (?i)(.*\.)?[a-z_]*escape[a-z_]*$
           # Rendered through a template, which escapes what it prints.
           - pattern: render_to_string(...)
           - pattern: render_template(...)
@@ -417,6 +450,21 @@ rules:
               - pattern: Markup($X)
               - pattern: markupsafe.Markup($X)
               - pattern: SafeString($X)
+              # A Flask view's return value is the response body, and a string is
+              # sent as text/html. Dicts and lists are sent as JSON.
+              - patterns:
+                  - pattern-inside: |
+                      @$APP.route(...)
+                      def $VIEW(...):
+                        ...
+                  - pattern: return $X
+                  - pattern-not: return {...}
+                  - pattern-not: return [...]
+                  # A call (send_file, a template, a response object) or an
+                  # attribute read is not a string this view built; the calls that
+                  # matter have sinks of their own.
+                  - pattern-not: return $F(...)
+                  - pattern-not: return $O.$A
           # A declared non-HTML type (text/plain, JSON) is not rendered as markup.
           - pattern-not: HttpResponse($X, ..., content_type=$T, ...)
           - pattern-not: django.http.HttpResponse($X, ..., content_type=$T, ...)
@@ -437,8 +485,8 @@ rules:
       category: security
     pattern-either:
       - pattern: $APP.secret_key = "..."
-      - pattern: $APP.config["SECRET_KEY"] = "..."
-      - pattern: $APP.config["JWT_SECRET_KEY"] = "..."
+      - pattern: '$APP.config["SECRET_KEY"] = "..."'
+      - pattern: '$APP.config["JWT_SECRET_KEY"] = "..."'
       - pattern: $APP.config.update(..., SECRET_KEY="...", ...)
       - patterns:
           - pattern: $NAME = "..."
@@ -474,3 +522,233 @@ rules:
       - pattern: lxml.etree.XMLParser(..., resolve_entities=True, ..., no_network=False, ...)
       - pattern: etree.XMLParser(..., resolve_entities=True, ..., no_network=False, ...)
       - pattern: etree.XMLParser(..., no_network=False, ..., resolve_entities=True, ...)
+
+  - id: achilles.python.ldap-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Request data is put into an LDAP search filter, so characters such as * ( ) |
+      in it change which entries the search returns (and can bypass a login check).
+      Escape it with ldap3.utils.conv.escape_filter_chars (or
+      ldap.filter.escape_filter_chars) first.
+    metadata:
+      cwe: ["CWE-90: Improper Neutralization of Special Elements used in an LDAP Query (LDAP Injection)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: escape_filter_chars(...)
+          - pattern: ldap3.utils.conv.escape_filter_chars(...)
+          - pattern: ldap.filter.escape_filter_chars(...)
+          - pattern: ldap.filter.filter_format(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              # ldap3: Connection.search(search_base, search_filter, ...)
+              - pattern: $CONN.search($BASE, $FILTER, ...)
+              - pattern: $CONN.search(..., search_filter=$FILTER, ...)
+              # python-ldap: search_s(base, scope, filterstr, ...)
+              - pattern: $CONN.search_s($BASE, $SCOPE, $FILTER, ...)
+              - pattern: $CONN.search_ext_s($BASE, $SCOPE, $FILTER, ...)
+              - pattern: $CONN.search_st($BASE, $SCOPE, $FILTER, ...)
+          - focus-metavariable: $FILTER
+
+  - id: achilles.python.xpath-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Request data is put into an XPath expression, so it can change what the query
+      selects (for example, every user's record instead of one). Pass it as an XPath
+      variable instead (lxml: tree.xpath("//user[@name=$name]", name=value)).
+    metadata:
+      cwe: ["CWE-643: Improper Neutralization of Data within XPath Expressions (XPath Injection)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: lxml.etree.XPath($Q, ...)
+              - pattern: etree.XPath($Q, ...)
+              - pattern: $TREE.xpath($Q, ...)
+              - pattern: elementpath.select($ROOT, $Q, ...)
+              - pattern: elementpath.iter_select($ROOT, $Q, ...)
+              - pattern: $ROOT.findall($Q, ...)
+              - pattern: $ROOT.find($Q, ...)
+              - pattern: $ROOT.iterfind($Q, ...)
+          - focus-metavariable: $Q
+
+  - id: achilles.python.open-redirect
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: >
+      The response redirects to a URL taken from the request, so a link to this site
+      can send the user anywhere (phishing, token theft). Redirect to a path built
+      with url_for, or check the target with url_has_allowed_host_and_scheme (Django)
+      or by parsing it and comparing the host to an allow-list.
+    metadata:
+      cwe: ["CWE-601: URL Redirection to Untrusted Site ('Open Redirect')"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: url_for(...)
+          - pattern: flask.url_for(...)
+          - pattern: reverse(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: redirect($URL, ...)
+              - pattern: flask.redirect($URL, ...)
+              - pattern: HttpResponseRedirect($URL, ...)
+              - pattern: HttpResponsePermanentRedirect($URL, ...)
+              - pattern: RedirectResponse($URL, ...)
+              - pattern: RedirectResponse(url=$URL, ...)
+          - focus-metavariable: $URL
+
+  - id: achilles.python.weak-random
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: >
+      A value from the random module becomes a cookie, a session value or a token.
+      random is a Mersenne Twister: a few outputs give away the rest. Use the secrets
+      module (secrets.token_urlsafe, secrets.randbelow) for anything an attacker must
+      not guess.
+    metadata:
+      cwe: ["CWE-330: Use of Insufficiently Random Values"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: random.$F(...)
+              - pattern: numpy.random.$F(...)
+              - pattern: np.random.$F(...)
+              # Opengrep drops taint across a slice, and the digits of a random
+              # float are usually taken with one: str(random.random())[2:].
+              - pattern: str(random.$F(...))[$A:]
+              - pattern: str(random.$F(...))[:$B]
+              - pattern: str(random.$F(...))[$A:$B]
+              - pattern: random.$F(...)[$A:]
+              - pattern: random.$F(...)[:$B]
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(random|randint|randrange|choice|choices|sample|shuffle|getrandbits|uniform|normalvariate|gauss|triangular|betavariate|expovariate|gammavariate|lognormvariate|vonmisesvariate|paretovariate|weibullvariate|randbytes|rand|bytes)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RESP.set_cookie($NAME, $V, ...)
+              - pattern: $RESP.set_cookie($NAME, value=$V, ...)
+              - pattern: $RESP.set_signed_cookie($NAME, $V, ...)
+              - pattern: 'session[$K] = $V'
+              - pattern: 'flask.session[$K] = $V'
+              - pattern: 'request.session[$K] = $V'
+          - focus-metavariable: $V
+      - patterns:
+          # A server-side session store under another name (user_session, mysession).
+          - pattern: '$SESS[$K] = $V'
+          - metavariable-regex:
+              metavariable: $SESS
+              regex: (?i).*session
+          - focus-metavariable: $V
+      - patterns:
+          # A variable whose name says it is a secret.
+          - pattern: $VAR = $E
+          - metavariable-regex:
+              metavariable: $VAR
+              regex: (?i)^[a-z_]*(token|secret|password|passwd|nonce|salt|otp|apikey|api_key|session_id|sessionid|reset_code|resetcode|remember_me|rememberme)[a-z_0-9]*$
+          - focus-metavariable: $E
+
+  - id: achilles.python.insecure-cookie
+    languages: [python]
+    severity: WARNING
+    message: >
+      The cookie is set with secure=False (so it is also sent over plain HTTP, where
+      anyone on the path can read it) or httponly=False (so a script on the page can
+      read it). Set both to True for any cookie that identifies a user.
+    metadata:
+      cwe:
+        - "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute"
+        - "CWE-1004: Sensitive Cookie Without 'HttpOnly' Flag"
+      category: security
+    pattern-either:
+      - pattern: $RESP.set_cookie(..., secure=False, ...)
+      - pattern: $RESP.set_cookie(..., httponly=False, ...)
+      - pattern: $RESP.set_signed_cookie(..., secure=False, ...)
+      - pattern: $RESP.set_signed_cookie(..., httponly=False, ...)
+
+  - id: achilles.python.trust-boundary
+    mode: taint
+    languages: [python]
+    severity: INFO
+    message: >
+      Request data is stored in the session, where the rest of the application may
+      treat it as trusted (set by the server). Validate it before storing it, and do
+      not let the request choose the key.
+    metadata:
+      cwe: ["CWE-501: Trust Boundary Violation"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: 'session[$K] = $V'
+              - pattern: 'flask.session[$K] = $V'
+              - pattern: 'request.session[$K] = $V'
+          - focus-metavariable: $V
+      - patterns:
+          - pattern-either:
+              - pattern: 'session[$K] = $V'
+              - pattern: 'flask.session[$K] = $V'
+              - pattern: 'request.session[$K] = $V'
+          - focus-metavariable: $K

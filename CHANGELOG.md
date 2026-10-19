@@ -7,6 +7,21 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Recall measured on real applications.** `evals/detect/real-apps/` labels 270
+  documented vulnerabilities in DVWA, NodeGoat, PyGoat, RailsGoat and WebGoat, pinned to
+  commits and written from each app's own lessons and wiki, not from scan output. With
+  Achilles' own rules, recall was 23.3%; with the rules below it is 30.7% (35.9% with
+  the community pack). The gain is in-sample: the rules were written against these
+  apps' misses. See `docs/benchmarking.md`.
+- **Eleven rules, from those misses.** Python: SQL injection by taint (however the query
+  string was built), reflected XSS into `HttpResponse`, `mark_safe` and `Markup`,
+  hard-coded Flask, Django and JWT signing keys, and XML parsers told to resolve external
+  entities. Templates: Django and Jinja `|safe` and `{% autoescape off %}`. Java: open
+  redirects (`sendRedirect`, `"redirect:" +`, `Location`) and XStream `fromXML` without
+  an allow-list. PHP: request data put into a string of HTML (pages that build `$html`
+  and print it elsewhere), uploads saved under the client's file name, and ECB, DES, RC4
+  and Blowfish in `openssl_encrypt`. JavaScript: swig, Nunjucks and Handlebars with
+  escaping turned off.
 - **`--gitlab-dependency-scanning`: dependency advisories in GitLab.** The GitLab SAST
   report leaves dependency advisories out, so GitLab never showed what osv-scanner and
   Trivy found. This writes them as a dependency scanning report

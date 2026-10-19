@@ -434,3 +434,104 @@ rules:
       - metavariable-regex:
           metavariable: $X
           regex: (?i).*(pass|pwd)
+
+  # DVWA-style pages build their HTML into a variable and echo it from another file,
+  # where intra-file taint loses it. Request data concatenated or interpolated into
+  # a string that contains markup is the XSS, wherever the string is printed.
+  - id: achilles.php.xss-html-building
+    languages: [php]
+    severity: WARNING
+    message: >
+      Request data is put into a string of HTML without escaping. When that string
+      is printed, a script in the input runs in the user's browser. Escape the value
+      with htmlspecialchars($x, ENT_QUOTES) as it goes into the markup.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - pattern: $_SERVER['PHP_SELF']
+          - pattern: $_SERVER['QUERY_STRING']
+          - pattern: $_SERVER['REQUEST_URI']
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: htmlspecialchars(...)
+          - pattern: htmlentities(...)
+          - pattern: strip_tags(...)
+          - pattern: intval(...)
+          - pattern: (int) $X
+          - pattern: e(...)
+          - pattern: json_encode(...)
+          - pattern: urlencode(...)
+          - pattern: rawurlencode(...)
+          - pattern: highlight_string($S, true)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $S . $X
+              - pattern: $X . $S
+          - metavariable-regex:
+              metavariable: $S
+              regex: (?s)^["'][^"']*<[a-zA-Z/!]
+          - focus-metavariable: $X
+          # Printed right here: achilles.php.xss reports it.
+          - pattern-not-inside: echo ...;
+          - pattern-not-inside: print(...)
+          # `query() or die("<pre>" . error)`: Opengrep cannot match die() itself.
+          - pattern-not-inside: $A or $B
+      - patterns:
+          - pattern-regex: \"[^"\n]*<[a-zA-Z/][^"\n]*\$[a-zA-Z_][^"\n]*\"
+          - pattern-not-inside: echo ...;
+          - pattern-not-inside: print(...)
+          # `query() or die("<pre>" . error)`: Opengrep cannot match die() itself.
+          - pattern-not-inside: $A or $B
+
+  - id: achilles.php.unrestricted-upload
+    languages: [php]
+    severity: WARNING
+    message: >
+      An uploaded file is saved under the name the client sent, extension included.
+      A .php (or .phtml, .phar) upload into a web-served directory runs as code. Save
+      it under a name the server generates, with an extension picked from an
+      allow-list, outside the web root if possible.
+    metadata:
+      cwe: ["CWE-434: Unrestricted Upload of File with Dangerous Type"]
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_FILES[$K]['name']
+          - pattern: $F->getClientOriginalName()
+          - pattern: $F->getClientFilename()
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: move_uploaded_file($TMP, $DEST)
+              - pattern: $F->move($DIR, $DEST)
+              - pattern: $F->storeAs($DIR, $DEST, ...)
+              - pattern: $F->moveTo($DEST)
+          - focus-metavariable: $DEST
+
+  - id: achilles.php.weak-cipher
+    languages: [php]
+    severity: WARNING
+    message: >
+      The cipher is broken or misused: ECB mode encrypts equal blocks to equal
+      ciphertext (so blocks can be read and rearranged), and DES, 3DES, RC4, RC2 and
+      Blowfish are weak. Use AES-256-GCM (or sodium_crypto_secretbox) with a random
+      nonce.
+    metadata:
+      cwe: ["CWE-327: Use of a Broken or Risky Cryptographic Algorithm"]
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: openssl_encrypt($D, "$ALGO", ...)
+          - pattern: openssl_decrypt($D, "$ALGO", ...)
+      - metavariable-regex:
+          metavariable: $ALGO
+          regex: (?i)^["']?(.*-ecb|des.*|rc4.*|rc2.*|bf-.*|blowfish.*|cast5.*|idea.*)["']?$

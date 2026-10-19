@@ -1,0 +1,335 @@
+{
+  "description" : "OWASP NodeGoat (Node.js/Express, MongoDB): every flaw that the in-app tutorial (a1-a10, redos, ssrf) and the source comments document, labeled at its source location.",
+  "id" : "nodegoat",
+  "schemaVersion" : 1,
+  "source" : {
+    "commit" : "c5cb68a7084e4ae7dcc60e6a98768720a81841e8",
+    "url" : "https://github.com/OWASP/NodeGoat.git"
+  },
+  "vulnerabilities" : [
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-95",
+        "CWE-94"
+      ],
+      "description" : "handleContributionsUpdate passes req.body.preTax to eval(), which lets an attacker run JavaScript on the server (SSJS injection).",
+      "endLine" : 32,
+      "file" : "app/routes/contributions.js",
+      "id" : "NG-INJECTION-1",
+      "note" : "tutorial a1.html (A1-1 Server Side JS Injection); comment 'Insecure use of eval() to parse inputs'",
+      "startLine" : 32
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-95",
+        "CWE-94"
+      ],
+      "description" : "handleContributionsUpdate passes req.body.afterTax to eval() (SSJS injection).",
+      "endLine" : 33,
+      "file" : "app/routes/contributions.js",
+      "id" : "NG-INJECTION-2",
+      "note" : "tutorial a1.html (A1-1 Server Side JS Injection)",
+      "startLine" : 33
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-95",
+        "CWE-94"
+      ],
+      "description" : "handleContributionsUpdate passes req.body.roth to eval() (SSJS injection).",
+      "endLine" : 34,
+      "file" : "app/routes/contributions.js",
+      "id" : "NG-INJECTION-3",
+      "note" : "tutorial a1.html (A1-1 Server Side JS Injection)",
+      "startLine" : 34
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-943"
+      ],
+      "description" : "getByUserIdAndThreshold puts the user's threshold query parameter straight into a MongoDB $where JavaScript expression, which allows NoSQL/SSJS injection: it can return every user's allocations or cause a DoS with while(true).",
+      "endLine" : 79,
+      "file" : "app/data/allocations-dao.js",
+      "id" : "NG-INJECTION-4",
+      "note" : "tutorial a1.html (A1-2 SQL and NoSQL Injection); comment 'Fix for A1 - 2 NoSQL Injection'",
+      "startLine" : 77
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-117"
+      ],
+      "description" : "handleLoginRequest logs the raw userName from the request with console.log, so CRLF in the input can forge log entries.",
+      "endLine" : 64,
+      "file" : "app/routes/session.js",
+      "id" : "NG-INJECTION-5",
+      "note" : "tutorial a1.html (A1-3 Log Injection); comment 'Fix for A1 - 3 Log Injection'",
+      "startLine" : 64
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-256",
+        "CWE-916"
+      ],
+      "description" : "addUser stores the request's password in the users collection as plaintext, not as a salted hash, and validateLogin compares it in plaintext.",
+      "endLine" : 25,
+      "file" : "app/data/user-dao.js",
+      "id" : "NG-AUTH-1",
+      "note" : "tutorial a2.html (A2-1 protecting user credentials); comment 'Fix for A2-1 - Broken Auth'",
+      "startLine" : 25
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-613",
+        "CWE-1004",
+        "CWE-614"
+      ],
+      "description" : "The express-session config sets no cookie options: no HttpOnly, Secure or maxAge (so the session never times out), and it keeps the default cookie name.",
+      "endLine" : 85,
+      "file" : "server.js",
+      "id" : "NG-AUTH-2",
+      "note" : "tutorial a2.html (A2-1 session timeout and cookies), a3.html (HTTPOnly), a5.html (generic cookie name); comments 'Fix for A3 - XSS' / 'Fix for A5 - Security MisConfig' in the session block",
+      "startLine" : 78
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-384"
+      ],
+      "description" : "After a successful login the code sets req.session.userId without calling req.session.regenerate(), which leaves the app open to session fixation and hijacking.",
+      "endLine" : 117,
+      "file" : "app/routes/session.js",
+      "id" : "NG-AUTH-3",
+      "note" : "tutorial a2.html (A2-1 session hijacking); comment block 'A2-Broken Authentication and Session Management' above it",
+      "startLine" : 116
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-521"
+      ],
+      "description" : "validateSignup's password policy /^.{1,20}$/ accepts any password of 1-20 characters, which helps password guessing.",
+      "endLine" : 144,
+      "file" : "app/routes/session.js",
+      "id" : "NG-AUTH-4",
+      "note" : "tutorial a2.html (A2-2 Password Guessing Attacks); comment 'Fix for A2-2 - Broken Authentication - requires stronger password'",
+      "startLine" : 144
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-204"
+      ],
+      "description" : "A failed login for an unknown user returns 'Invalid username', which reveals that the account does not exist (user enumeration).",
+      "endLine" : 85,
+      "file" : "app/routes/session.js",
+      "id" : "NG-INFO-DISCLOSURE-1",
+      "note" : "tutorial a2.html (A2-2 username/password enumeration); comment 'Fix for A2-2 Broken Auth - Uses identical error'",
+      "startLine" : 85
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-204"
+      ],
+      "description" : "A failed login with a wrong password returns a different message, 'Invalid password', which confirms that the username exists.",
+      "endLine" : 94,
+      "file" : "app/routes/session.js",
+      "id" : "NG-INFO-DISCLOSURE-2",
+      "note" : "tutorial a2.html (A2-2 username/password enumeration); comment 'Fix for A2-2 Broken Auth - Uses identical error'",
+      "startLine" : 94
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79",
+        "CWE-116"
+      ],
+      "description" : "The swig template engine is configured with autoescape: false, so every {{ }} output in the views renders unescaped.",
+      "endLine" : 137,
+      "file" : "server.js",
+      "id" : "NG-XSS-1",
+      "note" : "tutorial a3.html (fix: enable autoescape in server.js); comment 'Fix for A3 - XSS, enable auto escaping'",
+      "startLine" : 135
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "Stored XSS: the firstName and lastName that a user saves on the profile page are rendered unescaped in the top-right user menu.",
+      "endLine" : 75,
+      "file" : "app/views/layout.html",
+      "id" : "NG-XSS-2",
+      "note" : "tutorial a3.html (stored XSS on profile form, shown in top right menu)",
+      "startLine" : 75
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79",
+        "CWE-116"
+      ],
+      "description" : "A user-controlled name is put in an href attribute with no URL-context encoding, which allows javascript: links and XSS.",
+      "endLine" : 78,
+      "file" : "app/views/profile.html",
+      "id" : "NG-XSS-3",
+      "note" : "tutorial a3.html (output encoding context, profile.js and profile.html); @FIXME comment in profile.html",
+      "startLine" : 78
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79",
+        "CWE-116"
+      ],
+      "description" : "doc.website is HTML-encoded but is also used in a URL context, so the wrong encoder leaves XSS possible.",
+      "endLine" : 28,
+      "file" : "app/routes/profile.js",
+      "id" : "NG-XSS-4",
+      "note" : "tutorial a3.html (output encoding context, profile.js); @TODO @FIXME comment in profile.js",
+      "startLine" : 28
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-639"
+      ],
+      "description" : "displayAllocations takes userId from the URL parameter instead of the session, so any logged-in user can view another user's allocations (IDOR).",
+      "endLine" : 18,
+      "file" : "app/routes/allocations.js",
+      "id" : "NG-AUTHZ-1",
+      "note" : "tutorial a4.html (Insecure Direct Object References); comment 'Fix for A4 Insecure DOR'",
+      "startLine" : 16
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-285",
+        "CWE-862"
+      ],
+      "description" : "GET /benefits is protected only by isLoggedIn, with no isAdmin check, so any user can reach the admin benefits page.",
+      "endLine" : 55,
+      "file" : "app/routes/index.js",
+      "id" : "NG-AUTHZ-2",
+      "note" : "tutorial a7.html (Missing Function Level Access Control); comment 'Fix for A7 - checks user role'",
+      "startLine" : 55
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-285",
+        "CWE-862"
+      ],
+      "description" : "POST /benefits has no isAdmin check, so any logged-in user can change any user's benefit start date.",
+      "endLine" : 56,
+      "file" : "app/routes/index.js",
+      "id" : "NG-AUTHZ-3",
+      "note" : "tutorial a7.html (Missing Function Level Access Control)",
+      "startLine" : 56
+    },
+    {
+      "class" : "misconfiguration",
+      "cwe" : [
+        "CWE-693",
+        "CWE-200"
+      ],
+      "description" : "No security headers are set: x-powered-by is not disabled, and there is no helmet frameguard/noCache/CSP/HSTS and no nosniff (the fixes are commented out above this spot).",
+      "endLine" : 68,
+      "file" : "server.js",
+      "id" : "NG-MISCONFIGURATION-1",
+      "note" : "tutorial a5.html (Security Misconfiguration, server.js); comment 'Fix for A5 - Security MisConfig'",
+      "startLine" : 67
+    },
+    {
+      "class" : "misconfiguration",
+      "cwe" : [
+        "CWE-319"
+      ],
+      "description" : "The app listens on plain HTTP (http.createServer), so session cookies and sensitive data travel unencrypted.",
+      "endLine" : 145,
+      "file" : "server.js",
+      "id" : "NG-CLEARTEXT-1",
+      "note" : "tutorial a6.html (Sensitive Data Exposure, HTTPS in server.js); comment 'Insecure HTTP connection'",
+      "startLine" : 145
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-312"
+      ],
+      "description" : "updateUser stores the user's SSN and date of birth in the database as plaintext, unencrypted.",
+      "endLine" : 66,
+      "file" : "app/data/profile-dao.js",
+      "id" : "NG-CLEARTEXT-2",
+      "note" : "tutorial a6.html (encrypt ssn/dob in data/profile-dao.js); comment 'Fix for A7 - Sensitive Data Exposure - Store encrypted ssn and DOB'",
+      "startLine" : 61
+    },
+    {
+      "class" : "csrf",
+      "cwe" : [
+        "CWE-352"
+      ],
+      "description" : "The csurf middleware is not enabled (it is commented out), so no state-changing POST route (profile, contributions, benefits, memos) checks a CSRF token.",
+      "endLine" : 113,
+      "file" : "server.js",
+      "id" : "NG-CSRF-1",
+      "note" : "tutorial a8.html (CSRF, server.js); comment 'Fix for A8 - CSRF'",
+      "startLine" : 104
+    },
+    {
+      "class" : "csrf",
+      "cwe" : [
+        "CWE-352"
+      ],
+      "description" : "The contributions update form has no _csrf hidden token (it is commented out), so a cross-site request can change contribution percentages.",
+      "endLine" : 92,
+      "file" : "app/views/contributions.html",
+      "id" : "NG-CSRF-2",
+      "note" : "tutorial a8.html; comment 'Fix for A8 - CSRF' in contributions.html",
+      "startLine" : 89
+    },
+    {
+      "class" : "open-redirect",
+      "cwe" : [
+        "CWE-601"
+      ],
+      "description" : "The /learn route redirects to req.query.url without validating it, which is an open redirect.",
+      "endLine" : 72,
+      "file" : "app/routes/index.js",
+      "id" : "NG-OPEN-REDIRECT-1",
+      "note" : "tutorial a10.html (Unvalidated Redirects and Forwards); comment 'Insecure way to handle redirects'",
+      "startLine" : 72
+    },
+    {
+      "class" : "redos",
+      "cwe" : [
+        "CWE-1333"
+      ],
+      "description" : "The bankRouting value is checked with /([0-9]+)+\\#/, whose nested quantifier backtracks catastrophically on long digit strings and stalls the event loop.",
+      "endLine" : 61,
+      "file" : "app/routes/profile.js",
+      "id" : "NG-REDOS-1",
+      "note" : "tutorial redos.html; comment 'Fix for Section: ReDoS attack'",
+      "startLine" : 59
+    },
+    {
+      "class" : "ssrf",
+      "cwe" : [
+        "CWE-918"
+      ],
+      "description" : "displayResearch joins req.query.url and req.query.symbol and fetches the result server-side with needle.get, so an attacker can make the server request any URL.",
+      "endLine" : 16,
+      "file" : "app/routes/research.js",
+      "id" : "NG-SSRF-1",
+      "note" : "tutorial ssrf.html (Research page, routes/research.js)",
+      "startLine" : 15
+    }
+  ]
+}

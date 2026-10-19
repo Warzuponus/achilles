@@ -319,3 +319,158 @@ rules:
       cwe: ["CWE-489: Active Debug Code"]
       category: security
     pattern: $APP.run(..., debug=True, ...)
+
+  # Taint form of the SQL rules above: request data reaching a query however the
+  # string was put together (any number of pieces, built in one place and run in
+  # another), which the shape-matching rules cannot follow.
+  - id: achilles.python.sql-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Request data reaches an SQL query, so the input can change it. Pass values as
+      parameters (cursor.execute("... WHERE id = %s", [user_id]),
+      Model.objects.raw("... WHERE id = %s", [user_id])) or use the ORM's query API.
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: int(...)
+          - pattern: float(...)
+          - pattern: uuid.UUID(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $C.execute($Q, ...)
+              - pattern: $C.executemany($Q, ...)
+              - pattern: $C.executescript($Q)
+              - pattern: $M.objects.raw($Q, ...)
+              - pattern: $M.raw($Q, ...)
+              - pattern: sqlalchemy.text($Q)
+              - pattern: text($Q)
+          - focus-metavariable: $Q
+
+  - id: achilles.python.reflected-xss
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Request data is written into an HTML response, or marked safe for a template,
+      without escaping, so a script in it runs in the user's browser. Render it
+      through a template with autoescaping on, or escape it (html.escape,
+      markupsafe.escape, django.utils.html.escape) first.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: request.$ATTR
+              - pattern: flask.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|GET|POST|COOKIES|FILES|META|body|query_params|path_params)$
+      - pattern: request.get_json(...)
+      - pattern: request.get_data(...)
+      - pattern: flask.request.get_json(...)
+      - pattern: flask.request.get_data(...)
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: int(...)
+          - pattern: float(...)
+          - pattern: escape(...)
+          - pattern: html.escape(...)
+          - pattern: markupsafe.escape(...)
+          - pattern: flask.escape(...)
+          - pattern: conditional_escape(...)
+          - pattern: format_html(...)
+          - pattern: bleach.clean(...)
+          - pattern: json.dumps(...)
+          - pattern: urllib.parse.quote(...)
+          - pattern: quote(...)
+          # Rendered through a template, which escapes what it prints.
+          - pattern: render_to_string(...)
+          - pattern: render_template(...)
+          - pattern: flask.render_template(...)
+          - pattern: $TPL.render(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: HttpResponse($X, ...)
+              - pattern: django.http.HttpResponse($X, ...)
+              - pattern: make_response($X, ...)
+              - pattern: flask.make_response($X, ...)
+              - pattern: mark_safe($X)
+              - pattern: Markup($X)
+              - pattern: markupsafe.Markup($X)
+              - pattern: SafeString($X)
+          # A declared non-HTML type (text/plain, JSON) is not rendered as markup.
+          - pattern-not: HttpResponse($X, ..., content_type=$T, ...)
+          - pattern-not: django.http.HttpResponse($X, ..., content_type=$T, ...)
+          - focus-metavariable: $X
+
+  # A signing key in the source signs every session cookie and token: whoever reads
+  # the repository can forge them. Any literal counts, however short or
+  # placeholder-like, because the framework will use whatever it is given.
+  - id: achilles.python.hardcoded-signing-key
+    languages: [python]
+    severity: WARNING
+    message: >
+      The framework's signing key is a literal in the source. Anyone who can read it
+      can forge session cookies and signed tokens. Read it from the environment or a
+      secret store (os.environ["SECRET_KEY"]), and rotate this one.
+    metadata:
+      cwe: ["CWE-798: Use of Hard-coded Credentials"]
+      category: security
+    pattern-either:
+      - pattern: $APP.secret_key = "..."
+      - pattern: $APP.config["SECRET_KEY"] = "..."
+      - pattern: $APP.config["JWT_SECRET_KEY"] = "..."
+      - pattern: $APP.config.update(..., SECRET_KEY="...", ...)
+      - patterns:
+          - pattern: $NAME = "..."
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: ^(SECRET_KEY|JWT_SECRET_KEY|SIGNING_KEY|SECRET_COOKIE_KEY|SESSION_SECRET|JWT_SECRET)$
+          # Django's own test settings and the like are not deployed.
+          - pattern-not-inside: |
+              if $COND:
+                ...
+      - pattern: jwt.encode($P, "...", ...)
+      - pattern: jwt.decode($T, "...", ...)
+    paths:
+      exclude: ["test_*.py", "*_test.py", "tests/", "conftest.py"]
+
+  - id: achilles.python.xxe
+    languages: [python]
+    severity: ERROR
+    message: >
+      The XML parser is told to resolve external entities, so a document can read
+      local files or make the server fetch URLs. Leave external entities off, or
+      parse untrusted XML with defusedxml.
+    metadata:
+      cwe: ["CWE-611: Improper Restriction of XML External Entity Reference"]
+      category: security
+    pattern-either:
+      - pattern: $P.setFeature(feature_external_ges, True)
+      - pattern: $P.setFeature(feature_external_pes, True)
+      - pattern: $P.setFeature(xml.sax.handler.feature_external_ges, True)
+      - pattern: $P.setFeature(xml.sax.handler.feature_external_pes, True)
+      - pattern: $P.setFeature(handler.feature_external_ges, True)
+      - pattern: $P.setFeature(handler.feature_external_pes, True)
+      - pattern: lxml.etree.XMLParser(..., resolve_entities=True, ..., no_network=False, ...)
+      - pattern: etree.XMLParser(..., resolve_entities=True, ..., no_network=False, ...)
+      - pattern: etree.XMLParser(..., no_network=False, ..., resolve_entities=True, ...)

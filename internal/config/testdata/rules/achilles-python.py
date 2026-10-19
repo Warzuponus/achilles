@@ -172,6 +172,68 @@ def tls(url):
     requests.get(url, verify="/etc/ssl/internal-ca.pem")
 
 
+@app.route("/login", methods=["POST"])
+def login_lab(db, Login):
+    name = request.POST.get("name")
+    password = request.POST.get("pass")
+    sql_query = "SELECT * FROM login WHERE user='" + name + "' AND password='" + password + "'"
+    # ruleid: achilles.python.sql-injection
+    Login.objects.raw(sql_query)
+    cur = db.cursor()
+    # ruleid: achilles.python.sql-injection
+    cur.execute(request.form["query"])
+    # ok: achilles.python.sql-injection
+    cur.execute("SELECT * FROM t WHERE name = %s", [name])
+    # ok: achilles.python.sql-injection
+    cur.execute("SELECT * FROM t WHERE id = %s", [int(request.args["id"])])
+
+
+@app.route("/hello")
+def hello(HttpResponse, mark_safe):
+    who = request.GET.get("name", "")
+    # ruleid: achilles.python.reflected-xss
+    HttpResponse("<h1>Hello " + who + "</h1>")
+    # ruleid: achilles.python.reflected-xss
+    mark_safe("<b>%s</b>" % who)
+    # ok: achilles.python.reflected-xss
+    HttpResponse("<h1>Hello " + escape(who) + "</h1>")
+    # ok: achilles.python.reflected-xss
+    HttpResponse(who, content_type="text/plain")
+    # ruleid: achilles.python.reflected-xss
+    return make_response("<p>" + request.args.get("q", "") + "</p>")
+
+
+def signing_keys(jwt, payload, token):
+    # ruleid: achilles.python.hardcoded-signing-key
+    app.secret_key = "your-secret-key-here"
+    # ruleid: achilles.python.hardcoded-signing-key
+    app.config["SECRET_KEY"] = "dev"
+    # ok: achilles.python.hardcoded-signing-key
+    app.secret_key = os.environ["SECRET_KEY"]
+    # ruleid: achilles.python.hardcoded-signing-key
+    jwt.encode(payload, "PYGOAT", algorithm="HS256")
+    # ok: achilles.python.hardcoded-signing-key
+    jwt.encode(payload, os.environ["JWT_KEY"], algorithm="HS256")
+
+
+# ruleid: achilles.python.hardcoded-signing-key
+SECRET_COOKIE_KEY = "PYGOAT"
+# ok: achilles.python.hardcoded-signing-key
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+
+
+def xml_parsing(make_parser, feature_external_ges, etree, body):
+    parser = make_parser()
+    # ruleid: achilles.python.xxe
+    parser.setFeature(feature_external_ges, True)
+    # ok: achilles.python.xxe
+    parser.setFeature(feature_external_ges, False)
+    # ruleid: achilles.python.xxe
+    etree.XMLParser(resolve_entities=True, no_network=False)
+    # ok: achilles.python.xxe
+    etree.XMLParser(resolve_entities=False)
+
+
 if __name__ == "__main__":
     # ruleid: achilles.python.flask-debug
     app.run(host="0.0.0.0", debug=True)

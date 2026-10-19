@@ -1,0 +1,402 @@
+{
+  "description" : "OWASP RailsGoat (Ruby on Rails 8): the vulnerabilities named by its spec/vulnerabilities suite, wiki tutorial links, and in-code VULNERABILITY comments, pinned to controllers, models, ERB views, config initializers and lib.",
+  "id" : "railsgoat",
+  "schemaVersion" : 1,
+  "source" : {
+    "commit" : "f5951f13089d85c979de09e7da3c8c0fb982f94a",
+    "url" : "https://github.com/OWASP/railsgoat.git"
+  },
+  "vulnerabilities" : [
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "Account update looks up the user with User.where(\"id = '#{params[:user][:id]}'\"), so the hidden user id field allows SQL injection (and updating another account, e.g. the admin).",
+      "endLine" : 29,
+      "file" : "app/controllers/users_controller.rb",
+      "id" : "RG-INJECTION-1",
+      "note" : "spec/vulnerabilities/sql_injection_spec.rb; wiki R5-A1-SQL-Injection-Concatentation",
+      "startLine" : 29
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "hits_by_ip interpolates the column list into select(\"#{col}\"); admin analytics passes the keys of params[:field] (admin_controller.rb:13-17), so request parameter names become raw SQL.",
+      "endLine" : 3,
+      "file" : "app/models/analytics.rb",
+      "id" : "RG-INJECTION-2",
+      "note" : "RailsGoat wiki A1 SQL Injection (interpolation / analytics) tutorial; confirmed by reading admin_controller#analytics",
+      "startLine" : 3
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "Benefit form backup runs system(\"cp #{full_file_name} ...#{file.original_filename}\") with the uploaded file name, giving OS command injection.",
+      "endLine" : 15,
+      "file" : "app/models/benefits.rb",
+      "id" : "RG-INJECTION-3",
+      "note" : "spec/vulnerabilities/command_injection_spec.rb; wiki A1-Command-Injection",
+      "startLine" : 15
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-204"
+      ],
+      "description" : "Login raises \"#{email} doesn't exist!\", shown to the user as the flash error (sessions_controller.rb:28), enumerating valid accounts.",
+      "endLine" : 44,
+      "file" : "app/models/user.rb",
+      "id" : "RG-AUTH-1",
+      "note" : "spec/vulnerabilities/broken_auth_spec.rb scenario one; wiki A2-Credential-Enumeration",
+      "startLine" : 44
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-204"
+      ],
+      "description" : "Login raises a distinct \"Incorrect Password!\" error for an existing email, confirming the account exists.",
+      "endLine" : 48,
+      "file" : "app/models/user.rb",
+      "id" : "RG-AUTH-2",
+      "note" : "spec/vulnerabilities/broken_auth_spec.rb scenario two; wiki A2-Credential-Enumeration",
+      "startLine" : 48
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-521"
+      ],
+      "description" : "Password validation only enforces a 6-40 character length, so trivially weak passwords such as \"password\" are accepted.",
+      "endLine" : 7,
+      "file" : "app/models/user.rb",
+      "id" : "RG-AUTH-3",
+      "note" : "spec/vulnerabilities/password_complexity_spec.rb; wiki A2-Lack-of-Password-Complexity",
+      "startLine" : 5
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-916",
+        "CWE-328"
+      ],
+      "description" : "Passwords are stored as unsalted MD5 hashes (Digest::MD5.hexdigest) in the before_save callback.",
+      "endLine" : 55,
+      "file" : "app/models/user.rb",
+      "id" : "RG-WEAK-CRYPTO-1",
+      "note" : "spec/vulnerabilities/password_hashing_spec.rb; wiki A6-Sensitive-Data-Exposure-Insecure-Password-Storage",
+      "startLine" : 55
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-916",
+        "CWE-328"
+      ],
+      "description" : "Authentication verifies passwords by comparing against an unsalted MD5 digest.",
+      "endLine" : 45,
+      "file" : "app/models/user.rb",
+      "id" : "RG-WEAK-CRYPTO-2",
+      "note" : "spec/vulnerabilities/password_hashing_spec.rb; wiki A6-Sensitive-Data-Exposure-Insecure-Password-Storage",
+      "startLine" : 45
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "The header renders current_user.first_name.html_safe, so a first name set via account settings is stored XSS on every page.",
+      "endLine" : 47,
+      "file" : "app/views/layouts/shared/_header.html.erb",
+      "id" : "RG-XSS-1",
+      "note" : "spec/vulnerabilities/xss_spec.rb; wiki A3-Cross-Site-Scripting; in-code 'VULNERABILITY: XSS via html_safe' comment",
+      "startLine" : 47
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "Login page JavaScript document.write()s the decoded location.hash value into the DOM (DOM-based XSS).",
+      "endLine" : 89,
+      "file" : "app/views/sessions/new.html.erb",
+      "id" : "RG-XSS-2",
+      "note" : "in-code comments 'VULNERABILITY: XSS via URL hash parameter' / 'VULNERABLE: Directly writing user input to DOM'",
+      "startLine" : 89
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "The layout emits raw cookies[:font] inside a style block; the cookie is set from params[:font] (dashboard_controller.rb:11), so a crafted link injects markup/script.",
+      "endLine" : 427,
+      "file" : "app/views/layouts/application.html.erb",
+      "id" : "RG-XSS-3",
+      "note" : "in-code comment 'VULNERABILITY: XSS via cookie font-size'",
+      "startLine" : 427
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-22",
+        "CWE-639"
+      ],
+      "description" : "download passes params[:name] straight to send_file, so any server file (e.g. config/database.yml) can be downloaded.",
+      "endLine" : 13,
+      "file" : "app/controllers/benefit_forms_controller.rb",
+      "id" : "RG-PATH-TRAVERSAL-1",
+      "note" : "spec/vulnerabilities/insecure_dor_spec.rb 'attack one'",
+      "startLine" : 11
+    },
+    {
+      "class" : "other",
+      "cwe" : [
+        "CWE-470"
+      ],
+      "description" : "download calls params[:type].constantize.new(path), letting the requester choose which Ruby class is instantiated (unsafe reflection).",
+      "endLine" : 12,
+      "file" : "app/controllers/benefit_forms_controller.rb",
+      "id" : "RG-OTHER-1",
+      "note" : "same download flaw as insecure_dor_spec.rb 'attack one' (type=File); RailsGoat wiki constantize extra",
+      "startLine" : 12
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-639"
+      ],
+      "description" : "Work info is loaded with User.find_by(id: params[:user_id]) instead of current_user, so any user can view another user's salary and SSN.",
+      "endLine" : 4,
+      "file" : "app/controllers/work_info_controller.rb",
+      "id" : "RG-AUTHZ-1",
+      "note" : "spec/vulnerabilities/insecure_dor_spec.rb 'attack two'; wiki A4-Insecure-Direct-Object-Reference",
+      "startLine" : 4
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-285"
+      ],
+      "description" : "The administrative check only runs if params[:admin_id] != \"1\" (and never for get_user), so any logged-in user can reach /admin/1/* admin functions.",
+      "endLine" : 3,
+      "file" : "app/controllers/admin_controller.rb",
+      "id" : "RG-AUTHZ-2",
+      "note" : "spec/vulnerabilities/url_access_spec.rb; wiki A7-Missing-Function-Level-Access-Control--(Admin-Controller)",
+      "startLine" : 3
+    },
+    {
+      "class" : "csrf",
+      "cwe" : [
+        "CWE-352"
+      ],
+      "description" : "protect_from_forgery is commented out (and csrf_meta_tags is commented out in the layout), so state-changing requests such as schedule creation accept cross-site forms.",
+      "endLine" : 9,
+      "file" : "app/controllers/application_controller.rb",
+      "id" : "RG-CSRF-1",
+      "note" : "spec/vulnerabilities/csrf_spec.rb; wiki R4-A8-CSRF; 'sea-surfing' code comment",
+      "startLine" : 9
+    },
+    {
+      "class" : "open-redirect",
+      "cwe" : [
+        "CWE-601"
+      ],
+      "description" : "After login the app does redirect_to path where path is the unvalidated params[:url] (line 12).",
+      "endLine" : 26,
+      "file" : "app/controllers/sessions_controller.rb",
+      "id" : "RG-OPEN-REDIRECT-1",
+      "note" : "spec/vulnerabilities/unvalidated_redirects_spec.rb; wiki A10-Unvalidated-Redirects-and-Forwards-(redirect_to)",
+      "startLine" : 26
+    },
+    {
+      "class" : "mass-assignment",
+      "cwe" : [
+        "CWE-915"
+      ],
+      "description" : "Signup uses params.require(:user).permit!, so a new account can set admin=true.",
+      "endLine" : 50,
+      "file" : "app/controllers/users_controller.rb",
+      "id" : "RG-MASS-ASSIGNMENT-1",
+      "note" : "spec/vulnerabilities/mass_assignment_spec.rb 'attack two'; wiki R4-Extras-Mass-Assignment-Admin-Role",
+      "startLine" : 50
+    },
+    {
+      "class" : "mass-assignment",
+      "cwe" : [
+        "CWE-915"
+      ],
+      "description" : "Account update permits :admin, so a user can grant themselves admin via PUT /users/:id.json.",
+      "endLine" : 55,
+      "file" : "app/controllers/users_controller.rb",
+      "id" : "RG-MASS-ASSIGNMENT-2",
+      "note" : "spec/vulnerabilities/mass_assignment_spec.rb 'attack one'",
+      "startLine" : 55
+    },
+    {
+      "class" : "mass-assignment",
+      "cwe" : [
+        "CWE-915"
+      ],
+      "description" : "Admin update_user passes params[:user].to_unsafe_h straight to user.update, allowing assignment of any attribute including admin.",
+      "endLine" : 45,
+      "file" : "app/controllers/admin_controller.rb",
+      "id" : "RG-MASS-ASSIGNMENT-3",
+      "note" : "in-code comment 'VULNERABILITY: Using params[:user] directly without strong parameters' citing wiki Extras:-Mass-Assignment-Admin-Role",
+      "startLine" : 39
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-312",
+        "CWE-359"
+      ],
+      "description" : "The full cleartext SSN is rendered into the page source and only masked client-side by JavaScript; the encrypting before_save in work_info.rb is commented out.",
+      "endLine" : 30,
+      "file" : "app/views/work_info/index.html.erb",
+      "id" : "RG-INFO-DISCLOSURE-1",
+      "note" : "spec/vulnerabilities/sensitive_data_exposure.rb; wiki A6-Sensitive-Data-Exposure-Cleartext-Storage-SSNs; 'Secure Version' comment next to the line",
+      "startLine" : 30
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798"
+      ],
+      "description" : "secret_key_base is hardcoded in source, letting anyone forge signed/encrypted session cookies.",
+      "endLine" : 8,
+      "file" : "config/initializers/secret_token.rb",
+      "id" : "RG-HARDCODED-SECRET-1",
+      "note" : "docs/bonus_encrypted_secrets.md (hardcoded secret_key_base example); RailsGoat wiki session secret tutorial",
+      "startLine" : 8
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-321"
+      ],
+      "description" : "The AES key used for SSNs, bank account numbers and auth tokens is hardcoded.",
+      "endLine" : 16,
+      "file" : "config/initializers/key.rb",
+      "id" : "RG-HARDCODED-SECRET-2",
+      "note" : "in-file comment 'RailsGoat intentionally uses an insecure approach for key management'; docs/bonus_encrypted_secrets.md",
+      "startLine" : 16
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798"
+      ],
+      "description" : "ACCESS_TOKEN_SALT used to derive API tokens (SHA1(salt:id)) is hardcoded, so anyone can mint a valid API token for any user id.",
+      "endLine" : 2,
+      "file" : "config/initializers/constants.rb",
+      "id" : "RG-HARDCODED-SECRET-3",
+      "note" : "docs/bonus_encrypted_secrets.md (API keys/secrets); API token logic in api/v1/users_controller.rb:41-43",
+      "startLine" : 2
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-329",
+        "CWE-1204"
+      ],
+      "description" : "The shared encryption routine reuses the hardcoded KEY with a static hardcoded IV (RG_IV), making encryption deterministic across all values.",
+      "endLine" : 9,
+      "file" : "lib/encryption.rb",
+      "id" : "RG-WEAK-CRYPTO-3",
+      "note" : "code comments 'Added a re-usable encryption routine, shouldn't be an issue!' / 'Should be able to just re-use the same key'",
+      "startLine" : 8
+    },
+    {
+      "class" : "other",
+      "cwe" : [
+        "CWE-200"
+      ],
+      "description" : "decrypted_bank_acct_num decrypts any caller-supplied value with the shared key, acting as a decryption oracle (e.g. for other users' bank numbers or auth tokens).",
+      "endLine" : 39,
+      "file" : "app/controllers/pay_controller.rb",
+      "id" : "RG-OTHER-2",
+      "note" : "RailsGoat wiki encryption/logic-flaw extra; same key reuse as lib/encryption.rb comments",
+      "startLine" : 39
+    },
+    {
+      "class" : "deserialization",
+      "cwe" : [
+        "CWE-502"
+      ],
+      "description" : "reset_password runs Marshal.load on the base64 'user' request parameter (a hidden field, reset_password.html.erb:13), allowing object injection and resetting any user's password.",
+      "endLine" : 6,
+      "file" : "app/controllers/password_resets_controller.rb",
+      "id" : "RG-DESERIALIZATION-1",
+      "note" : "RailsGoat wiki insecure deserialization (A8:2017) tutorial",
+      "startLine" : 6
+    },
+    {
+      "class" : "misconfiguration",
+      "cwe" : [
+        "CWE-1004"
+      ],
+      "description" : "The session cookie is configured with httponly: false, so XSS can steal it.",
+      "endLine" : 4,
+      "file" : "config/initializers/session_store.rb",
+      "id" : "RG-MISCONFIGURATION-1",
+      "note" : "RailsGoat wiki A2-Lack-of-HttpOnly-Flag",
+      "startLine" : 4
+    },
+    {
+      "class" : "redos",
+      "cwe" : [
+        "CWE-1333"
+      ],
+      "description" : "redos_email matches params[:email] against a nested-quantifier email regex prone to catastrophic backtracking.",
+      "endLine" : 27,
+      "file" : "app/controllers/tutorials_controller.rb",
+      "id" : "RG-REDOS-1",
+      "note" : "in-code 'VULNERABILITY: Regular Expression Denial of Service (ReDoS)' comment; wiki R8-A1-ReDoS",
+      "startLine" : 23
+    },
+    {
+      "class" : "redos",
+      "cwe" : [
+        "CWE-1333"
+      ],
+      "description" : "redos_username matches params[:username] against /^(a+)+$/, the canonical exponential-backtracking pattern.",
+      "endLine" : 61,
+      "file" : "app/controllers/tutorials_controller.rb",
+      "id" : "RG-REDOS-2",
+      "note" : "in-code 'VULNERABILITY: ReDoS with nested quantifiers' comment; wiki R8-A1-ReDoS",
+      "startLine" : 57
+    },
+    {
+      "class" : "misconfiguration",
+      "cwe" : [
+        "CWE-353",
+        "CWE-829"
+      ],
+      "description" : "jQuery is loaded from a CDN without a Subresource Integrity attribute.",
+      "endLine" : 18,
+      "file" : "app/views/layouts/application.html.erb",
+      "id" : "RG-MISCONFIGURATION-2",
+      "note" : "in-code comment 'VULNERABILITY A03:2025 - Software Supply Chain Failures ... Missing Subresource Integrity'; tutorials#supply_chain",
+      "startLine" : 18
+    },
+    {
+      "class" : "misconfiguration",
+      "cwe" : [
+        "CWE-353",
+        "CWE-829"
+      ],
+      "description" : "The Bootstrap JS bundle is loaded from a CDN without a Subresource Integrity attribute.",
+      "endLine" : 29,
+      "file" : "app/views/layouts/application.html.erb",
+      "id" : "RG-MISCONFIGURATION-3",
+      "note" : "in-code comment 'VULNERABILITY A03:2025 - Software Supply Chain Failures ... Missing Subresource Integrity'; tutorials#supply_chain",
+      "startLine" : 29
+    }
+  ]
+}

@@ -1,0 +1,713 @@
+{
+  "description" : "PyGoat (Python, Django plus Flask/Django dockerized labs): every lab vulnerability documented in the lab pages, Solutions/solution.md, dockerized lab READMEs and code comments, labeled at the server-side sink or template/client-side sink.",
+  "id" : "pygoat",
+  "schemaVersion" : 1,
+  "source" : {
+    "commit" : "19d17cc8874861142b330636d068bbde54e86b85",
+    "url" : "https://github.com/adeyosemanputra/pygoat.git"
+  },
+  "vulnerabilities" : [
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "sql_lab concatenates the POSTed name and password into a raw SQL string and executes it with login.objects.raw(), allowing login bypass as admin.",
+      "endLine" : 162,
+      "file" : "introduction/views.py",
+      "id" : "PG-INJECTION-1",
+      "note" : "Solutions/solution.md A1 Sql Injection; mitre_top3.html lab details (/sql_lab)",
+      "startLine" : 158
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "injection_sql_lab builds a SQL string from POSTed name/password (line 864) and executes it with sql_lab_table.objects.raw().",
+      "endLine" : 878,
+      "file" : "introduction/views.py",
+      "id" : "PG-INJECTION-2",
+      "note" : "2021 A3 Injection lab (Lab_2021/A3_Injection/sql_lab.html); mitre_top4.html Lab 3",
+      "startLine" : 878
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "cmd_lab formats the user-supplied domain into an nslookup/dig command and runs it with subprocess.Popen(shell=True), allowing command chaining.",
+      "endLine" : 434,
+      "file" : "introduction/views.py",
+      "id" : "PG-INJECTION-3",
+      "note" : "Solutions/solution.md Command Injection Lab 1; Lab/CMD/cmd.html; mitre_top6.html",
+      "startLine" : 430
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-95",
+        "CWE-94"
+      ],
+      "description" : "cmd_lab2 passes the POSTed expression straight to eval(), giving arbitrary Python code execution.",
+      "endLine" : 460,
+      "file" : "introduction/views.py",
+      "id" : "PG-INJECTION-4",
+      "note" : "Solutions/solution.md Command Injection Lab 2; Lab/CMD/cmd.html (eval lab)",
+      "startLine" : 460
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-95",
+        "CWE-94"
+      ],
+      "description" : "a9_lab2 evaluates the user-supplied function string with PIL ImageMath.eval (Pillow 8.0.0), allowing code execution such as exec(exit()).",
+      "endLine" : 588,
+      "file" : "introduction/views.py",
+      "id" : "PG-INJECTION-5",
+      "note" : "Lab/A9/a9.html Lab 2; Solutions/solution.md 2021-A6 lab-2",
+      "startLine" : 588
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78",
+        "CWE-77"
+      ],
+      "description" : "mitre_lab_17_api builds \"nmap \" + ip from POST data (line 241) and command_out runs it with subprocess.Popen(shell=True).",
+      "endLine" : 233,
+      "file" : "introduction/mitre.py",
+      "id" : "PG-INJECTION-6",
+      "note" : "mitre/mitre_top17.html CWE-77 Command Injection lab",
+      "startLine" : 233
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-95",
+        "CWE-94"
+      ],
+      "description" : "mitre_lab_25_api evaluates the POSTed calculator expression with eval(), giving code execution.",
+      "endLine" : 218,
+      "file" : "introduction/mitre.py",
+      "id" : "PG-INJECTION-7",
+      "note" : "mitre/mitre_top25.html CWE-94 Code Injection lab",
+      "startLine" : 218
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-1336",
+        "CWE-94"
+      ],
+      "description" : "ssti_lab writes the user's blog content (filter_blog is a no-op) into a Django template file that is later rendered by ssti_view_blog, allowing server-side template injection.",
+      "endLine" : 996,
+      "file" : "introduction/views.py",
+      "id" : "PG-INJECTION-8",
+      "note" : "Solutions/solution.md 2021-A3 Server side Template Injection; mitre_top4.html Lab 1; Lab_2021/A3_Injection/ssti.html",
+      "startLine" : 994
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-117"
+      ],
+      "description" : "a10_lab2 logs the unsanitized POSTed username on failed login, so newlines let an attacker forge log entries.",
+      "endLine" : 672,
+      "file" : "introduction/views.py",
+      "id" : "PG-INJECTION-9",
+      "note" : "Solutions/solution.md 2021-A9 Insufficient Logging; Lab/A10/a10.html Lab 2",
+      "startLine" : 672
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-117"
+      ],
+      "description" : "a10_lab2 also logs the unsanitized username on the successful-login path (warning and info), enabling log forging.",
+      "endLine" : 669,
+      "file" : "introduction/views.py",
+      "id" : "PG-INJECTION-10",
+      "note" : "Solutions/solution.md 2021-A9; Lab/A10/a10.html Lab 2 (second sink of the same lab)",
+      "startLine" : 668
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "The search query from xss_lab is reflected with {{query|safe}}, disabling autoescaping (reflected XSS).",
+      "endLine" : 27,
+      "file" : "introduction/templates/Lab/XSS/xss_lab.html",
+      "id" : "PG-XSS-1",
+      "note" : "Lab/XSS/xss.html Lab 1 and mitigation section; Solutions/solution.md A7",
+      "startLine" : 27
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "The POSTed username, only stripped of literal <script> tags in xss_lab2, is rendered with |safe, so payloads like <img onerror=...> execute.",
+      "endLine" : 20,
+      "file" : "introduction/templates/Lab/XSS/xss_lab_2.html",
+      "id" : "PG-XSS-2",
+      "note" : "Lab/XSS/xss.html Lab 2 details",
+      "startLine" : 20
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "User input with alphanumerics removed is placed directly inside a <script> block, so JSFuck-style payloads execute.",
+      "endLine" : 22,
+      "file" : "introduction/templates/Lab/XSS/xss_lab_3.html",
+      "id" : "PG-XSS-3",
+      "note" : "Lab/XSS/xss.html Lab 3 details; Solutions/solution.md A7 Lab 3",
+      "startLine" : 22
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "The username GET parameter is rendered with |safe, letting an injected script rewrite the download link to a malicious file.",
+      "endLine" : 11,
+      "file" : "introduction/templates/Lab_2021/A8_software_and_data_integrity_failure/lab2.html",
+      "id" : "PG-XSS-4",
+      "note" : "Solutions/solution.md 2021-A8 Software and Data Integrity failure; A8 desc.html Lab 2; mitre_top2.html",
+      "startLine" : 11
+    },
+    {
+      "class" : "deserialization",
+      "cwe" : [
+        "CWE-502"
+      ],
+      "description" : "insec_des_lab base64-decodes the token cookie and passes it to pickle.loads(), allowing role tampering and code execution.",
+      "endLine" : 214,
+      "file" : "introduction/views.py",
+      "id" : "PG-DESERIALIZATION-1",
+      "note" : "Solutions/solution.md A8 Insecure Deserialization; Lab_2021 A8 desc.html Lab 1",
+      "startLine" : 213
+    },
+    {
+      "class" : "deserialization",
+      "cwe" : [
+        "CWE-502"
+      ],
+      "description" : "a9_lab loads the uploaded YAML with yaml.load(file, yaml.Loader), so !!python/object/apply tags execute commands.",
+      "endLine" : 560,
+      "file" : "introduction/views.py",
+      "id" : "PG-DESERIALIZATION-2",
+      "note" : "Solutions/solution.md A9 Using Components with Known Vulnerability; Lab/A9/a9.html Lab 1",
+      "startLine" : 560
+    },
+    {
+      "class" : "deserialization",
+      "cwe" : [
+        "CWE-502"
+      ],
+      "description" : "deserialize_data passes base64-decoded user-supplied data to pickle.loads() without validation.",
+      "endLine" : 36,
+      "file" : "dockerized_labs/insec_des_lab/main.py",
+      "id" : "PG-DESERIALIZATION-3",
+      "note" : "dockerized_labs/insec_des_lab/README.md Vulnerability Details; code comment 'Intentionally vulnerable deserialization'",
+      "startLine" : 36
+    },
+    {
+      "class" : "xxe",
+      "cwe" : [
+        "CWE-611"
+      ],
+      "description" : "xxe_parse enables external general entities on the SAX parser and parses the request body, allowing file disclosure via XXE.",
+      "endLine" : 260,
+      "file" : "introduction/views.py",
+      "id" : "PG-XXE-1",
+      "note" : "Solutions/solution.md A4 XML External Entities; Lab/XXE/xxe.html",
+      "startLine" : 259
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-22"
+      ],
+      "description" : "ssrf_lab joins the POSTed blog path onto the app directory and opens it without validation, so ../.env and other files can be read.",
+      "endLine" : 927,
+      "file" : "introduction/views.py",
+      "id" : "PG-PATH-TRAVERSAL-1",
+      "note" : "Solutions/solution.md 2021 A10 SSRF (lab 1, find ../.env); mitre_top8.html CWE-22 lab; Lab/ssrf/ssrf.html Lab 1",
+      "startLine" : 925
+    },
+    {
+      "class" : "ssrf",
+      "cwe" : [
+        "CWE-918"
+      ],
+      "description" : "ssrf_lab2 fetches an arbitrary user-supplied URL with requests.get(), reaching localhost-only pages such as /ssrf_target.",
+      "endLine" : 963,
+      "file" : "introduction/views.py",
+      "id" : "PG-SSRF-1",
+      "note" : "Solutions/solution.md 2021 A10 SSRF lab2; Lab/ssrf/ssrf.html Lab 2; mitre_top21.html Lab 2",
+      "startLine" : 963
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-565",
+        "CWE-639"
+      ],
+      "description" : "ba_lab grants admin data whenever the client-controlled admin cookie equals \"1\".",
+      "endLine" : 347,
+      "file" : "introduction/views.py",
+      "id" : "PG-AUTHZ-1",
+      "note" : "Solutions/solution.md A5 Broken Access Control; Lab/BrokenAccess/ba.html",
+      "startLine" : 347
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-565",
+        "CWE-639"
+      ],
+      "description" : "a1_broken_access_lab_1 trusts the client-controlled admin cookie value \"1\" to reveal the admin secret.",
+      "endLine" : 758,
+      "file" : "introduction/views.py",
+      "id" : "PG-AUTHZ-2",
+      "note" : "Solutions/solution.md 2021-A1 Lab 1; Lab_2021/A1_BrokenAccessControl/broken_access.html Lab 1",
+      "startLine" : 758
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-290",
+        "CWE-284"
+      ],
+      "description" : "a1_broken_access_lab_2 treats any request with User-Agent \"pygoat_admin\" as admin.",
+      "endLine" : 797,
+      "file" : "introduction/views.py",
+      "id" : "PG-AUTHZ-3",
+      "note" : "Solutions/solution.md 2021-A1 Lab 2; broken_access.html Lab 2",
+      "startLine" : 797
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-862",
+        "CWE-425"
+      ],
+      "description" : "a1_broken_access_lab3_secret renders the admin secret page with no admin check, so any logged-in user can browse to it directly.",
+      "endLine" : 841,
+      "file" : "introduction/views.py",
+      "id" : "PG-AUTHZ-4",
+      "note" : "Solutions/solution.md 2021-A1 Lab 3; broken_access.html Lab 3; code comment 'no checking applied here'",
+      "startLine" : 840
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-290",
+        "CWE-284"
+      ],
+      "description" : "secret() reveals the secret key when the client-supplied X-Host header equals admin.localhost:8000.",
+      "endLine" : 538,
+      "file" : "introduction/views.py",
+      "id" : "PG-AUTHZ-5",
+      "note" : "Solutions/solution.md A6 Security Misconfiguration; Lab/sec_mis/sec_mis.html Lab 1",
+      "startLine" : 536
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-862",
+        "CWE-359"
+      ],
+      "description" : "all_users_data_view returns every user's full credit card, SSN and API key with no authentication or authorization check.",
+      "endLine" : 132,
+      "file" : "dockerized_labs/sensitive_data_exposure/dataexposure/views.py",
+      "id" : "PG-AUTHZ-6",
+      "note" : "dockerized_labs/sensitive_data_exposure/README.md flaws 3, 6, 7; code comment 'MAJOR SECURITY FLAW'",
+      "startLine" : 129
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-565",
+        "CWE-639"
+      ],
+      "description" : "auth_lab_login logs a user in purely from the sequential userid cookie, so changing it impersonates other users.",
+      "endLine" : 302,
+      "file" : "introduction/views.py",
+      "id" : "PG-AUTH-1",
+      "note" : "Lab/AUTH/auth_home.html (Broken Authentication, 'think about cookies') and auth_lab.html 'Can You Log in as other user?'",
+      "startLine" : 302
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-307"
+      ],
+      "description" : "Otp verifies the 3-digit admin OTP with no rate limiting or attempt counter, so it can be brute-forced.",
+      "endLine" : 514,
+      "file" : "introduction/views.py",
+      "id" : "PG-AUTH-2",
+      "note" : "Solutions/solution.md A2 Broken Authentication; Lab/BrokenAuth/bau.html; Lab_2021 a7.html Lab 1",
+      "startLine" : 514
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-565",
+        "CWE-345"
+      ],
+      "description" : "crypto_failure_lab3 grants admin when the unsigned \"username|timestamp\" cookie starts with admin.",
+      "endLine" : 1061,
+      "file" : "introduction/views.py",
+      "id" : "PG-AUTH-3",
+      "note" : "Solutions/solution.md 2021-A2 Lab 3; crypto_failure.html Lab 3",
+      "startLine" : 1060
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-645"
+      ],
+      "description" : "auth_failure_lab2 locks the admin account for 24 hours after 5 failed attempts by anyone, letting an attacker lock out the real admin.",
+      "endLine" : 1152,
+      "file" : "introduction/views.py",
+      "id" : "PG-AUTH-4",
+      "note" : "Lab_2021/A7_auth_failure/a7.html Lab 2 ('do something else so that real admin can't access the admin panel')",
+      "startLine" : 1148
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-613"
+      ],
+      "description" : "auth_failure_lab3 logout only blanks the session_id cookie and never deletes the AF_session_id record, so old session tokens keep working.",
+      "endLine" : 1197,
+      "file" : "introduction/views.py",
+      "id" : "PG-AUTH-5",
+      "note" : "Lab_2021/A7_auth_failure/a7.html Lab 3; A7 discussion api expects AF_session_id...delete()",
+      "startLine" : 1196
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-307",
+        "CWE-256"
+      ],
+      "description" : "login compares plaintext passwords with no brute-force protection.",
+      "endLine" : 41,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-AUTH-6",
+      "note" : "dockerized_labs/broken_auth_lab/README.md items 2 and 6; code comment 'Plain text password comparison'",
+      "startLine" : 41
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-330",
+        "CWE-565"
+      ],
+      "description" : "The session token is just base64(username:timestamp), which is predictable and forgeable.",
+      "endLine" : 45,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-AUTH-7",
+      "note" : "broken_auth_lab/README.md item 3 / exercise 2; code comment 'Insecure session management'",
+      "startLine" : 45
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-539",
+        "CWE-1004"
+      ],
+      "description" : "Remember me stores the forgeable session token in a 30-day persistent cookie without HttpOnly/Secure.",
+      "endLine" : 49,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-AUTH-8",
+      "note" : "broken_auth_lab/README.md item 4; code comment 'Insecure Remember Me implementation'",
+      "startLine" : 49
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-521"
+      ],
+      "description" : "register accepts any non-empty password with no complexity requirements.",
+      "endLine" : 65,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-AUTH-9",
+      "note" : "broken_auth_lab/README.md item 1 / exercise 1; code comment 'No password complexity requirements'",
+      "startLine" : 65
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-256"
+      ],
+      "description" : "register stores new users' passwords in plaintext.",
+      "endLine" : 68,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-AUTH-10",
+      "note" : "broken_auth_lab/README.md item 2; code comment 'Storing plain text passwords'",
+      "startLine" : 68
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-287",
+        "CWE-565"
+      ],
+      "description" : "dashboard takes the username from the base64 session cookie without verification, so a forged cookie logs in as admin (role escalation).",
+      "endLine" : 112,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-AUTH-11",
+      "note" : "broken_auth_lab/README.md exercises 2 and 4; code comment 'Insecure session validation'",
+      "startLine" : 111
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-328",
+        "CWE-916"
+      ],
+      "description" : "crypto_failure_lab hashes passwords with unsalted MD5, so leaked hashes are trivially reversed.",
+      "endLine" : 1026,
+      "file" : "introduction/views.py",
+      "id" : "PG-WEAK-CRYPTO-1",
+      "note" : "Solutions/solution.md 2021-A2 Lab 1; crypto_failure.html Lab 1",
+      "startLine" : 1026
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-916",
+        "CWE-759"
+      ],
+      "description" : "customHash is an unsalted, fast SHA-256 with the hex reversed, used for crypto_failure_lab2 passwords and easily cracked.",
+      "endLine" : 59,
+      "file" : "introduction/utility.py",
+      "id" : "PG-WEAK-CRYPTO-2",
+      "note" : "Solutions/solution.md 2021-A2 Lab 2 ('custom function is used'); crypto_failure.html Lab 2",
+      "startLine" : 59
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-330",
+        "CWE-640"
+      ],
+      "description" : "Password reset tokens are MD5(email:timestamp), which is predictable.",
+      "endLine" : 86,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-WEAK-CRYPTO-3",
+      "note" : "broken_auth_lab/README.md item 5 / exercise 3; code comment 'Predictable token generation'",
+      "startLine" : 86
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-338"
+      ],
+      "description" : "API keys are generated with the non-cryptographic random.choices.",
+      "endLine" : 42,
+      "file" : "dockerized_labs/sensitive_data_exposure/dataexposure/views.py",
+      "id" : "PG-WEAK-CRYPTO-4",
+      "note" : "code comments in generate_api_key ('should probably use a better method'), 'not very secure api key'",
+      "startLine" : 42
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798",
+        "CWE-321"
+      ],
+      "description" : "The JWT signing key SECRET_COOKIE_KEY is a hardcoded weak value (\"PYGOAT\"), exposed via the debug page, letting attackers forge an admin auth_cookie.",
+      "endLine" : 171,
+      "file" : "pygoat/settings.py",
+      "id" : "PG-HARDCODED-SECRET-1",
+      "note" : "Lab/sec_mis/sec_mis.html Lab 3 ('solve lab2 before this', login as admin) and sec_mis_lab3.html code view",
+      "startLine" : 171
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798"
+      ],
+      "description" : "Flask app.secret_key is hardcoded.",
+      "endLine" : 8,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-HARDCODED-SECRET-2",
+      "note" : "code comment 'Vulnerable: Hardcoded secret key' in broken_auth_lab/app.py",
+      "startLine" : 8
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798",
+        "CWE-521"
+      ],
+      "description" : "The admin account has a hardcoded weak password (admin123).",
+      "endLine" : 13,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-HARDCODED-SECRET-3",
+      "note" : "code comment 'Vulnerable: Weak password'; broken_auth_lab/README.md default credentials",
+      "startLine" : 13
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798",
+        "CWE-521"
+      ],
+      "description" : "The regular user account has a hardcoded weak password (password123).",
+      "endLine" : 18,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-HARDCODED-SECRET-4",
+      "note" : "code comment 'Vulnerable: Weak password'; broken_auth_lab/README.md default credentials",
+      "startLine" : 18
+    },
+    {
+      "class" : "misconfiguration",
+      "cwe" : [
+        "CWE-489",
+        "CWE-215"
+      ],
+      "description" : "DEBUG = True makes 500/404 errors dump settings, including SENSITIVE_DATA and SECRET_COOKIE_KEY.",
+      "endLine" : 30,
+      "file" : "pygoat/settings.py",
+      "id" : "PG-MISCONFIGURATION-1",
+      "note" : "Solutions/solution.md A3 Sensitive Data Exposure; Lab/DataExp/data_exp.html; Lab/sec_mis/sec_mis.html Lab 2",
+      "startLine" : 30
+    },
+    {
+      "class" : "misconfiguration",
+      "cwe" : [
+        "CWE-489",
+        "CWE-94"
+      ],
+      "description" : "The Flask app runs with debug=True on 0.0.0.0.",
+      "endLine" : 123,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-MISCONFIGURATION-2",
+      "note" : "broken_auth_lab/README.md item 7; code comment 'Debug mode enabled in production'",
+      "startLine" : 123
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-532",
+        "CWE-200"
+      ],
+      "description" : "The unauthenticated /debug route serves a log file containing a request with credentials in the query string.",
+      "endLine" : 637,
+      "file" : "introduction/views.py",
+      "id" : "PG-INFO-DISCLOSURE-1",
+      "note" : "Solutions/solution.md A10 Insufficient Logging & Monitoring; Lab/A10/a10.html Lab 1",
+      "startLine" : 637
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-640",
+        "CWE-200"
+      ],
+      "description" : "The password reset link and token are shown to whoever requests the reset instead of being emailed.",
+      "endLine" : 91,
+      "file" : "dockerized_labs/broken_auth_lab/app.py",
+      "id" : "PG-INFO-DISCLOSURE-2",
+      "note" : "code comment 'Vulnerable: Token exposed in response'; broken_auth_lab/README.md exercise 3",
+      "startLine" : 91
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-615"
+      ],
+      "description" : "The profile page emits the full credit card, SSN and API key inside an HTML comment.",
+      "endLine" : 130,
+      "file" : "dockerized_labs/sensitive_data_exposure/templates/profile.html",
+      "id" : "PG-INFO-DISCLOSURE-3",
+      "note" : "dockerized_labs/sensitive_data_exposure/README.md flaw 1 (comments in HTML)",
+      "startLine" : 128
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-200"
+      ],
+      "description" : "Client-side JavaScript embeds the user's API key in a global variable.",
+      "endLine" : 219,
+      "file" : "dockerized_labs/sensitive_data_exposure/templates/profile.html",
+      "id" : "PG-INFO-DISCLOSURE-4",
+      "note" : "sensitive_data_exposure/README.md flaw 2 (JavaScript that exposes API keys)",
+      "startLine" : 219
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-922"
+      ],
+      "description" : "Client-side JavaScript stores the API key in localStorage.",
+      "endLine" : 222,
+      "file" : "dockerized_labs/sensitive_data_exposure/templates/profile.html",
+      "id" : "PG-INFO-DISCLOSURE-5",
+      "note" : "sensitive_data_exposure/README.md flaw 4 (data stored in localStorage)",
+      "startLine" : 222
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-359",
+        "CWE-200"
+      ],
+      "description" : "api_data_view returns the full, unmasked credit card, SSN and API key as JSON.",
+      "endLine" : 109,
+      "file" : "dockerized_labs/sensitive_data_exposure/dataexposure/views.py",
+      "id" : "PG-INFO-DISCLOSURE-6",
+      "note" : "sensitive_data_exposure/README.md flaws 3 and 5; code comment 'Intentionally exposing sensitive data through API'",
+      "startLine" : 109
+    },
+    {
+      "class" : "other",
+      "cwe" : [
+        "CWE-311",
+        "CWE-312"
+      ],
+      "description" : "Credit card numbers and SSNs are stored unencrypted in the database.",
+      "endLine" : 7,
+      "file" : "dockerized_labs/sensitive_data_exposure/dataexposure/models.py",
+      "id" : "PG-OTHER-1",
+      "note" : "code comments 'probly should encrypt this', 'security risk!' in models.py",
+      "startLine" : 6
+    },
+    {
+      "class" : "other",
+      "cwe" : [
+        "CWE-837",
+        "CWE-799"
+      ],
+      "description" : "insec_desgine_lab limits free tickets per account only, so creating multiple accounts claims all tickets (insecure design / business logic).",
+      "endLine" : 703,
+      "file" : "introduction/views.py",
+      "id" : "PG-OTHER-2",
+      "note" : "Solutions/solution.md OWASP 2021 A4 Insecure Design; Lab/A11/a11.html",
+      "startLine" : 703
+    },
+    {
+      "class" : "csrf",
+      "cwe" : [
+        "CWE-352"
+      ],
+      "description" : "csrf_transfer_monei_api transfers money on a plain GET authenticated only by a cookie, with no CSRF token, so a cross-site link can make the victim transfer funds.",
+      "endLine" : 193,
+      "file" : "introduction/mitre.py",
+      "id" : "PG-CSRF-1",
+      "note" : "mitre/mitre_top9.html CWE-352 CSRF lab (bank transfer)",
+      "startLine" : 191
+    }
+  ]
+}

@@ -1,0 +1,1043 @@
+{
+  "description" : "OWASP WebGoat (Java, Spring Boot): every deliberately exploitable lesson/challenge sink described by the lesson documentation (adoc pages, hints, code comments), labeled at the dangerous statement.",
+  "id" : "webgoat",
+  "schemaVersion" : 1,
+  "source" : {
+    "commit" : "e7b131360d74336c0c94ab5c8a21259503f59be8",
+    "url" : "https://github.com/WebGoat/WebGoat.git"
+  },
+  "vulnerabilities" : [
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "The raw SQL string from request parameter 'query' is executed directly with Statement.executeQuery.",
+      "endLine" : 49,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson2.java",
+      "id" : "WG-INJECTION-1",
+      "note" : "SqlInjection_introduction_content1.adoc (What is SQL? - assignment runs user-supplied SQL)",
+      "startLine" : 49
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "The raw SQL string from request parameter 'query' is executed directly with Statement.executeUpdate.",
+      "endLine" : 47,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson3.java",
+      "id" : "WG-INJECTION-2",
+      "note" : "SqlInjection_introduction_content2.adoc (DML assignment runs user-supplied SQL)",
+      "startLine" : 47
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "The raw SQL string from request parameter 'query' is executed directly with Statement.executeUpdate (DDL).",
+      "endLine" : 46,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson4.java",
+      "id" : "WG-INJECTION-3",
+      "note" : "SqlInjection_introduction_content3.adoc (DDL assignment runs user-supplied SQL)",
+      "startLine" : 46
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "The raw SQL string from request parameter 'query' (GRANT statement) is executed directly.",
+      "endLine" : 65,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson5.java",
+      "id" : "WG-INJECTION-4",
+      "note" : "SqlInjection_introduction_content4.adoc (DCL assignment runs user-supplied SQL)",
+      "startLine" : 65
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "account/operator/injection parameters are concatenated into a string literal of a SELECT on user_data and executed with Statement.executeQuery.",
+      "endLine" : 52,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson5a.java",
+      "id" : "WG-INJECTION-5",
+      "note" : "SqlInjection_introduction_content11.adoc (Try It! String SQL injection, 'or 1=1'), code EXPLANATION constant",
+      "startLine" : 48
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "userid is concatenated (numeric context) into the query passed to prepareStatement, so only login_count is parameterized.",
+      "endLine" : 49,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson5b.java",
+      "id" : "WG-INJECTION-6",
+      "note" : "SqlInjection_introduction_content12.adoc (Try It! Numeric SQL injection)",
+      "startLine" : 47
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "name and auth_tan are concatenated into a SELECT on employees and executed, allowing confidentiality compromise.",
+      "endLine" : 62,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson8.java",
+      "id" : "WG-INJECTION-7",
+      "note" : "SqlInjection_introduction_content8.adoc (Compromising confidentiality with String SQL injection)",
+      "startLine" : 62
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "name and auth_tan are concatenated into a query executed with Statement.execute, allowing stacked UPDATE queries.",
+      "endLine" : 65,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson9.java",
+      "id" : "WG-INJECTION-8",
+      "note" : "SqlInjection_introduction_content9.adoc (Compromising Integrity with Query chaining)",
+      "startLine" : 65
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "action_string is concatenated into a LIKE clause on access_log and executed, allowing stacked DROP TABLE.",
+      "endLine" : 56,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/introduction/SqlInjectionLesson10.java",
+      "id" : "WG-INJECTION-9",
+      "note" : "SqlInjection_introduction_content10.adoc (Compromising Availability)",
+      "startLine" : 56
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "userid_6a is concatenated into a SELECT on user_data (built at line 54) and executed, enabling UNION/stacked extraction of user_system_data.",
+      "endLine" : 72,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/advanced/SqlInjectionLesson6a.java",
+      "id" : "WG-INJECTION-10",
+      "note" : "SqlInjection_content6a.adoc (advanced, UNION), answer comment at lines 46-47",
+      "startLine" : 72
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "username_reg is concatenated into the user-exists check query and executed, a blind boolean SQL injection.",
+      "endLine" : 61,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/advanced/SqlInjectionChallenge.java",
+      "id" : "WG-INJECTION-11",
+      "note" : "SqlInjection_challenge.adoc (log in as Tom; blind injection in registration)",
+      "startLine" : 59
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "The 'column' request parameter is concatenated into the ORDER BY clause of a prepared statement.",
+      "endLine" : 53,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/mitigation/Servers.java",
+      "id" : "WG-INJECTION-12",
+      "note" : "SqlInjection_content13.adoc / SqlInjection_order_by.adoc (ORDER BY injection to get the webgoat-prd IP)",
+      "startLine" : 49
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "Input validation that only rejects spaces is bypassable (e.g. comments), and the value reaches the concatenated query of lesson 6a.",
+      "endLine" : 35,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/mitigation/SqlOnlyInputValidation.java",
+      "id" : "WG-INJECTION-13",
+      "note" : "SqlInjection_content12a.adoc (input validation alone is not enough)",
+      "startLine" : 32
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "Single-pass removal of SELECT/FROM plus a space check is bypassable, and the value reaches the concatenated query of lesson 6a.",
+      "endLine" : 41,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/sqlinjection/mitigation/SqlOnlyInputValidationOnKeywords.java",
+      "id" : "WG-INJECTION-14",
+      "note" : "SqlInjection_content12b.adoc (keyword filtering is not enough)",
+      "startLine" : 37
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "The JWT 'kid' header is concatenated into a SELECT on jwt_keys, so an attacker controls the HMAC signing key.",
+      "endLine" : 76,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/jwt/claimmisuse/JWTHeaderKIDEndpoint.java",
+      "id" : "WG-INJECTION-15",
+      "note" : "JWT_claim_misuse_kid.adoc / JWT_claim_misuse_kid_assignment.adoc",
+      "startLine" : 72
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "username_login and password_login are concatenated into the login query, allowing login as Larry without the password.",
+      "endLine" : 50,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/challenges/challenge5/Assignment5.java",
+      "id" : "WG-INJECTION-16",
+      "note" : "Challenge_5.adoc (Can you login as Larry?)",
+      "startLine" : 43
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "Command strings built from user input are executed through '/bin/sh -c' or 'cmd.exe /c', so shell metacharacters are interpreted.",
+      "endLine" : 34,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/commandinjection/CommandExecutionService.java",
+      "id" : "WG-INJECTION-17",
+      "note" : "CommandInjection_Intro.adoc / CommandInjection_Safety.adoc (shared shell execution sink for tasks 2-4)",
+      "startLine" : 33
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "The 'base' and 'payload' request parameters are joined into a shell command and executed, leaking the WEBGOAT_BUILD_TOKEN environment variable.",
+      "endLine" : 55,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/commandinjection/CommandInjectionTask2.java",
+      "id" : "WG-INJECTION-18",
+      "note" : "CommandInjection_Task2.adoc",
+      "startLine" : 53
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "The search 'title' is concatenated into a grep/findstr command (buildCommand line 108) and run through the shell, allowing the flag file to be read.",
+      "endLine" : 45,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/commandinjection/CommandInjectionTask3Service.java",
+      "id" : "WG-INJECTION-19",
+      "note" : "CommandInjection_Task3.adoc",
+      "startLine" : 43
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "A denylist that only strips ';', '&&' and '|' is bypassable (e.g. newline, $(), backticks), and the title is executed through the shell.",
+      "endLine" : 47,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/commandinjection/CommandInjectionTask4Service.java",
+      "id" : "WG-INJECTION-20",
+      "note" : "CommandInjection_Task4.adoc (filter bypass)",
+      "startLine" : 45
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "readObject of the deserialization gadget passes the attacker-controlled taskAction to Runtime.exec.",
+      "endLine" : 67,
+      "file" : "src/main/java/org/dummy/insecure/framework/VulnerableTaskHolder.java",
+      "id" : "WG-INJECTION-21",
+      "note" : "InsecureDeserialization_Task.adoc / InsecureDeserialization_GadgetChain.adoc (VulnerableTaskHolder gadget)",
+      "startLine" : 67
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-117"
+      ],
+      "description" : "The username is written unneutralized into the simulated log output, so CRLF/HTML lets an attacker forge an 'admin' log entry.",
+      "endLine" : 32,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/logging/LogSpoofingTask.java",
+      "id" : "WG-INJECTION-22",
+      "note" : "logSpoofing_Task.adoc",
+      "startLine" : 31
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "The credit card field1 parameter is concatenated unescaped into the HTML output that is rendered in the page (reflected XSS).",
+      "endLine" : 65,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/xss/CrossSiteScriptingLesson5a.java",
+      "id" : "WG-XSS-1",
+      "note" : "CrossSiteScripting_content5a.adoc (Try It! Reflected XSS)",
+      "startLine" : 65
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "The 'test/:param' route value from the URL fragment is inserted with jQuery .html(), a DOM-based XSS sink.",
+      "endLine" : 216,
+      "file" : "src/main/resources/webgoat/static/js/goatApp/view/LessonContentView.js",
+      "id" : "WG-XSS-2",
+      "note" : "CrossSiteScripting_content6a.adoc / CrossSiteScripting_content6b.adoc (DOM-based XSS, start.mvc#test/ route; comments in DOMCrossSiteScripting.java)",
+      "startLine" : 216
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "Stored comment text returned by /CrossSiteScriptingStored/stored-xss is placed into an HTML template and appended to the DOM unescaped.",
+      "endLine" : 40,
+      "file" : "src/main/resources/lessons/xss/js/stored-xss.js",
+      "id" : "WG-XSS-3",
+      "note" : "CrossSiteScripting_content7.adoc / CrossSiteScriptingStored_plan.adoc (stored XSS assignment; StoredXssComments stores comment text unsanitized)",
+      "startLine" : 39
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-22"
+      ],
+      "description" : "The user-supplied fullName is used as the file name under the upload directory, so '../' writes the file elsewhere.",
+      "endLine" : 53,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/pathtraversal/ProfileUploadBase.java",
+      "id" : "WG-PATH-TRAVERSAL-1",
+      "note" : "PathTraversal_upload.adoc (ProfileUpload passes fullName unchanged)",
+      "startLine" : 51
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-22"
+      ],
+      "description" : "The 'fix' removes '../' only once, so '....//' still traverses out of the upload directory.",
+      "endLine" : 43,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/pathtraversal/ProfileUploadFix.java",
+      "id" : "WG-PATH-TRAVERSAL-2",
+      "note" : "PathTraversal_upload_fix.adoc (bypass the implemented fix)",
+      "startLine" : 43
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-22"
+      ],
+      "description" : "The multipart original file name (attacker-controlled) is used as the destination name, allowing traversal.",
+      "endLine" : 41,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/pathtraversal/ProfileUploadRemoveUserInput.java",
+      "id" : "WG-PATH-TRAVERSAL-3",
+      "note" : "PathTraversal_upload_remove_user_input.adoc",
+      "startLine" : 41
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-22"
+      ],
+      "description" : "The 'id' parameter builds a File path; the raw query-string check is bypassed with URL encoding, so files outside the cats directory are read.",
+      "endLine" : 101,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/pathtraversal/ProfileUploadRetrieval.java",
+      "id" : "WG-PATH-TRAVERSAL-4",
+      "note" : "PathTraversal_retrieval.adoc (path-traversal-secret.jpg)",
+      "startLine" : 100
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-22"
+      ],
+      "description" : "Zip entry names are used unvalidated as extraction paths (Zip Slip), so entries with '../' overwrite arbitrary files.",
+      "endLine" : 81,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/pathtraversal/ProfileZipSlip.java",
+      "id" : "WG-PATH-TRAVERSAL-5",
+      "note" : "PathTraversal_zip_slip.adoc / PathTraversal_zip_slip_assignment.adoc",
+      "startLine" : 79
+    },
+    {
+      "class" : "xxe",
+      "cwe" : [
+        "CWE-611"
+      ],
+      "description" : "Comment XML is parsed with a default XMLInputFactory/JAXB unmarshaller (securityEnabled=false), so external entities are resolved.",
+      "endLine" : 82,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/xxe/CommentsCache.java",
+      "id" : "WG-XXE-1",
+      "note" : "XXE_simple.adoc (SimpleXXE calls parseXml(commentStr, false)); 'TODO fix me disabled' comment",
+      "startLine" : 79
+    },
+    {
+      "class" : "xxe",
+      "cwe" : [
+        "CWE-611"
+      ],
+      "description" : "When the Content-Type is switched to XML the JSON endpoint parses the body with the XXE-vulnerable parser.",
+      "endLine" : 60,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/xxe/ContentTypeAssignment.java",
+      "id" : "WG-XXE-2",
+      "note" : "XXE_changing_content_type.adoc",
+      "startLine" : 60
+    },
+    {
+      "class" : "xxe",
+      "cwe" : [
+        "CWE-611"
+      ],
+      "description" : "The comment body is parsed with the XXE-vulnerable parser, allowing blind out-of-band exfiltration of secret.txt via parameter entities.",
+      "endLine" : 79,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/xxe/BlindSendFileAssignment.java",
+      "id" : "WG-XXE-3",
+      "note" : "XXE_blind.adoc / XXE_blind_assignment.adoc",
+      "startLine" : 79
+    },
+    {
+      "class" : "xxe",
+      "cwe" : [
+        "CWE-611"
+      ],
+      "description" : "The feed importer's DocumentBuilderFactory explicitly enables external general entities, which the entity resolver fetches.",
+      "endLine" : 59,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/challenges/challenge2/ChainedXmlService.java",
+      "id" : "WG-XXE-4",
+      "note" : "Challenge 2 (Partner feed recovery) hints challenge2.chain.hint1/hint3 in i18n WebGoatLabels.properties",
+      "startLine" : 56
+    },
+    {
+      "class" : "deserialization",
+      "cwe" : [
+        "CWE-502"
+      ],
+      "description" : "The base64 'token' parameter is deserialized with ObjectInputStream.readObject without any class filtering.",
+      "endLine" : 45,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/deserialization/InsecureDeserializationTask.java",
+      "id" : "WG-DESERIALIZATION-1",
+      "note" : "InsecureDeserialization_Task.adoc",
+      "startLine" : 42
+    },
+    {
+      "class" : "deserialization",
+      "cwe" : [
+        "CWE-502"
+      ],
+      "description" : "User XML is deserialized with XStream.fromXML without a type allowlist, allowing arbitrary object/gadget instantiation (CVE-2013-7285 style).",
+      "endLine" : 42,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/vulnerablecomponents/VulnerableComponentsLesson.java",
+      "id" : "WG-DESERIALIZATION-2",
+      "note" : "VulnerableComponents_content5a.adoc (Exploiting CVE-2013-7285 XStream); code comment references CVE-2013-7285",
+      "startLine" : 42
+    },
+    {
+      "class" : "ssrf",
+      "cwe" : [
+        "CWE-918"
+      ],
+      "description" : "The server opens the client-supplied 'url' parameter with new URL(url).openStream() and returns the response.",
+      "endLine" : 36,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/ssrf/SSRFTask2.java",
+      "id" : "WG-SSRF-1",
+      "note" : "SSRF_Task2.adoc (make the server fetch http://ifconfig.pro); the URL is regex-limited to that host in this training code",
+      "startLine" : 36
+    },
+    {
+      "class" : "ssrf",
+      "cwe" : [
+        "CWE-918"
+      ],
+      "description" : "The allowed source is checked only for the starting URL; redirect targets are followed unchecked, so the importer reaches the internal diagnostics endpoint.",
+      "endLine" : 51,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/challenges/challenge2/ChainedFetchService.java",
+      "id" : "WG-SSRF-2",
+      "note" : "Challenge 2 hints challenge2.chain.hint2/hint3; code comment 'Redirect targets intentionally bypass that check'",
+      "startLine" : 50
+    },
+    {
+      "class" : "open-redirect",
+      "cwe" : [
+        "CWE-601"
+      ],
+      "description" : "The 'url' parameter is used unvalidated in a 'redirect:' view name.",
+      "endLine" : 21,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/openredirect/OpenRedirectRealRedirect.java",
+      "id" : "WG-OPEN-REDIRECT-1",
+      "note" : "OpenRedirect_Explained.adoc; code comment 'Intentionally vulnerable: no validation'",
+      "startLine" : 21
+    },
+    {
+      "class" : "open-redirect",
+      "cwe" : [
+        "CWE-601"
+      ],
+      "description" : "The publisher /northstar/go endpoint redirects to any 'url' parameter, which is chained into the SSRF.",
+      "endLine" : 20,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/challenges/challenge2/NorthstarEndpoints.java",
+      "id" : "WG-OPEN-REDIRECT-2",
+      "note" : "Challenge 2 hint challenge2.chain.hint2 (look closely at the publisher link)",
+      "startLine" : 20
+    },
+    {
+      "class" : "open-redirect",
+      "cwe" : [
+        "CWE-601"
+      ],
+      "description" : "Redirect-target validation only checks that the URL contains 'webgoat', so external hosts such as webgoat.evil.com pass.",
+      "endLine" : 37,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/openredirect/OpenRedirectTask2.java",
+      "id" : "WG-OPEN-REDIRECT-3",
+      "note" : "OpenRedirect_Task2.adoc (bypass naive filter; simulated redirect)",
+      "startLine" : 37
+    },
+    {
+      "class" : "open-redirect",
+      "cwe" : [
+        "CWE-601"
+      ],
+      "description" : "The redirect target is treated as internal if it starts with http(s)://webgoat.local, so userinfo tricks ('webgoat.local@evil.com') reach an external host.",
+      "endLine" : 44,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/openredirect/OpenRedirectTask3.java",
+      "id" : "WG-OPEN-REDIRECT-4",
+      "note" : "OpenRedirect_Task3.adoc; code comment 'Vulnerable heuristic'",
+      "startLine" : 43
+    },
+    {
+      "class" : "open-redirect",
+      "cwe" : [
+        "CWE-601",
+        "CWE-174"
+      ],
+      "description" : "The target is validated after one URL decode but decoded a second time downstream, so double-encoded '@' changes the real host.",
+      "endLine" : 64,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/openredirect/OpenRedirectTask4.java",
+      "id" : "WG-OPEN-REDIRECT-5",
+      "note" : "OpenRedirect_Task4.adoc (double decoding)",
+      "startLine" : 63
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-639"
+      ],
+      "description" : "Any userId from the path is used to load and return that user's profile without a horizontal access-control check.",
+      "endLine" : 51,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/idor/IDORViewOtherProfile.java",
+      "id" : "WG-AUTHZ-1",
+      "note" : "IDOR_viewOtherProfile.adoc; code comment about missing horizontal access control",
+      "startLine" : 49
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-639"
+      ],
+      "description" : "A PUT to /IDOR/profile/{userId} updates another user's color and role without checking authorization.",
+      "endLine" : 56,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/idor/IDOREditOtherProfile.java",
+      "id" : "WG-AUTHZ-2",
+      "note" : "IDOR_editOtherProfile.adoc; code comment 'not checking for proper authorization'",
+      "startLine" : 51
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-862"
+      ],
+      "description" : "The JSON /access-control/users endpoint returns all users with their hashes to any authenticated user (no admin check).",
+      "endLine" : 58,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/missingac/MissingFunctionACUsers.java",
+      "id" : "WG-AUTHZ-3",
+      "note" : "missing-function-ac-03-users.adoc",
+      "startLine" : 54
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-862",
+        "CWE-915"
+      ],
+      "description" : "Anyone can POST a new user with admin=true (also on users-admin-fix), which bypasses the admin check of the 'fixed' listing.",
+      "endLine" : 83,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/missingac/MissingFunctionACUsers.java",
+      "id" : "WG-AUTHZ-4",
+      "note" : "missing-function-ac-04-users-fixed.adoc (the company fixed the problem, right?)",
+      "startLine" : 81
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-425",
+        "CWE-602"
+      ],
+      "description" : "Admin menu items (Users, Config) are only hidden with CSS, relying on obscurity instead of access control.",
+      "endLine" : 41,
+      "file" : "src/main/resources/lessons/missingac/html/MissingFunctionAC.html",
+      "id" : "WG-AUTHZ-5",
+      "note" : "missing-function-ac-02-client-controls.adoc (relying on obscurity, hidden menu items)",
+      "startLine" : 37
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-602",
+        "CWE-200"
+      ],
+      "description" : "The salaries endpoint returns every employee's SSN and salary and leaves the filtering to client-side code.",
+      "endLine" : 78,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/clientsidefiltering/Salaries.java",
+      "id" : "WG-AUTHZ-6",
+      "note" : "ClientSideFiltering_assignment.adoc (find the CEO's salary)",
+      "startLine" : 77
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-639"
+      ],
+      "description" : "The account a new credential is bound to is taken from the client-sent userHandle instead of server-side ceremony state, so a key can be registered on Jerry's account.",
+      "endLine" : 111,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/webauthn/WebAuthnRegistrationAssignment.java",
+      "id" : "WG-AUTHZ-7",
+      "note" : "WebAuthn_registration_assignment.adoc / WebAuthn_pitfalls.adoc ('Account taken from the client')",
+      "startLine" : 110
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-287",
+        "CWE-288"
+      ],
+      "description" : "Security-question checks only run if the expected parameter names are present, so renamed parameters skip verification entirely.",
+      "endLine" : 73,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/authbypass/AccountVerificationHelper.java",
+      "id" : "WG-AUTH-1",
+      "note" : "2fa-bypass.adoc; code comment 'Can you find the flaw?'",
+      "startLine" : 63
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-347"
+      ],
+      "description" : "Jwts.parser().parse() accepts unsigned (alg none) tokens, so a forged admin=true claim resets the votes.",
+      "endLine" : 202,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/jwt/JWTVotesEndpoint.java",
+      "id" : "WG-AUTH-2",
+      "note" : "JWT_signing.adoc / JWT_signing_solution.adoc",
+      "startLine" : 200
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-347"
+      ],
+      "description" : "The checkout endpoint parses the bearer token with parse(), accepting unsigned alg none tokens for user Tom.",
+      "endLine" : 91,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/jwt/JWTRefreshEndpoint.java",
+      "id" : "WG-AUTH-3",
+      "note" : "JWT_refresh_assignment.adoc; feedback key jwt-refresh-alg-none at line 96",
+      "startLine" : 91
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-613",
+        "CWE-639"
+      ],
+      "description" : "Refresh tokens are not bound to a user and expired access tokens are accepted, so Jerry's refresh token mints a new token for Tom.",
+      "endLine" : 133,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/jwt/JWTRefreshEndpoint.java",
+      "id" : "WG-AUTH-4",
+      "note" : "JWT_refresh_assignment.adoc (let Tom pay for the books)",
+      "startLine" : 131
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-347",
+        "CWE-918"
+      ],
+      "description" : "The verification key is fetched from the token's own 'jku' header URL, so an attacker-hosted JWKS validates a forged token.",
+      "endLine" : 60,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/jwt/claimmisuse/JWTHeaderJKUEndpoint.java",
+      "id" : "WG-AUTH-5",
+      "note" : "JWT_claim_misuse_jku.adoc / JWT_claim_misuse_jku_assignment.adoc",
+      "startLine" : 56
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-650"
+      ],
+      "description" : "Verb-based authentication only blocks GET, so a HEAD request to the vote endpoint votes and receives the flag header.",
+      "endLine" : 46,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/challenges/challenge8/Assignment8.java",
+      "id" : "WG-AUTH-6",
+      "note" : "Challenge_8.adoc (Can you still vote?); code comment 'VERB Based Authentication'",
+      "startLine" : 46
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-640",
+        "CWE-307",
+        "CWE-204"
+      ],
+      "description" : "Password recovery relies on a guessable favorite-color answer with no lockout, and unknown users get a distinct message.",
+      "endLine" : 51,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/passwordreset/QuestionsAssignment.java",
+      "id" : "WG-AUTH-7",
+      "note" : "PasswordReset_known_questions.adoc ('There is no lock-out mechanism'), PasswordReset_wrong_message.adoc",
+      "startLine" : 45
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-640",
+        "CWE-644"
+      ],
+      "description" : "The password-reset e-mail link is built from the client-supplied Host header (read at line 67), so a poisoned host leaks Tom's reset token.",
+      "endLine" : 91,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/passwordreset/ResetLinkAssignmentForgotPassword.java",
+      "id" : "WG-AUTH-8",
+      "note" : "PasswordReset_host_header.adoc",
+      "startLine" : 91
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-294"
+      ],
+      "description" : "The issued challenge is removed from the session but never compared with clientData.challenge, so a captured assertion of Jerry can be replayed.",
+      "endLine" : 77,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/webauthn/WebAuthnAuthenticationAssignment.java",
+      "id" : "WG-AUTH-9",
+      "note" : "WebAuthn_authentication_assignment.adoc / WebAuthn_pitfalls.adoc; code comment 'never compared with clientData.challenge()'",
+      "startLine" : 76
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798",
+        "CWE-521"
+      ],
+      "description" : "The JWT HMAC key is a hardcoded dictionary word, so the token signature can be brute-forced and forged.",
+      "endLine" : 38,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/jwt/JWTSecretKeyEndpoint.java",
+      "id" : "WG-HARDCODED-SECRET-1",
+      "note" : "JWT_weak_keys / JWT_signing (secret key assignment)",
+      "startLine" : 34
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798"
+      ],
+      "description" : "The admin password for challenge 1 is hardcoded in source (only the 1234 part is replaced by the PIN).",
+      "endLine" : 10,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/challenges/SolutionConstants.java",
+      "id" : "WG-HARDCODED-SECRET-2",
+      "note" : "Challenge_1.adoc (the admin forgot where the password is stashed); TODO comment 'should be random generated'",
+      "startLine" : 10
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798",
+        "CWE-1392"
+      ],
+      "description" : "Default admin/admin credentials are hardcoded and accepted for the staging login.",
+      "endLine" : 29,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/securitymisconfiguration/DefaultCredentialsTask.java",
+      "id" : "WG-HARDCODED-SECRET-3",
+      "note" : "SecurityMisconfiguration_Task1.adoc (default credentials)",
+      "startLine" : 28
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798",
+        "CWE-319"
+      ],
+      "description" : "Obfuscated hardcoded credentials (CaptainJack/BlackPearl) are sent in cleartext in the login request body.",
+      "endLine" : 5,
+      "file" : "src/main/resources/lessons/insecurelogin/js/credentials.js",
+      "id" : "WG-HARDCODED-SECRET-4",
+      "note" : "InsecureLogin_Intro.adoc / InsecureLogin_Task.adoc (sniff the cleartext login)",
+      "startLine" : 5
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-328",
+        "CWE-759"
+      ],
+      "description" : "A password is hashed with unsalted MD5, which is reversible with lookup tables.",
+      "endLine" : 41,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/cryptography/HashingAssignment.java",
+      "id" : "WG-WEAK-CRYPTO-1",
+      "note" : "hashing_plan.adoc (crack the MD5 hash)",
+      "startLine" : 39
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-759",
+        "CWE-916"
+      ],
+      "description" : "A password is hashed with a single unsalted SHA-256, which is reversible with lookup tables.",
+      "endLine" : 56,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/cryptography/HashingAssignment.java",
+      "id" : "WG-WEAK-CRYPTO-2",
+      "note" : "hashing_plan.adoc (crack the SHA-256 hash)",
+      "startLine" : 56
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-759",
+        "CWE-916"
+      ],
+      "description" : "Stage 1 password records are unsalted fast SHA-256, so equal passwords share a hash and a wordlist cracks them.",
+      "endLine" : 132,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/passwordstorage/PasswordStorageService.java",
+      "id" : "WG-WEAK-CRYPTO-3",
+      "note" : "PasswordStorage_Stage1.adoc",
+      "startLine" : 131
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-916"
+      ],
+      "description" : "Stage 2 password records are salted but still a single fast SHA-256, so a wordlist attack per record still succeeds.",
+      "endLine" : 144,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/passwordstorage/PasswordStorageService.java",
+      "id" : "WG-WEAK-CRYPTO-4",
+      "note" : "PasswordStorage_Stage2.adoc",
+      "startLine" : 141
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-208"
+      ],
+      "description" : "The HMAC tag is compared byte by byte with an early exit, leaking the number of matching bytes through response timing.",
+      "endLine" : 45,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/cryptography/timing/InsecureHmacValidator.java",
+      "id" : "WG-WEAK-CRYPTO-5",
+      "note" : "timing-attacks-introduction.adoc / timing-attacks-discovery.adoc / timing-attacks-mitigation.adoc (early-exit cause)",
+      "startLine" : 41
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-330",
+        "CWE-340"
+      ],
+      "description" : "Session IDs are an incrementing counter plus a millisecond timestamp, so other users' session cookies can be predicted.",
+      "endLine" : 30,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/hijacksession/cas/HijackSessionAuthenticationProvider.java",
+      "id" : "WG-WEAK-CRYPTO-6",
+      "note" : "HijackSession_content0.adoc; code comment 'weak id value and mechanism'",
+      "startLine" : 29
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-330",
+        "CWE-336"
+      ],
+      "description" : "Reset links come from java.util.Random, seeded with the key length for admin, so the admin reset link is fixed and predictable.",
+      "endLine" : 18,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/challenges/challenge7/PasswordResetLink.java",
+      "id" : "WG-WEAK-CRYPTO-7",
+      "note" : "Challenge_7.adoc (reset the password for admin); code comment 'Admin has a fix reset link'",
+      "startLine" : 15
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-327",
+        "CWE-565"
+      ],
+      "description" : "The authentication cookie is only reversed/hex/base64-encoded (not signed), so a cookie for 'tom' can be forged.",
+      "endLine" : 28,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/spoofcookie/encoders/EncDec.java",
+      "id" : "WG-WEAK-CRYPTO-8",
+      "note" : "SpoofCookie_content0.adoc; code comment 'PoC: weak encoding method'",
+      "startLine" : 25
+    },
+    {
+      "class" : "csrf",
+      "cwe" : [
+        "CWE-352"
+      ],
+      "description" : "The state-changing basic-get-flag POST has no anti-CSRF token and accepts cross-origin requests.",
+      "endLine" : 29,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/csrf/CSRFGetFlag.java",
+      "id" : "WG-CSRF-1",
+      "note" : "CSRF_GET.adoc / CSRF_Get_Flag.adoc / CSRF_Basic_Get-1.adoc",
+      "startLine" : 29
+    },
+    {
+      "class" : "csrf",
+      "cwe" : [
+        "CWE-352"
+      ],
+      "description" : "The review endpoint's 'anti-CSRF' check compares against a static hardcoded token (line 38), so forged cross-site reviews succeed.",
+      "endLine" : 92,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/csrf/ForgedReviews.java",
+      "id" : "WG-CSRF-2",
+      "note" : "CSRF_Reviews.adoc",
+      "startLine" : 92
+    },
+    {
+      "class" : "csrf",
+      "cwe" : [
+        "CWE-352"
+      ],
+      "description" : "The JSON feedback endpoint accepts a JSON body sent as text/plain from a cross-site form without any CSRF protection.",
+      "endLine" : 45,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/csrf/CSRFFeedback.java",
+      "id" : "WG-CSRF-3",
+      "note" : "CSRF_JSON.adoc / CSRF_ContentType.adoc",
+      "startLine" : 45
+    },
+    {
+      "class" : "csrf",
+      "cwe" : [
+        "CWE-352"
+      ],
+      "description" : "Spring Security CSRF protection is disabled globally, so the login form is open to login CSRF.",
+      "endLine" : 71,
+      "file" : "src/main/java/org/owasp/webgoat/container/WebSecurityConfig.java",
+      "id" : "WG-CSRF-4",
+      "note" : "CSRF_Login.adoc (see if WebGoat is vulnerable to login CSRF)",
+      "startLine" : 71
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-532"
+      ],
+      "description" : "The generated Admin password is written (base64-encoded) to the application log at startup.",
+      "endLine" : 33,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/logging/LogBleedingTask.java",
+      "id" : "WG-INFO-DISCLOSURE-1",
+      "note" : "logReading_Task.adoc / sensitive_logging_intro.adoc",
+      "startLine" : 31
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-209"
+      ],
+      "description" : "A verbose error page returns a stack trace with DB credentials and the system API token.",
+      "endLine" : 46,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/securitymisconfiguration/VerboseErrorTask.java",
+      "id" : "WG-INFO-DISCLOSURE-2",
+      "note" : "SecurityMisconfiguration_Task2.adoc (verbose errors)",
+      "startLine" : 42
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-200",
+        "CWE-215"
+      ],
+      "description" : "An unauthenticated actuator/env-style endpoint exposes the internal system API key.",
+      "endLine" : 37,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/securitymisconfiguration/ActuatorExposureTask.java",
+      "id" : "WG-INFO-DISCLOSURE-3",
+      "note" : "SecurityMisconfiguration_Task3.adoc (exposed actuator)",
+      "startLine" : 34
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-538",
+        "CWE-200"
+      ],
+      "description" : "A reachable blog-backup application.properties discloses the password pepper, allowing the peppered hashes to be cracked.",
+      "endLine" : 55,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/passwordstorage/PasswordStorageDataController.java",
+      "id" : "WG-INFO-DISCLOSURE-4",
+      "note" : "PasswordStorage_Stage5.adoc (disclosure)",
+      "startLine" : 52
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-527",
+        "CWE-540"
+      ],
+      "description" : "The /challenge/7/.git endpoint serves the repository archive, revealing the reset-link generation code.",
+      "endLine" : 103,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/challenges/challenge7/Assignment7.java",
+      "id" : "WG-INFO-DISCLOSURE-5",
+      "note" : "Challenge_7.adoc (reset the password for admin)",
+      "startLine" : 100
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-200"
+      ],
+      "description" : "The admin PIN that completes the password is embedded into the bytes of the public logo image.",
+      "endLine" : 39,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/challenges/challenge1/ImageServlet.java",
+      "id" : "WG-INFO-DISCLOSURE-6",
+      "note" : "Challenge_1.adoc (the admin forgot where the password is stashed)",
+      "startLine" : 34
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-200",
+        "CWE-602"
+      ],
+      "description" : "The coupons endpoint lists every code, including the 100% 'get_it_for_free' coupon that the UI never shows.",
+      "endLine" : 61,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/clientsidefiltering/ShopEndpoint.java",
+      "id" : "WG-INFO-DISCLOSURE-7",
+      "note" : "ClientSideFiltering_final.adoc (get it for free)",
+      "startLine" : 57
+    },
+    {
+      "class" : "other",
+      "cwe" : [
+        "CWE-602",
+        "CWE-472"
+      ],
+      "description" : "The checkout trusts the client-supplied Total price instead of recomputing it server-side.",
+      "endLine" : 25,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/htmltampering/HtmlTamperingTask.java",
+      "id" : "WG-OTHER-1",
+      "note" : "HtmlTampering_Task.adoc (buy the TV for a lower price)",
+      "startLine" : 24
+    },
+    {
+      "class" : "other",
+      "cwe" : [
+        "CWE-235"
+      ],
+      "description" : "Authorization checks the first 'recipient' value while the transfer uses the last, so a duplicated parameter redirects the money.",
+      "endLine" : 43,
+      "file" : "src/main/java/org/owasp/webgoat/lessons/httpparameterpollution/ParameterPollutionTransfer.java",
+      "id" : "WG-OTHER-2",
+      "note" : "HttpParameterPollution_3.adoc (Exploit: transfer validation bypass)",
+      "startLine" : 42
+    }
+  ]
+}

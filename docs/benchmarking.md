@@ -266,9 +266,61 @@ templates. Business-logic flaws (access control, IDOR, CSRF, password reset logi
 ReDoS and vulnerable dependencies are for the AI review, the dependency scanners or
 nobody: no pattern rule finds them.
 
-None of these applications has a complete list of its flaws in a form that can be
-scored, so this gives no recall figure. It shows what the rules report on real
-application code, and that what they report is almost always right.
+That is precision: what the rules report on real application code, and that what
+they report is almost always right. Recall on the same applications is next.
+
+## Recall on the same applications
+
+[`evals/detect/real-apps/`](../evals/detect/real-apps/README.md) labels the documented
+vulnerabilities of the five applications above, at the same commits: 270 in all,
+written from each application's own lessons, help pages and wiki before any scan
+output was looked at. They include flaws no pattern rule can find (access control,
+CSRF, authentication logic, information disclosure), so the overall figure is the
+share of everything documented, not of what a scanner could reach.
+
+Measured on 2026-10-18 with the binary scanners (Opengrep, gitleaks, osv-scanner,
+Trivy; no Docker, so none of the Tier-2 tools) and AI review off. "Own rules" is
+`--mode commercial`; "with community rules" is the default `--mode oss`.
+
+| | Own rules, before | Own rules, after | With community rules, before | With community rules, after |
+|---|---|---|---|---|
+| **Overall** | **23.3%** (63) | **30.7%** (83) | **30.7%** (83) | **35.9%** (97) |
+| Injection (61) | 31 | 33 | 36 | 36 |
+| XSS (28) | 3 | 11 | 10 | 15 |
+| Path traversal (11) | 4 | 4 | 4 | 4 |
+| Weak crypto (21) | 5 | 6 | 7 | 8 |
+| Hard-coded secret (12) | 1 | 3 | 1 | 3 |
+| Open redirect (10) | 5 | 7 | 6 | 7 |
+| Deserialization (6) | 5 | 6 | 5 | 6 |
+| XXE (5) | 1 | 2 | 1 | 2 |
+| File upload (3) | 0 | 3 | 0 | 3 |
+| SSRF (4) | 3 | 3 | 3 | 3 |
+| Access control, authentication, CSRF, info disclosure, misconfiguration, other (102) | 3 | 3 | 6 | 6 |
+
+"After" is with the rules added on 2026-10-18: Python SQL injection by taint and
+reflected XSS, Django and Jinja `|safe` and `autoescape off`, hard-coded Flask, Django
+and JWT signing keys, Python XXE, Java open redirect and XStream, PHP HTML built from
+request data, uploads saved under the client's file name and ECB/DES ciphers, and
+JavaScript template engines with escaping off.
+
+Read it with these limits in mind:
+
+- **The "after" columns are in-sample.** The rules were written while reading these
+  applications' misses. They are general patterns, not app-specific ones, but recall
+  on code they were not written against will be lower than the gain here suggests.
+- **Precision held.** With own rules only, the new rules added 52 findings to the five
+  apps, 20 of them on labels. The rest were read by hand: nearly all are real flaws
+  the labels do not list (request data in DVWA's HTML, `$_SERVER['PHP_SELF']` in form
+  actions, DVWA's view-source page reflecting `id`). Two were wrong: command output
+  and a username echoed on DVWA's "impossible" levels, which validate the input in
+  ways the rule cannot follow.
+- **What is still missed, by cause:** taint that crosses files (WebGoat's command
+  injection runs in a service class the controller calls; DVWA includes the page
+  chosen in another file); SQL escaped but used unquoted (DVWA medium); Opengrep
+  dropping a second identical sink after a `switch` `break` (DVWA's SQLite branches);
+  DOM XSS in inline `<script>` blocks; hard-coded passwords too short or plain to
+  tell from test data; and logic flaws, which are for the AI review (`--hunt`) or a
+  person.
 
 ## External targets
 

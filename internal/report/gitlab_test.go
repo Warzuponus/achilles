@@ -528,3 +528,57 @@ func TestGitLabSecretDetection_HistoryFindingNamesItsCommit(t *testing.T) {
 		t.Errorf("commit sha = %v, want the commit the credential was found in", sha)
 	}
 }
+
+// GitLab follows a vulnerability by its tracking signature, so the signature must
+// survive the code moving to other lines, must tell two identical matches in one
+// file apart, and must be left out when there is no line-independent fingerprint.
+func TestGitLab_TrackingSignatureIgnoresLinesButNotOccurrences(t *testing.T) {
+	sigs := func(s model.Scan) []string {
+		doc := decodeGitLab(t, func(b *bytes.Buffer) error { return WriteGitLabSAST(b, s, gitlabMeta) })
+		checkGitLabSecurityReport(t, doc, "sast")
+		var out []string
+		for _, v := range doc["vulnerabilities"].([]any) {
+			tr, ok := v.(map[string]any)["tracking"].(map[string]any)
+			if !ok {
+				out = append(out, "")
+				continue
+			}
+			if tr["type"] != "source" {
+				t.Errorf("tracking type = %v, want source", tr["type"])
+			}
+			item := tr["items"].([]any)[0].(map[string]any)
+			sig := item["signatures"].([]any)[0].(map[string]any)
+			if sig["algorithm"] != "hash" {
+				t.Errorf("signature algorithm = %v, want hash", sig["algorithm"])
+			}
+			out = append(out, sig["value"].(string))
+		}
+		return out
+	}
+
+	s := gitlabScan()
+	before := sigs(s)[0]
+	if before == "" {
+		t.Fatal("a finding with a fingerprint has no tracking signature")
+	}
+	moved := gitlabScan()
+	moved.Findings[0].Location.Region = model.Region{StartLine: 141, EndLine: 143}
+	if after := sigs(moved)[0]; after != before {
+		t.Errorf("signature changed when the finding moved lines: %s -> %s", before, after)
+	}
+
+	twice := gitlabScan()
+	again := twice.Findings[0]
+	again.Location.Region = model.Region{StartLine: 90, EndLine: 90}
+	twice.Findings = append(twice.Findings, again)
+	got := sigs(twice)
+	if got[0] == got[len(got)-1] {
+		t.Error("two identical matches in one file share a tracking signature, so GitLab would merge them")
+	}
+
+	none := gitlabScan()
+	none.Findings[0].Fingerprint = ""
+	if sig := sigs(none)[0]; sig != "" {
+		t.Errorf("a finding without a fingerprint has tracking %q; want none", sig)
+	}
+}

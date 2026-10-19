@@ -186,9 +186,24 @@ What to know:
 - **An incomplete scan says so.** If a scanner could not run, the report's scan
   status is `failure` and a message names the tool; the findings from the scanners
   that did run are still there.
-- **Dependency advisories** are not written as a GitLab dependency scanning report
-  (that format needs per-package data Achilles does not keep). They are in the Code
-  Quality report and in Achilles' own reports.
+- **Dependency advisories** go in the dependency scanning report, each with the
+  package, version and manifest taken from the scanner's message (an advisory that
+  names no package is reported as `unknown`), and in the Code Quality report.
+- **Vulnerabilities keep their history when code moves.** Each finding in the
+  security reports carries a tracking signature built from Achilles' fingerprint,
+  which hashes the matched code rather than its line, so GitLab (Ultimate) keeps a
+  vulnerability's status, comments and linked issue when an edit above it shifts
+  its line, instead of resolving it and reporting a new one.
+- **A summary note on the merge request**, on every tier: add
+  `--gitlab-mr-comment $CI_MERGE_REQUEST_IID` in merge request pipelines and store a
+  token as a masked CI/CD variable named `ACHILLES_GITLAB_TOKEN`: a project access
+  token with the `api` scope and the Reporter role is enough (`CI_JOB_TOKEN` cannot
+  write notes). Achilles posts the Markdown summary once and updates that same note on
+  every later run. It only ever edits a note that starts with its marker and was
+  written by the token's own user, so a note someone else plants is left alone. The
+  project and API URL come from `CI_PROJECT_ID` and `CI_API_V4_URL`; outside GitLab CI
+  pass `--gitlab-project` (and the API defaults to gitlab.com). With `--ai`, nothing is
+  posted if the AI review did not finish.
 - **Schema.** The security reports declare version 15.0.0 of GitLab's
   [security report schemas](https://gitlab.com/gitlab-org/security-products/security-report-schemas),
   the oldest of the 15.x line, and use only fields present in every 15.x version.

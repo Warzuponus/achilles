@@ -193,4 +193,21 @@ function hashes(password, key, iv) {
   crypto.createCipheriv("aes-256-gcm", key, iv);
 }
 
+
+function templates(swig, nunjucks, Handlebars, src) {
+  // ruleid: achilles.javascript.template-autoescape-disabled
+  swig.setDefaults({ autoescape: false });
+  // ok: achilles.javascript.template-autoescape-disabled
+  swig.setDefaults({ autoescape: true });
+  // ruleid: achilles.javascript.template-autoescape-disabled
+  nunjucks.configure("views", { autoescape: false, express: app });
+  // ok: achilles.javascript.template-autoescape-disabled
+  nunjucks.configure("views", { autoescape: true, express: app });
+  // ruleid: achilles.javascript.template-autoescape-disabled
+  Handlebars.compile(src, { noEscape: true });
+  // ok: achilles.javascript.template-autoescape-disabled
+  Handlebars.compile(src);
+}
+
+
 app.listen(3000);

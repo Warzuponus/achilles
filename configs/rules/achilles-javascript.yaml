@@ -361,3 +361,21 @@ rules:
               metavariable: $ALG
               regex: (?i)^["'](des|des-ede|des-ede3|rc2|rc4|bf|blowfish)[^"']*["']$|(?i)^["'][^"']*-ecb["']$
       - pattern: crypto.createCipher(...)
+
+  - id: achilles.javascript.template-autoescape-disabled
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      HTML escaping is turned off for the template engine, so every value a template
+      prints is raw markup, and any of them that holds user input is XSS. Leave
+      autoescaping on and mark only trusted, sanitized HTML as safe.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    pattern-either:
+      - pattern: "$SWIG.setDefaults({..., autoescape: false, ...})"
+      - pattern: "new $SWIG.Swig({..., autoescape: false, ...})"
+      - pattern: "nunjucks.configure(..., {..., autoescape: false, ...}, ...)"
+      - pattern: "new nunjucks.Environment($LOADER, {..., autoescape: false, ...})"
+      - pattern: "$HB.compile($T, {..., noEscape: true, ...})"
+      - pattern: "$ENGINE({..., noEscape: true, ...})"

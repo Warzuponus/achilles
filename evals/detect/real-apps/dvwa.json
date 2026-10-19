@@ -1,0 +1,899 @@
+{
+  "description" : "DVWA (PHP + inline/client-side JS): every documented low/medium/high level of every vulnerability module, labeled at the sink or missing check; impossible levels excluded.",
+  "id" : "dvwa",
+  "schemaVersion" : 1,
+  "source" : {
+    "commit" : "068d974487a297c155c48722f9fcf7180a83adc4",
+    "url" : "https://github.com/digininja/DVWA.git"
+  },
+  "vulnerabilities" : [
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "SQLi low (MySQL branch): raw $_REQUEST['id'] is quoted into the SELECT and run with mysqli_query.",
+      "endLine" : 11,
+      "file" : "vulnerabilities/sqli/source/low.php",
+      "id" : "DVWA-INJECTION-1",
+      "note" : "vulnerabilities/sqli/help/help.php Low Level",
+      "startLine" : 10
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "SQLi low (SQLite branch): raw id is concatenated into the SELECT and run with SQLite3::query.",
+      "endLine" : 34,
+      "file" : "vulnerabilities/sqli/source/low.php",
+      "id" : "DVWA-INJECTION-2",
+      "note" : "vulnerabilities/sqli/help/help.php Low Level",
+      "startLine" : 31
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "SQLi medium (MySQL branch): mysqli_real_escape_string is used, but the id sits unquoted in a numeric context, so UNION payloads still work.",
+      "endLine" : 12,
+      "file" : "vulnerabilities/sqli/source/medium.php",
+      "id" : "DVWA-INJECTION-3",
+      "note" : "vulnerabilities/sqli/help/help.php Medium Level",
+      "startLine" : 11
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "SQLi medium (SQLite branch): the id is unquoted in the query that SQLite3::query runs.",
+      "endLine" : 30,
+      "file" : "vulnerabilities/sqli/source/medium.php",
+      "id" : "DVWA-INJECTION-4",
+      "note" : "vulnerabilities/sqli/help/help.php Medium Level",
+      "startLine" : 27
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "SQLi high (MySQL branch): $_SESSION['id'], set from user input on session-input.php, is quoted into the SELECT without escaping.",
+      "endLine" : 11,
+      "file" : "vulnerabilities/sqli/source/high.php",
+      "id" : "DVWA-INJECTION-5",
+      "note" : "vulnerabilities/sqli/help/help.php High Level",
+      "startLine" : 10
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "SQLi high (SQLite branch): the id from the session is concatenated into the query that SQLite3::query runs.",
+      "endLine" : 31,
+      "file" : "vulnerabilities/sqli/source/high.php",
+      "id" : "DVWA-INJECTION-6",
+      "note" : "vulnerabilities/sqli/help/help.php High Level",
+      "startLine" : 28
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "Blind SQLi low (MySQL branch): raw $_GET['id'] is quoted into the SELECT, and the boolean or time-based result shows through the exists/404 response.",
+      "endLine" : 13,
+      "file" : "vulnerabilities/sqli_blind/source/low.php",
+      "id" : "DVWA-INJECTION-7",
+      "note" : "vulnerabilities/sqli_blind/help/help.php Low Level",
+      "startLine" : 11
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "Blind SQLi low (SQLite branch): raw id is concatenated into the query that SQLite3::query runs.",
+      "endLine" : 34,
+      "file" : "vulnerabilities/sqli_blind/source/low.php",
+      "id" : "DVWA-INJECTION-8",
+      "note" : "vulnerabilities/sqli_blind/help/help.php Low Level",
+      "startLine" : 32
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "Blind SQLi medium (MySQL branch): the escaped id is unquoted in a numeric context, so it is still injectable.",
+      "endLine" : 15,
+      "file" : "vulnerabilities/sqli_blind/source/medium.php",
+      "id" : "DVWA-INJECTION-9",
+      "note" : "vulnerabilities/sqli_blind/help/help.php Medium Level",
+      "startLine" : 13
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "Blind SQLi medium (SQLite branch): the POSTed id goes into the query unescaped and unquoted.",
+      "endLine" : 36,
+      "file" : "vulnerabilities/sqli_blind/source/medium.php",
+      "id" : "DVWA-INJECTION-10",
+      "note" : "vulnerabilities/sqli_blind/help/help.php Medium Level",
+      "startLine" : 34
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "Blind SQLi high (MySQL branch): $_COOKIE['id'] is quoted into the SELECT without escaping.",
+      "endLine" : 13,
+      "file" : "vulnerabilities/sqli_blind/source/high.php",
+      "id" : "DVWA-INJECTION-11",
+      "note" : "vulnerabilities/sqli_blind/help/help.php High Level",
+      "startLine" : 11
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89"
+      ],
+      "description" : "Blind SQLi high (SQLite branch): the cookie id is concatenated into the query that SQLite3::query runs.",
+      "endLine" : 35,
+      "file" : "vulnerabilities/sqli_blind/source/high.php",
+      "id" : "DVWA-INJECTION-12",
+      "note" : "vulnerabilities/sqli_blind/help/help.php High Level",
+      "startLine" : 33
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "Command injection low (Windows branch): raw $_REQUEST['ip'] is appended to 'ping' and passed to shell_exec.",
+      "endLine" : 10,
+      "file" : "vulnerabilities/exec/source/low.php",
+      "id" : "DVWA-INJECTION-13",
+      "note" : "vulnerabilities/exec/help/help.php Low Level",
+      "startLine" : 10
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "Command injection low (*nix branch): raw ip is appended to 'ping -c 4' and passed to shell_exec.",
+      "endLine" : 14,
+      "file" : "vulnerabilities/exec/source/low.php",
+      "id" : "DVWA-INJECTION-14",
+      "note" : "vulnerabilities/exec/help/help.php Low Level",
+      "startLine" : 14
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "Command injection medium (Windows branch): the blacklist removes only '&&' and ';', so '|', '&' and similar still reach shell_exec.",
+      "endLine" : 19,
+      "file" : "vulnerabilities/exec/source/medium.php",
+      "id" : "DVWA-INJECTION-15",
+      "note" : "vulnerabilities/exec/help/help.php Medium Level",
+      "startLine" : 19
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "Command injection medium (*nix branch): the incomplete blacklist lets other shell metacharacters reach shell_exec.",
+      "endLine" : 23,
+      "file" : "vulnerabilities/exec/source/medium.php",
+      "id" : "DVWA-INJECTION-16",
+      "note" : "vulnerabilities/exec/help/help.php Medium Level",
+      "startLine" : 23
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "Command injection high (Windows branch): the blacklist entry is '| ' (pipe followed by a space), so a bare '|' still reaches shell_exec.",
+      "endLine" : 26,
+      "file" : "vulnerabilities/exec/source/high.php",
+      "id" : "DVWA-INJECTION-17",
+      "note" : "vulnerabilities/exec/help/help.php High Level",
+      "startLine" : 26
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "Command injection high (*nix branch): the '| ' typo in the blacklist lets '|cmd' reach shell_exec.",
+      "endLine" : 30,
+      "file" : "vulnerabilities/exec/source/high.php",
+      "id" : "DVWA-INJECTION-18",
+      "note" : "vulnerabilities/exec/help/help.php High Level",
+      "startLine" : 30
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-78"
+      ],
+      "description" : "API high: the JSON 'target' of /v2/health/connectivity is concatenated into exec('ping -c 4 ' . $target).",
+      "endLine" : 88,
+      "file" : "vulnerabilities/api/src/HealthController.php",
+      "id" : "DVWA-INJECTION-19",
+      "note" : "vulnerabilities/api/help/help.php High Level",
+      "startLine" : 88
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89",
+        "CWE-348",
+        "CWE-117"
+      ],
+      "description" : "BAC low: the attacker-controlled X-Forwarded-For header is put unescaped into the bac_log INSERT, which allows log forgery and SQL injection.",
+      "endLine" : 81,
+      "file" : "vulnerabilities/bac/source/low.php",
+      "id" : "DVWA-INJECTION-20",
+      "note" : "vulnerabilities/bac/help/help.php 'Security Logs' (XFF lets logs be manipulated); bac/README.md Low ('Vulnerable to SQL injection')",
+      "startLine" : 77
+    },
+    {
+      "class" : "injection",
+      "cwe" : [
+        "CWE-89",
+        "CWE-348",
+        "CWE-117"
+      ],
+      "description" : "BAC medium: the X-Forwarded-For header is put unescaped into the bac_log INSERT, which allows log forgery and SQL injection.",
+      "endLine" : 73,
+      "file" : "vulnerabilities/bac/source/medium.php",
+      "id" : "DVWA-INJECTION-21",
+      "note" : "vulnerabilities/bac/help/help.php 'Security Logs' section",
+      "startLine" : 69
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "Reflected XSS low: $_GET['name'] is concatenated into HTML output without encoding.",
+      "endLine" : 8,
+      "file" : "vulnerabilities/xss_r/source/low.php",
+      "id" : "DVWA-XSS-1",
+      "note" : "vulnerabilities/xss_r/help/help.php Low Level",
+      "startLine" : 8
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "Reflected XSS medium: only the exact lowercase '<script>' is removed before output, so mixed case or other tags get through.",
+      "endLine" : 11,
+      "file" : "vulnerabilities/xss_r/source/medium.php",
+      "id" : "DVWA-XSS-2",
+      "note" : "vulnerabilities/xss_r/help/help.php Medium Level",
+      "startLine" : 8
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "Reflected XSS high: a regex strips 's.c.r.i.p.t' patterns only, so event-handler payloads such as <img onerror> are output unencoded.",
+      "endLine" : 11,
+      "file" : "vulnerabilities/xss_r/source/high.php",
+      "id" : "DVWA-XSS-3",
+      "note" : "vulnerabilities/xss_r/help/help.php High Level",
+      "startLine" : 8
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "Stored XSS low: the guestbook name and message are stored with only SQL escaping (no HTML encoding) and rendered later.",
+      "endLine" : 17,
+      "file" : "vulnerabilities/xss_s/source/low.php",
+      "id" : "DVWA-XSS-4",
+      "note" : "vulnerabilities/xss_s/help/help.php Low Level",
+      "startLine" : 16
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "Stored XSS medium: the name field is filtered only by str_replace('<script>') before storage, so mixed-case script tags are stored.",
+      "endLine" : 18,
+      "file" : "vulnerabilities/xss_s/source/medium.php",
+      "id" : "DVWA-XSS-5",
+      "note" : "vulnerabilities/xss_s/help/help.php Medium Level",
+      "startLine" : 14
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "Stored XSS high: the name field is filtered only by the s.c.r.i.p.t regex, so event-handler payloads are stored.",
+      "endLine" : 18,
+      "file" : "vulnerabilities/xss_s/source/high.php",
+      "id" : "DVWA-XSS-6",
+      "note" : "vulnerabilities/xss_s/help/help.php High Level",
+      "startLine" : 14
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "Stored XSS output sink shared by low/medium/high: dvwaGuestbook() echoes the stored name and comment without htmlspecialchars, except at impossible.",
+      "endLine" : 626,
+      "file" : "dvwa/includes/dvwaPage.inc.php",
+      "id" : "DVWA-XSS-7",
+      "note" : "vulnerabilities/xss_s/help/help.php (all vulnerable levels)",
+      "startLine" : 622
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "DOM XSS sink for all levels: the 'default=' part of document.location.href is decoded and written into the page with document.write.",
+      "endLine" : 53,
+      "file" : "vulnerabilities/xss_d/index.php",
+      "id" : "DVWA-XSS-8",
+      "note" : "vulnerabilities/xss_d/help/help.php Low/Medium/High",
+      "startLine" : 51
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "DOM XSS medium: the server blocks only '<script', so breaking out of <select> with an <img onerror> reaches the document.write sink.",
+      "endLine" : 8,
+      "file" : "vulnerabilities/xss_d/source/medium.php",
+      "id" : "DVWA-XSS-9",
+      "note" : "vulnerabilities/xss_d/help/help.php Medium Level",
+      "startLine" : 8
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "DOM XSS high: the server whitelists only the query value, but the client sink also reads the URL fragment (#...), which is never sent to the server.",
+      "endLine" : 7,
+      "file" : "vulnerabilities/xss_d/source/high.php",
+      "id" : "DVWA-XSS-10",
+      "note" : "vulnerabilities/xss_d/help/help.php High Level",
+      "startLine" : 7
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79",
+        "CWE-829"
+      ],
+      "description" : "CSP bypass low: user-supplied $_POST['include'] becomes a <script src>, and the permissive CSP allows scripts from attacker-controllable hosts.",
+      "endLine" : 15,
+      "file" : "vulnerabilities/csp/source/low.php",
+      "id" : "DVWA-XSS-11",
+      "note" : "vulnerabilities/csp/help/help.php Low Level",
+      "startLine" : 14
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "CSP bypass medium: $_POST['include'] is dropped into the page raw, and inline scripts run when they carry the static nonce.",
+      "endLine" : 16,
+      "file" : "vulnerabilities/csp/source/medium.php",
+      "id" : "DVWA-XSS-12",
+      "note" : "vulnerabilities/csp/help/help.php Medium Level",
+      "startLine" : 15
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "CSP bypass high: $_POST['include'] is dropped into the page raw, so an injected <script src=source/jsonp.php?callback=...> passes script-src 'self'.",
+      "endLine" : 10,
+      "file" : "vulnerabilities/csp/source/high.php",
+      "id" : "DVWA-XSS-13",
+      "note" : "vulnerabilities/csp/help/help.php High Level",
+      "startLine" : 9
+    },
+    {
+      "class" : "xss",
+      "cwe" : [
+        "CWE-79"
+      ],
+      "description" : "CSP bypass high: the JSONP endpoint echoes the unvalidated callback parameter as executable script.",
+      "endLine" : 12,
+      "file" : "vulnerabilities/csp/source/jsonp.php",
+      "id" : "DVWA-XSS-14",
+      "note" : "vulnerabilities/csp/help/help.php High Level (modify the jsonp.php callback)",
+      "startLine" : 12
+    },
+    {
+      "class" : "misconfiguration",
+      "cwe" : [
+        "CWE-693"
+      ],
+      "description" : "CSP low: script-src allowlists hosts that serve arbitrary user content (unpkg.com, cdn.jsdelivr.net, pastebin, etc.).",
+      "endLine" : 5,
+      "file" : "vulnerabilities/csp/source/low.php",
+      "id" : "DVWA-MISCONFIGURATION-1",
+      "note" : "vulnerabilities/csp/help/help.php Low Level",
+      "startLine" : 3
+    },
+    {
+      "class" : "misconfiguration",
+      "cwe" : [
+        "CWE-693",
+        "CWE-330"
+      ],
+      "description" : "CSP medium: the policy uses a hardcoded nonce that never changes, together with 'unsafe-inline'.",
+      "endLine" : 5,
+      "file" : "vulnerabilities/csp/source/medium.php",
+      "id" : "DVWA-MISCONFIGURATION-2",
+      "note" : "vulnerabilities/csp/help/help.php Medium Level",
+      "startLine" : 3
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-98",
+        "CWE-22"
+      ],
+      "description" : "File inclusion sink for low/medium/high: include($file), where $file comes from $_GET['page'].",
+      "endLine" : 36,
+      "file" : "vulnerabilities/fi/index.php",
+      "id" : "DVWA-PATH-TRAVERSAL-1",
+      "note" : "vulnerabilities/fi/help/help.php Low/Medium/High",
+      "startLine" : 36
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-98",
+        "CWE-22"
+      ],
+      "description" : "File inclusion low: $_GET['page'] is used with no validation as the file to include (LFI/RFI).",
+      "endLine" : 4,
+      "file" : "vulnerabilities/fi/source/low.php",
+      "id" : "DVWA-PATH-TRAVERSAL-2",
+      "note" : "vulnerabilities/fi/help/help.php Low Level",
+      "startLine" : 4
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-98",
+        "CWE-22"
+      ],
+      "description" : "File inclusion medium: a single-pass str_replace of 'http://' and '../' can be bypassed (e.g. '....//', 'hthttp://tp://') or avoided with absolute paths.",
+      "endLine" : 8,
+      "file" : "vulnerabilities/fi/source/medium.php",
+      "id" : "DVWA-PATH-TRAVERSAL-3",
+      "note" : "vulnerabilities/fi/help/help.php Medium Level",
+      "startLine" : 7
+    },
+    {
+      "class" : "path-traversal",
+      "cwe" : [
+        "CWE-98",
+        "CWE-22"
+      ],
+      "description" : "File inclusion high: fnmatch('file*') also accepts file:///etc/passwd and similar values.",
+      "endLine" : 7,
+      "file" : "vulnerabilities/fi/source/high.php",
+      "id" : "DVWA-PATH-TRAVERSAL-4",
+      "note" : "vulnerabilities/fi/help/help.php High Level",
+      "startLine" : 7
+    },
+    {
+      "class" : "file-upload",
+      "cwe" : [
+        "CWE-434"
+      ],
+      "description" : "Upload low: any file, including .php, is moved into the web-accessible hackable/uploads/ with no type or extension check.",
+      "endLine" : 9,
+      "file" : "vulnerabilities/upload/source/low.php",
+      "id" : "DVWA-FILE-UPLOAD-1",
+      "note" : "vulnerabilities/upload/help/help.php Low Level",
+      "startLine" : 6
+    },
+    {
+      "class" : "file-upload",
+      "cwe" : [
+        "CWE-434"
+      ],
+      "description" : "Upload medium: only the client-supplied MIME type is checked, so a .php file sent with Content-Type image/png is saved.",
+      "endLine" : 18,
+      "file" : "vulnerabilities/upload/source/medium.php",
+      "id" : "DVWA-FILE-UPLOAD-2",
+      "note" : "vulnerabilities/upload/help/help.php Medium Level",
+      "startLine" : 14
+    },
+    {
+      "class" : "file-upload",
+      "cwe" : [
+        "CWE-434"
+      ],
+      "description" : "Upload high: the extension and getimagesize checks still accept image/PHP polyglots without re-encoding, so they can be executed through file inclusion.",
+      "endLine" : 20,
+      "file" : "vulnerabilities/upload/source/high.php",
+      "id" : "DVWA-FILE-UPLOAD-3",
+      "note" : "vulnerabilities/upload/help/help.php High Level",
+      "startLine" : 15
+    },
+    {
+      "class" : "csrf",
+      "cwe" : [
+        "CWE-352"
+      ],
+      "description" : "CSRF low: a GET request changes the password with no anti-CSRF token, referer check or current-password check.",
+      "endLine" : 17,
+      "file" : "vulnerabilities/csrf/source/low.php",
+      "id" : "DVWA-CSRF-1",
+      "note" : "vulnerabilities/csrf/help/help.php Low Level",
+      "startLine" : 16
+    },
+    {
+      "class" : "csrf",
+      "cwe" : [
+        "CWE-352"
+      ],
+      "description" : "CSRF medium: the only protection is stripos(HTTP_REFERER, SERVER_NAME), which any referer containing the host name passes.",
+      "endLine" : 5,
+      "file" : "vulnerabilities/csrf/source/medium.php",
+      "id" : "DVWA-CSRF-2",
+      "note" : "vulnerabilities/csrf/help/help.php Medium Level",
+      "startLine" : 5
+    },
+    {
+      "class" : "open-redirect",
+      "cwe" : [
+        "CWE-601"
+      ],
+      "description" : "Open redirect low: $_GET['redirect'] goes straight into the Location header.",
+      "endLine" : 4,
+      "file" : "vulnerabilities/open_redirect/source/low.php",
+      "id" : "DVWA-OPEN-REDIRECT-1",
+      "note" : "vulnerabilities/open_redirect/help/help.php Low Level",
+      "startLine" : 4
+    },
+    {
+      "class" : "open-redirect",
+      "cwe" : [
+        "CWE-601"
+      ],
+      "description" : "Open redirect medium: only http:// and https:// are blocked, so protocol-relative //evil.com still redirects off-site.",
+      "endLine" : 11,
+      "file" : "vulnerabilities/open_redirect/source/medium.php",
+      "id" : "DVWA-OPEN-REDIRECT-2",
+      "note" : "vulnerabilities/open_redirect/help/help.php Medium Level",
+      "startLine" : 11
+    },
+    {
+      "class" : "open-redirect",
+      "cwe" : [
+        "CWE-601"
+      ],
+      "description" : "Open redirect high: the redirect only has to contain 'info.php', e.g. https://evil.com/?info.php.",
+      "endLine" : 5,
+      "file" : "vulnerabilities/open_redirect/source/high.php",
+      "id" : "DVWA-OPEN-REDIRECT-3",
+      "note" : "vulnerabilities/open_redirect/help/help.php High Level",
+      "startLine" : 4
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-330",
+        "CWE-341"
+      ],
+      "description" : "Weak session ID low: the dvwaSession cookie is a sequential counter.",
+      "endLine" : 11,
+      "file" : "vulnerabilities/weak_id/source/low.php",
+      "id" : "DVWA-WEAK-CRYPTO-1",
+      "note" : "vulnerabilities/weak_id/help/help.php Low Level",
+      "startLine" : 9
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-330",
+        "CWE-341"
+      ],
+      "description" : "Weak session ID medium: the dvwaSession cookie is the current Unix timestamp from time().",
+      "endLine" : 7,
+      "file" : "vulnerabilities/weak_id/source/medium.php",
+      "id" : "DVWA-WEAK-CRYPTO-2",
+      "note" : "vulnerabilities/weak_id/help/help.php Medium Level",
+      "startLine" : 6
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-330",
+        "CWE-328"
+      ],
+      "description" : "Weak session ID high: the dvwaSession cookie is md5 of a sequential counter.",
+      "endLine" : 11,
+      "file" : "vulnerabilities/weak_id/source/high.php",
+      "id" : "DVWA-WEAK-CRYPTO-3",
+      "note" : "vulnerabilities/weak_id/help/help.php High Level",
+      "startLine" : 9
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-327"
+      ],
+      "description" : "Cryptography low: messages are 'encrypted' with a repeating-key XOR plus base64, so the key is recoverable from known plaintext.",
+      "endLine" : 10,
+      "file" : "vulnerabilities/cryptography/source/low.php",
+      "id" : "DVWA-WEAK-CRYPTO-4",
+      "note" : "vulnerabilities/cryptography/help/help.php Low Level",
+      "startLine" : 10
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-327"
+      ],
+      "description" : "Cryptography medium: session tokens use AES-128-ECB, so ciphertext blocks can be cut and pasted to forge an admin token.",
+      "endLine" : 3,
+      "file" : "vulnerabilities/cryptography/source/medium.php",
+      "id" : "DVWA-WEAK-CRYPTO-5",
+      "note" : "vulnerabilities/cryptography/help/help.php Medium Level",
+      "startLine" : 3
+    },
+    {
+      "class" : "weak-crypto",
+      "cwe" : [
+        "CWE-327",
+        "CWE-649",
+        "CWE-209"
+      ],
+      "description" : "Cryptography high: tokens use unauthenticated AES-128-CBC with a client-supplied IV, and decrypt failures return distinct errors (a padding oracle), so tokens can be decrypted and forged.",
+      "endLine" : 26,
+      "file" : "vulnerabilities/cryptography/source/token_library_high.php",
+      "id" : "DVWA-WEAK-CRYPTO-6",
+      "note" : "vulnerabilities/cryptography/help/help.php High Level",
+      "startLine" : 26
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-862",
+        "CWE-425"
+      ],
+      "description" : "Authorisation bypass low: admin-only access is enforced only by hiding the menu link, so non-admins can browse to /vulnerabilities/authbypass/ directly.",
+      "endLine" : 312,
+      "file" : "dvwa/includes/dvwaPage.inc.php",
+      "id" : "DVWA-AUTHZ-1",
+      "note" : "vulnerabilities/authbypass/help/help.php Low Level; authbypass/source/low.php comment points to dvwaHtmlEcho",
+      "startLine" : 311
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-862"
+      ],
+      "description" : "Authorisation bypass medium: the admin check in the user-data API applies only at high/impossible, so any user can read all user data at medium.",
+      "endLine" : 10,
+      "file" : "vulnerabilities/authbypass/get_user_data.php",
+      "id" : "DVWA-AUTHZ-2",
+      "note" : "vulnerabilities/authbypass/help/help.php Medium Level",
+      "startLine" : 10
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-862"
+      ],
+      "description" : "Authorisation bypass high: the admin check on the POST update endpoint applies only at impossible, so any user can change other users' details.",
+      "endLine" : 11,
+      "file" : "vulnerabilities/authbypass/change_user_details.php",
+      "id" : "DVWA-AUTHZ-3",
+      "note" : "vulnerabilities/authbypass/help/help.php High Level",
+      "startLine" : 11
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-639",
+        "CWE-565"
+      ],
+      "description" : "BAC low: profile access is allowed when the client-controlled user_id cookie equals the requested ID (IDOR via cookie tampering).",
+      "endLine" : 33,
+      "file" : "vulnerabilities/bac/source/low.php",
+      "id" : "DVWA-AUTHZ-4",
+      "note" : "vulnerabilities/bac/help/help.php Low Level",
+      "startLine" : 30
+    },
+    {
+      "class" : "authz",
+      "cwe" : [
+        "CWE-639",
+        "CWE-798"
+      ],
+      "description" : "BAC medium: access to any profile is gated only by the static URL parameter token=user_token.",
+      "endLine" : 26,
+      "file" : "vulnerabilities/bac/source/medium.php",
+      "id" : "DVWA-AUTHZ-5",
+      "note" : "vulnerabilities/bac/help/help.php Medium Level (help describes cookie tampering; code comments hint at token=user_token)",
+      "startLine" : 26
+    },
+    {
+      "class" : "mass-assignment",
+      "cwe" : [
+        "CWE-915",
+        "CWE-269"
+      ],
+      "description" : "API medium: PUT /v2/user/{id} accepts an undocumented 'level' field, so a user can raise themselves to admin (level 0).",
+      "endLine" : 225,
+      "file" : "vulnerabilities/api/src/UserController.php",
+      "id" : "DVWA-MASS-ASSIGNMENT-1",
+      "note" : "vulnerabilities/api/help/help.php Medium Level",
+      "startLine" : 224
+    },
+    {
+      "class" : "info-disclosure",
+      "cwe" : [
+        "CWE-200",
+        "CWE-1059"
+      ],
+      "description" : "API low: the still-reachable v1 user endpoint serializes the password hash in each user record.",
+      "endLine" : 45,
+      "file" : "vulnerabilities/api/src/User.php",
+      "id" : "DVWA-INFO-DISCLOSURE-1",
+      "note" : "vulnerabilities/api/help/help.php Low Level",
+      "startLine" : 40
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-307"
+      ],
+      "description" : "Brute force low: the login check has no rate limiting, lockout or delay.",
+      "endLine" : 15,
+      "file" : "vulnerabilities/brute/source/low.php",
+      "id" : "DVWA-AUTH-1",
+      "note" : "vulnerabilities/brute/help/help.php Low Level",
+      "startLine" : 12
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-307"
+      ],
+      "description" : "Brute force medium: the only defence is a fixed sleep(2) after a failed login, with no lockout.",
+      "endLine" : 28,
+      "file" : "vulnerabilities/brute/source/medium.php",
+      "id" : "DVWA-AUTH-2",
+      "note" : "vulnerabilities/brute/help/help.php Medium Level",
+      "startLine" : 27
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-307"
+      ],
+      "description" : "Brute force high: only an anti-CSRF token and a random sleep on failure, with no lockout, so the token can be scraped and guessing automated.",
+      "endLine" : 33,
+      "file" : "vulnerabilities/brute/source/high.php",
+      "id" : "DVWA-AUTH-3",
+      "note" : "vulnerabilities/brute/help/help.php High Level",
+      "startLine" : 32
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-841",
+        "CWE-804"
+      ],
+      "description" : "Insecure CAPTCHA low: step 2 (the actual password change) runs without checking that the CAPTCHA step was completed.",
+      "endLine" : 45,
+      "file" : "vulnerabilities/captcha/source/low.php",
+      "id" : "DVWA-AUTH-4",
+      "note" : "vulnerabilities/captcha/help/help.php Low Level",
+      "startLine" : 45
+    },
+    {
+      "class" : "auth",
+      "cwe" : [
+        "CWE-602",
+        "CWE-807"
+      ],
+      "description" : "Insecure CAPTCHA medium: CAPTCHA completion is tracked with a client-supplied passed_captcha POST field.",
+      "endLine" : 55,
+      "file" : "vulnerabilities/captcha/source/medium.php",
+      "id" : "DVWA-AUTH-5",
+      "note" : "vulnerabilities/captcha/help/help.php Medium Level",
+      "startLine" : 55
+    },
+    {
+      "class" : "hardcoded-secret",
+      "cwe" : [
+        "CWE-798",
+        "CWE-489"
+      ],
+      "description" : "Insecure CAPTCHA high: leftover development code accepts the hardcoded response 'hidd3n_valu3' with User-Agent 'reCAPTCHA' in place of a valid CAPTCHA.",
+      "endLine" : 21,
+      "file" : "vulnerabilities/captcha/source/high.php",
+      "id" : "DVWA-HARDCODED-SECRET-1",
+      "note" : "vulnerabilities/captcha/help/help.php High Level",
+      "startLine" : 20
+    },
+    {
+      "class" : "other",
+      "cwe" : [
+        "CWE-602"
+      ],
+      "description" : "JavaScript low: the anti-tamper token is generated client-side as md5(rot13(phrase)), so it can be computed for any phrase.",
+      "endLine" : 18,
+      "file" : "vulnerabilities/javascript/source/low.php",
+      "id" : "DVWA-OTHER-1",
+      "note" : "vulnerabilities/javascript/help/help.php Low Level",
+      "startLine" : 16
+    },
+    {
+      "class" : "other",
+      "cwe" : [
+        "CWE-602"
+      ],
+      "description" : "JavaScript medium: the minified client-side do_elsesomething/do_something build the token by reversing 'XX'+phrase+'XX', which an attacker can reproduce.",
+      "endLine" : 1,
+      "file" : "vulnerabilities/javascript/source/medium.js",
+      "id" : "DVWA-OTHER-2",
+      "note" : "vulnerabilities/javascript/help/help.php Medium Level",
+      "startLine" : 1
+    },
+    {
+      "class" : "other",
+      "cwe" : [
+        "CWE-602",
+        "CWE-656"
+      ],
+      "description" : "JavaScript high: the token comes from obfuscated client-side sha256 chaining (token_part_1/2/3), and obfuscation is the only protection.",
+      "endLine" : 1,
+      "file" : "vulnerabilities/javascript/source/high.js",
+      "id" : "DVWA-OTHER-3",
+      "note" : "vulnerabilities/javascript/help/help.php High Level (readable copy in javascript/source/high_unobfuscated.js lines 522-540)",
+      "startLine" : 1
+    },
+    {
+      "class" : "other",
+      "cwe" : [
+        "CWE-348"
+      ],
+      "description" : "BAC high: the logged client IP comes from the spoofable X-Forwarded-For header, so access logs can be falsified.",
+      "endLine" : 92,
+      "file" : "vulnerabilities/bac/source/high.php",
+      "id" : "DVWA-OTHER-4",
+      "note" : "vulnerabilities/bac/help/help.php 'Security Logs' section",
+      "startLine" : 92
+    }
+  ]
+}

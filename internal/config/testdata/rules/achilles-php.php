@@ -173,3 +173,41 @@ function passwords($password, $file)
     // ok: achilles.php.weak-password-hash
     $etag = md5($file);
 }
+
+function html_building() {
+    // ruleid: achilles.php.xss-html-building
+    $html .= '<pre>Hello ' . $_GET['name'] . '</pre>';
+    $id = $_REQUEST['id'];
+    // ruleid: achilles.php.xss-html-building
+    $html .= "<pre>ID: {$id}</pre>";
+    // ok: achilles.php.xss-html-building
+    $html .= '<pre>Hello ' . htmlspecialchars($_GET['name'], ENT_QUOTES) . '</pre>';
+    // ok: achilles.php.xss-html-building
+    $sql = "SELECT * FROM users WHERE id = '$id'";
+    // ok: achilles.php.xss-html-building
+    $greeting = 'Hello ' . $_GET['name'];
+}
+
+function uploads() {
+    $target = "uploads/" . basename($_FILES['uploaded']['name']);
+    // ruleid: achilles.php.unrestricted-upload
+    move_uploaded_file($_FILES['uploaded']['tmp_name'], $target);
+    // ok: achilles.php.unrestricted-upload
+    move_uploaded_file($_FILES['uploaded']['tmp_name'], "uploads/" . bin2hex(random_bytes(16)) . ".png");
+}
+
+function ciphers($data, $key, $iv) {
+    // ruleid: achilles.php.weak-cipher
+    $e = openssl_encrypt($data, 'aes-128-ecb', $key, OPENSSL_RAW_DATA);
+    // ruleid: achilles.php.weak-cipher
+    $d = openssl_decrypt($data, "des-ede3-cbc", $key, 0, $iv);
+    // ok: achilles.php.weak-cipher
+    $g = openssl_encrypt($data, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+}
+
+function die_on_error($c) {
+    // Inside `x or die(...)` the rule stands back (Opengrep cannot match die()
+    // itself, and the usual case prints a database error); a known gap.
+    // ok: achilles.php.xss-html-building
+    $r = mysqli_query($c, "SELECT 1") or die('<pre>' . $_GET['debug'] . '</pre>');
+}

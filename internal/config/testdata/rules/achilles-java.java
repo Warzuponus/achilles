@@ -140,4 +140,39 @@ public class Demo {
         // ruleid: achilles.java.spring-csrf-disabled
         http.csrf().disable();
     }
+
+    @GetMapping("/go")
+    public ModelAndView redirect(@RequestParam("url") String url) {
+        // ruleid: achilles.java.open-redirect
+        return new ModelAndView("redirect:" + url);
+    }
+
+    @GetMapping("/go2")
+    public void redirect2(HttpServletRequest request, HttpServletResponse response) throws Exception {
+        String next = request.getParameter("next");
+        // ruleid: achilles.java.open-redirect
+        response.sendRedirect(next);
+        // ok: achilles.java.open-redirect
+        response.sendRedirect("/home");
+    }
+
+    @GetMapping("/go3")
+    public ResponseEntity<Void> redirect3(@RequestParam String url) {
+        // ruleid: achilles.java.open-redirect
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(url)).build();
+    }
+
+    public Object xstreamLoad(String payload) {
+        XStream xstream = new XStream();
+        // ruleid: achilles.java.xstream-deserialization
+        return xstream.fromXML(payload);
+    }
+
+    public Object xstreamSafe(String payload) {
+        XStream xstream = new XStream();
+        xstream.allowTypes(new Class[] {Contact.class});
+        // ok: achilles.java.xstream-deserialization
+        return xstream.fromXML(payload);
+    }
+
 }

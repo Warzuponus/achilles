@@ -1,0 +1,21 @@
+<!-- Tests for configs/rules/achilles-templates.yaml (opengrep --test). Never served. -->
+<!-- ruleid: achilles.generic.template-unescaped-output -->
+<h3>The company '{{query|safe}}' is not part of FAANG</h3>
+<!-- ruleid: achilles.generic.template-unescaped-output -->
+<p>Hello, {{ username | safe }}</p>
+<!-- ruleid: achilles.generic.template-unescaped-output -->
+<div>{{ post.body|striptags|safe }}</div>
+<!-- ok: achilles.generic.template-unescaped-output -->
+<p>Hello, {{ username }}</p>
+<!-- ok: achilles.generic.template-unescaped-output -->
+<td>{{ form.username|safe }}</td>
+<!-- ok: achilles.generic.template-unescaped-output -->
+<script>const csrf = "{{ csrf_token|safe }}";</script>
+<!-- ok: achilles.generic.template-unescaped-output -->
+<p>{{ "<b>static</b>"|safe }}</p>
+<!-- ruleid: achilles.generic.template-unescaped-output -->
+{% autoescape off %}
+{{ comment }}
+{% endautoescape %}
+<!-- ok: achilles.generic.template-unescaped-output -->
+{% autoescape on %}

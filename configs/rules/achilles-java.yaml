@@ -294,3 +294,74 @@ rules:
       - pattern: $HTTP.csrf().disable()
       - pattern: $HTTP.csrf($C -> $C.disable())
       - pattern: $HTTP.csrf(AbstractHttpConfigurer::disable)
+
+  - id: achilles.java.open-redirect
+    mode: taint
+    languages: [java]
+    severity: WARNING
+    message: >
+      The response redirects to a URL taken from the request, so a link to this site
+      can send the user anywhere (phishing, token theft). Redirect only to relative
+      paths or to hosts on a fixed allow-list, compared after parsing the URL.
+    metadata:
+      cwe: ["CWE-601: URL Redirection to Untrusted Site ('Open Redirect')"]
+      category: security
+    pattern-sources:
+      - pattern: (HttpServletRequest $R).getParameter(...)
+      - pattern: (HttpServletRequest $R).getHeader(...)
+      - pattern: (HttpServletRequest $R).getQueryString()
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+          - pattern: $X
+    pattern-sanitizers:
+      # A server-side lookup keyed by the input picks one of the server's own
+      # targets; a literal path prefix keeps the redirect on this site.
+      - pattern: $MAP.getOrDefault(...)
+      - pattern: $MAP.get(...)
+      - patterns:
+          - pattern: $LIT + $X
+          - metavariable-regex:
+              metavariable: $LIT
+              regex: ^"/[^/"]
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletResponse $R).sendRedirect($U)
+              - pattern: $R.setHeader("Location", $U)
+              - pattern: $R.addHeader("Location", $U)
+              - pattern: new RedirectView($U, ...)
+              - pattern: new ModelAndView("redirect:" + $U, ...)
+              - pattern: return "redirect:" + $U;
+              - pattern: $B.location(URI.create($U))
+              - pattern: $B.location(new URI($U))
+          - focus-metavariable: $U
+
+  - id: achilles.java.xstream-deserialization
+    languages: [java]
+    severity: ERROR
+    message: >
+      XStream turns XML into any class on the classpath unless it is told which
+      types to allow, and gadget chains turn that into code execution. Call
+      xstream.allowTypes(...) (or addPermission with an allow-list) before fromXML,
+      and keep XStream current.
+    metadata:
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      category: security
+    patterns:
+      - pattern: (XStream $X).fromXML(...)
+      - pattern-not-inside: |
+          $X.allowTypes(...);
+          ...
+      - pattern-not-inside: |
+          $X.allowTypesByWildcard(...);
+          ...
+      - pattern-not-inside: |
+          $X.allowTypesByRegExp(...);
+          ...
+      - pattern-not-inside: |
+          $X.addPermission(...);
+          ...

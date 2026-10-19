@@ -26,6 +26,7 @@ evals/detect/
     py-webapp.json  js-express.json  go-service.json  deps-manifest.json  secrets-config.json
     external.example.json  format example for pinned public apps (never scored)
   fixtures/                the deliberately vulnerable code the local targets point at
+  real-apps/               labels for five public vulnerable apps at pinned commits (run on purpose; they clone)
   baseline.json            the committed scorecard that `eval-detect-gate` compares against
 ```
 

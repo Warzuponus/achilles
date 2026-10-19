@@ -1,0 +1,26 @@
+# Achilles rules for HTML templates (Django, Jinja2, Nunjucks) - original, written
+# for this project (Apache-2.0), so they load in every license mode. Opengrep has no
+# parser for these template languages, so these are generic-mode rules limited to
+# template files. Tested by internal/config/testdata/rules/achilles-templates.html
+# (opengrep --test). Keep this file ASCII-only: Opengrep reads rule files as ASCII.
+rules:
+  - id: achilles.generic.template-unescaped-output
+    languages: [generic]
+    severity: WARNING
+    message: >
+      The template turns HTML escaping off for a value (the safe filter, or an
+      autoescape-off block), so a script in it runs in the user's browser. Let the
+      template escape it, or clean it with an HTML sanitizer (bleach, nh3) before
+      marking it safe.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    paths:
+      include: ["*.html", "*.htm", "*.jinja", "*.jinja2", "*.j2", "*.njk", "*.djhtml"]
+    pattern-either:
+      # {{ value|safe }}: a variable, attribute or filter chain, not a literal.
+      # Form widgets and the CSRF token are markup Django generates itself.
+      - patterns:
+          - pattern-regex: \{\{-?\s*[A-Za-z_][\w.\[\]'"]*(\s*\|\s*\w+(\([^)]*\)|:[^|}]+)?)*\s*\|\s*safe\b[^}]*\}\}
+          - pattern-not-regex: \{\{-?\s*(csrf_token|form|[\w.]*\.as_(p|table|ul|div)|[\w]*form\.[\w.]+)\b[^}]*\}\}
+      - pattern-regex: \{%-?\s*autoescape\s+(off|false)\s*-?%\}

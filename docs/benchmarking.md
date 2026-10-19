@@ -322,6 +322,56 @@ Read it with these limits in mind:
   tell from test data; and logic flaws, which are for the AI review (`--hunt`) or a
   person.
 
+## The OWASP Benchmark for Java
+
+The [OWASP Benchmark](https://owasp.org/www-project-benchmark/) is 2,740 small Java
+servlets in 11 categories, each either a real vulnerability (1,415) or a decoy built
+to look like one (1,325), with an answer key. Its scorecard flags a test case when a
+tool reports a finding with the category's CWE anywhere in that case's file, and
+scores each category as true-positive rate minus false-positive rate: 0 is what
+flagging at random gets, 100 is perfect. Because it has decoys, it measures false
+positives as well as recall, which the vulnerable-app labels above cannot.
+
+```bash
+git clone https://github.com/OWASP-Benchmark/BenchmarkJava   # about 76 MB
+go run ./cmd/achilles-eval --mode owasp --owasp-dir BenchmarkJava
+```
+
+Measured on 2026-10-18 at commit `bc5ffeb` with the binary scanners (no Docker, so
+no SpotBugs/find-sec-bugs) and AI review off:
+
+| | Recall | False positives | Score |
+|---|---|---|---|
+| Own rules, before (`--mode commercial`) | 19.2% | 12.2% | **4.7** |
+| Own rules, after the 2026-10-18 Java rules | 88.1% | 22.9% | **68.8** |
+| With community rules (`--mode oss`), before | 91.7% | 25.9% | 66.3 |
+| With community rules, after | 93.9% | 28.5% | 67.1 |
+
+Recall and false positives are over all test cases; the score is the scorecard's
+average over categories.
+
+How to read it:
+
+- **The "before" row is the out-of-sample result**, and it was poor: Achilles' own
+  Java rules found SQL and command injection only. They missed classes written out
+  in full (`new java.io.File(...)`, `java.security.MessageDigest`), and had no rule
+  at all for XSS, LDAP or XPath injection, weak randomness, insecure cookies or trust
+  boundaries.
+- **The "after" rows are in-sample**: the new rules were written after reading the
+  Benchmark's cases. They are general (each sink is a standard API, each source the
+  servlet or Spring request), and on the five vulnerable apps above they added seven
+  findings, all real (secrets and tokens drawn from `java.util.Random`), and one more
+  labeled flaw, not a flood. But do not read 68.8 as what they score on code
+  they were not written against.
+- **Where the false positives come from:** most decoys keep the input out of the sink
+  through a branch that is never taken (`if (7 * 42 - 106 > 200) bar = param;`) or a
+  map key that is never read. A taint engine without constant folding follows both
+  paths, so SQL injection (62.9% of decoys flagged), path traversal (32.6%) and trust
+  boundaries (46.5%) score lowest. The AI review is meant for exactly this; it is not
+  measured here.
+- **Hashing** reads the algorithm name from a properties file in a third of its real
+  cases, which no static rule can see (69% recall, 0% false positives).
+
 ## External targets
 
 Point the benchmark at pinned commits of public intentionally-vulnerable apps (OWASP

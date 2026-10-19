@@ -144,10 +144,11 @@ report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/
   Until gosec catches up, scan Go code with Go 1.27.1 (the Docker image does).
 - **Accuracy is measured, and modest on recall:** on 270 documented vulnerabilities in
   five deliberately vulnerable apps (DVWA, NodeGoat, PyGoat, RailsGoat, WebGoat), the
-  scanners with Achilles' own rules find 30.7% (35.9% with the community rule pack), and
-  that includes access-control and logic flaws no pattern rule can find. Those rules
-  were partly written against these apps, so expect less elsewhere. Precision on the
-  same apps is high (136 of 144 findings judged real). There is also an 18-case
+  scanners with Achilles' own rules find 31% (36% with the community rule pack), and
+  that includes access-control and logic flaws no pattern rule can find. On the OWASP
+  Benchmark for Java, which has decoys and so measures false positives too, the own
+  rules score 68.8 (88% recall, 23% of decoys flagged). Both sets of rules were partly
+  written against these benchmarks, so expect less elsewhere. There is also an 18-case
   labeled triage corpus and a 24-issue synthetic regression benchmark. See
   [evals/](evals/README.md) and [Benchmarking Detection](docs/benchmarking.md).
 - **You choose the model and pay the provider.** `--dry-run` prints a cost estimate

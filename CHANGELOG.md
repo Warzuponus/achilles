@@ -54,6 +54,12 @@ All notable changes to this project are recorded here. The format follows
   input.
 
 ### Fixed
+- **A `configs/rules` folder in the working directory no longer replaces the built-in
+  rules.** Without `--config`, Achilles took any such folder as its complete Opengrep
+  rule set, so running it from a project that has one (a common name) silently dropped
+  every built-in rule, and a repository scanned from its root could ship an empty one
+  to hide its findings. The built-in registry now always uses the built-in rules;
+  rules on disk take an explicit `--config`.
 - **False positives found by running the rules on five deliberately vulnerable
   applications** (RailsGoat, DVWA, NodeGoat, PyGoat, WebGoat; 144 findings judged by
   hand, 136 real, 4 wrong, down from 18 wrong). `java.ssrf` treated building a `URI` as

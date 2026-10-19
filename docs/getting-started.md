@@ -70,9 +70,10 @@ non-zero if a default-profile scanner is missing, printing the exact fix command
 If upstream publishes no download for your platform, doctor says so and points at the
 manual install or the Docker image.
 
-**Rules.** Opengrep's `-f` rules are, in order: the `rules:` directory from your tool
-config if it exists on disk (a repo checkout uses `configs/rules`), otherwise the
-built-in rules embedded in the binary (materialized into your user cache): about 65
+**Rules.** Opengrep's `-f` rules are the built-in rules embedded in the binary
+(materialized into your user cache), unless a tool config you pass with `--config`
+names a `rules:` directory that exists on disk (a `configs/rules` folder in the working
+directory is never picked up on its own). The built-in rules are about 65
 Achilles-authored rules for injection, path traversal, SSRF, XSS, unsafe
 deserialization, weak crypto, disabled TLS checks and hard-coded credentials in
 Python, JavaScript and TypeScript, Java, Ruby (Rails and its ERB views, Sinatra) and PHP (plain PHP,

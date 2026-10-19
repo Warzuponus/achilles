@@ -12,7 +12,7 @@ import (
 )
 
 // The OWASP Benchmark (https://owasp.org/www-project-benchmark/) is a suite of
-// small Java test cases, each either a real vulnerability or a decoy that looks
+// small test cases (a Java edition and, since 2026, a Python one), each either a real vulnerability or a decoy that looks
 // like one, with an answer key (expectedresults-*.csv). Its scorecard flags a test
 // case when a tool reports, anywhere in that case's file, a finding whose CWE is
 // the category's, and scores each category as true-positive rate minus
@@ -38,6 +38,7 @@ var owaspRelated = map[string][]int{
 	"hash":         {327, 916},
 	"weakrand":     {338},
 	"securecookie": {1004, 315},
+	"codeinj":      {94, 95},
 }
 
 // ParseOWASPExpected reads an expectedresults CSV ("# test name, category, real
@@ -73,7 +74,7 @@ func ParseOWASPExpected(r io.Reader) ([]OWASPCase, error) {
 }
 
 var (
-	owaspTestFile = regexp.MustCompile(`(BenchmarkTest\d+)\.java`)
+	owaspTestFile = regexp.MustCompile(`(BenchmarkTest\d+)\.(?:java|py)\b`)
 	sarifCWETag   = regexp.MustCompile(`(?i)(?:^|/)cwe-0*(\d+)`)
 )
 

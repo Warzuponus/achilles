@@ -64,7 +64,7 @@ rules:
               - pattern: $JDBC.batchUpdate(..., $SQL, ...)
           - metavariable-regex:
               metavariable: $JDBC
-              regex: (?i)jdbc
+              regex: (?i).*jdbc
           - focus-metavariable: $SQL
 
   - id: achilles.java.sql-string-building

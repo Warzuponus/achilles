@@ -7,6 +7,16 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Python rules, from the OWASP Benchmark for Python.** Out of sample, Achilles' own
+  Python rules scored 19.5 on its 1,230 Flask cases. New rules for LDAP and XPath
+  injection, open redirects, `random` feeding cookies, sessions and tokens, cookies set
+  with `secure=False` or `httponly=False`, and request data stored in the session
+  (informational); reflected XSS now includes a Flask view returning a string built
+  from request data, and a project's own escaping helper counts as a fix; `codecs.open`
+  and `pathlib`'s `/` are path sinks; and the code-injection rule follows request data
+  into `exec`, `eval` and `compile` instead of flagging every `exec` of a variable. The
+  own rules now score 50.3, in-sample; on the five vulnerable apps they added six
+  findings, all real.
 - **Achilles' own Java rules, rebuilt from the OWASP Benchmark's verdict.** On the
   Benchmark (2,740 Java cases, half of them decoys) the own rules scored 4.7, catching
   SQL and command injection only. New rules for XSS (`response.getWriter()`), LDAP and
@@ -15,10 +25,10 @@ All notable changes to this project are recorded here. The format follows
   session (informational); classes written out in full (`new java.io.File`,
   `java.security.MessageDigest`, `javax.crypto.Cipher`); the environment argument of
   `Runtime.exec` and every argument of `ProcessBuilder`; Spring `JdbcTemplate` queries;
-  DES key generators. The own rules now score 68.8 (88% recall, 23% of decoys flagged),
-  in-sample. On the five vulnerable apps they added seven findings, all real.
-- **`achilles-eval --mode owasp --owasp-dir BenchmarkJava`** scans an OWASP Benchmark
-  checkout and prints its scorecard (true-positive minus false-positive rate per
+  DES key generators. The own rules now score 69.7 (91% recall, 21% of decoys flagged,
+  category averages), in-sample. On the five vulnerable apps they added seven findings, all real.
+- **`achilles-eval --mode owasp --owasp-dir BenchmarkJava`** (or `BenchmarkPython`) scans an
+  OWASP Benchmark checkout and prints its scorecard (true-positive minus false-positive rate per
   category), by the Benchmark's CWE rule and with related CWEs accepted.
 - **A summary note on GitLab merge requests.** `--gitlab-mr-comment $CI_MERGE_REQUEST_IID`
   posts the Markdown summary as a note and updates that same note on later runs, on
@@ -32,6 +42,11 @@ All notable changes to this project are recorded here. The format follows
   reporting a new one. Two identical matches in one file get different signatures.
 
 ### Fixed
+- **Three rules whose name checks never matched what they meant to.** Opengrep anchors
+  `metavariable-regex` at the start of the value, so the JavaScript XSS rule did not
+  recognize `DOMPurify.sanitize` or `_.escape` as escaping, and two checks added in
+  this release (a JDBC template receiver, a session store's name) missed names that
+  only contain the word.
 - **Scans from a deep directory on Windows no longer come back "clean" having read
   nothing.** Opengrep cannot open a file whose full path reaches Windows' 260-character
   limit, and skips it without an error. Achilles now counts such files and, when there

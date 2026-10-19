@@ -13,13 +13,13 @@ import (
 	"github.com/Warzuponus/achilles/internal/eval"
 )
 
-// runOWASP scans an OWASP Benchmark (Java) checkout with achilles and scores the
+// runOWASP scans an OWASP Benchmark (Java or Python) checkout with achilles and scores the
 // result against its answer key, the way the Benchmark's own scorecard does.
 // Achilles runs exactly as a user would run it, so ACHILLES_SETTINGS (for example
 // "mode: commercial") and ACHILLES_HOME apply.
 func runOWASP(dir, achillesBin, cacheDir, out string, timeout time.Duration) error {
 	if dir == "" {
-		return errors.New("--mode owasp needs --owasp-dir: a checkout of https://github.com/OWASP-Benchmark/BenchmarkJava")
+		return errors.New("--mode owasp needs --owasp-dir: a checkout of github.com/OWASP-Benchmark/BenchmarkJava or BenchmarkPython")
 	}
 	keys, _ := filepath.Glob(filepath.Join(dir, "expectedresults-*.csv"))
 	if len(keys) != 1 {
@@ -34,9 +34,20 @@ func runOWASP(dir, achillesBin, cacheDir, out string, timeout time.Duration) err
 	if err != nil {
 		return err
 	}
-	testcode := filepath.Join(dir, "src", "main", "java", "org", "owasp", "benchmark", "testcode")
-	if st, err := os.Stat(testcode); err != nil || !st.IsDir() {
-		return fmt.Errorf("%s: no test cases at %s", dir, testcode)
+	// BenchmarkJava keeps its cases in the Java package tree, BenchmarkPython in
+	// testcode/ at the root.
+	var testcode string
+	for _, c := range []string{
+		filepath.Join(dir, "src", "main", "java", "org", "owasp", "benchmark", "testcode"),
+		filepath.Join(dir, "testcode"),
+	} {
+		if st, err := os.Stat(c); err == nil && st.IsDir() {
+			testcode = c
+			break
+		}
+	}
+	if testcode == "" {
+		return fmt.Errorf("%s: no testcode directory (is this a BenchmarkJava or BenchmarkPython checkout?)", dir)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

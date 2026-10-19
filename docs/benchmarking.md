@@ -340,15 +340,15 @@ go run ./cmd/achilles-eval --mode owasp --owasp-dir BenchmarkJava
 Measured on 2026-10-18 at commit `bc5ffeb` with the binary scanners (no Docker, so
 no SpotBugs/find-sec-bugs) and AI review off:
 
-| | Recall | False positives | Score |
+| | Recall | Decoys flagged | Score |
 |---|---|---|---|
-| Own rules, before (`--mode commercial`) | 19.2% | 12.2% | **4.7** |
-| Own rules, after the 2026-10-18 Java rules | 88.1% | 22.9% | **68.8** |
-| With community rules (`--mode oss`), before | 91.7% | 25.9% | 66.3 |
-| With community rules, after | 93.9% | 28.5% | 67.1 |
+| Own rules, before (`--mode commercial`) | 11.6% | 6.9% | **4.7** |
+| Own rules, after the 2026-10-18/19 Java rules | 90.6% | 20.9% | **69.7** |
+| With community rules (`--mode oss`), before | 90.9% | 24.6% | 66.3 |
+| With community rules, after | 94.0% | 26.9% | 67.1 |
 
-Recall and false positives are over all test cases; the score is the scorecard's
-average over categories.
+All three columns are averages over the 11 categories, as the scorecard reports
+them.
 
 How to read it:
 
@@ -361,7 +361,7 @@ How to read it:
   Benchmark's cases. They are general (each sink is a standard API, each source the
   servlet or Spring request), and on the five vulnerable apps above they added seven
   findings, all real (secrets and tokens drawn from `java.util.Random`), and one more
-  labeled flaw, not a flood. But do not read 68.8 as what they score on code
+  labeled flaw, not a flood. But do not read 69.7 as what they score on code
   they were not written against.
 - **Where the false positives come from:** most decoys keep the input out of the sink
   through a branch that is never taken (`if (7 * 42 - 106 > 200) bar = param;`) or a
@@ -371,6 +371,46 @@ How to read it:
   measured here.
 - **Hashing** reads the algorithm name from a properties file in a third of its real
   cases, which no static rule can see (69% recall, 0% false positives).
+
+### The Python edition
+
+[BenchmarkPython](https://github.com/OWASP-Benchmark/BenchmarkPython) (version 0.1,
+2026) is the same idea for Flask: 1,230 cases in 15 categories, 452 of them real. The
+same command scores it (`--owasp-dir BenchmarkPython`). Measured on 2026-10-19 at
+commit `f129148`, binary scanners, AI review off:
+
+| | Recall | Decoys flagged | Score |
+|---|---|---|---|
+| Own rules, before (`--mode commercial`) | 31.5% | 12.0% | **19.5** |
+| Own rules, after the 2026-10-19 Python rules | 69.1% | 18.8% | **50.3** |
+| With community rules (`--mode oss`), before | 45.3% | 27.0% | 18.3 |
+| With community rules, after | 75.2% | 33.4% | 41.8 |
+
+- **"Before" is out of sample again**, and it showed the same kind of gap as Java:
+  nothing for LDAP or XPath injection, open redirects, weak randomness, insecure
+  cookies, trust boundaries or a Flask view that returns request data as HTML; and
+  `codecs.open` and `pathlib`'s `/` were not path sinks. Achilles' Python rules had
+  been written against PyGoat (Django), which has few of these.
+- **"After" is in-sample.** On the five vulnerable apps the Python changes added six
+  findings, all real (`eval` of request data in two PyGoat labs, three cookies set with
+  `secure=False`, a one-time code from `random.randint`), and lost none.
+- **The community pack adds recall and more false positives** here: with it, a third of
+  the decoys are flagged and the score is lower than the own rules alone.
+- **Still weak:** command injection (the few real cases pass the input through a
+  helper in another file), code injection and XPath (decoys that keep the input out
+  through a branch never taken), and path traversal through the Benchmark's helper
+  classes.
+
+Two things found on the way apply to every Python taint rule. Opengrep drops taint
+across a slice (`request.args["q"][:100]` is clean to it; an index, `[0]`, is not),
+so truncated input is missed. And `metavariable-regex` is anchored at the start of
+the value, so a check meant to find a word inside a name has to begin with `.*`; three
+rules got that wrong and are fixed, among them the JavaScript XSS rule's check for an
+escaping function (`DOMPurify.sanitize` and `_.escape` were not recognized).
+
+Opengrep's results vary slightly from run to run: one community-pack finding in
+NodeGoat appeared in one of two identical scans, which moves the five-app figure with
+the community pack between 35.6% and 35.9%. `achilles-eval --repeat` measures this.
 
 ## External targets
 

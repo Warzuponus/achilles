@@ -60,11 +60,21 @@ def commands(host):
     subprocess.run(["ping", "-c", "1", host])
 
 
-def code(snippet):
+@app.route("/run", methods=["POST"])
+def code():
+    snippet = request.form["code"]
     # ruleid: achilles.python.code-injection-exec
     exec(snippet)
+    # ruleid: achilles.python.code-injection-exec
+    eval(request.args.get("expr"))
     # ok: achilles.python.code-injection-exec
     exec("print('constant')")
+
+
+def code_from_config(config_text):
+    # ok: achilles.python.code-injection-exec
+    exec(config_text)
+
 
 
 @app.route("/download")
@@ -232,6 +242,95 @@ def xml_parsing(make_parser, feature_external_ges, etree, body):
     etree.XMLParser(resolve_entities=True, no_network=False)
     # ok: achilles.python.xxe
     etree.XMLParser(resolve_entities=False)
+
+
+def ldap_and_xpath(conn, tree, lxml, escape_filter_chars):
+    uid = request.args.get("uid")
+    # ruleid: achilles.python.ldap-injection
+    conn.search("ou=people,dc=example,dc=com", f"(uid={uid})")
+    # ok: achilles.python.ldap-injection
+    conn.search("ou=people,dc=example,dc=com", f"(uid={escape_filter_chars(uid)})")
+    # ruleid: achilles.python.xpath-injection
+    tree.xpath(f"//user[@name='{uid}']")
+    # ok: achilles.python.xpath-injection
+    tree.xpath("//user[@name=$name]", name=uid)
+
+
+@app.route("/next")
+def next_page(redirect, url_for):
+    target = request.args.get("next", "/")
+    # ruleid: achilles.python.open-redirect
+    return redirect(target)
+
+
+@app.route("/home")
+def home(redirect, url_for):
+    # ok: achilles.python.open-redirect
+    return redirect(url_for("index"))
+
+
+@app.route("/hello-html")
+def hello_html():
+    name = request.args.get("name", "")
+    # ruleid: achilles.python.reflected-xss
+    return f"<h1>Hello {name}</h1>"
+
+
+@app.route("/hello-json")
+def hello_json():
+    name = request.args.get("name", "")
+    # ok: achilles.python.reflected-xss
+    return {"greeting": name}
+
+
+@app.route("/hello-escaped")
+def hello_escaped(escape_for_html):
+    name = request.args.get("name", "")
+    # ok: achilles.python.reflected-xss
+    return f"<h1>Hello {escape_for_html(name)}</h1>"
+
+
+def remember_me(resp, user_session):
+    import random
+    import secrets
+    value = str(random.random())[2:]
+    # ruleid: achilles.python.weak-random
+    resp.set_cookie("rememberMe", value)
+    # ruleid: achilles.python.weak-random
+    user_session["token"] = str(random.getrandbits(64))
+    # ruleid: achilles.python.weak-random
+    reset_token = random.randint(100000, 999999)
+    # ok: achilles.python.weak-random
+    resp.set_cookie("rememberMe", secrets.token_urlsafe(32))
+    # ok: achilles.python.weak-random
+    delay = random.uniform(0.1, 0.5)
+
+
+def cookies(resp):
+    # ruleid: achilles.python.insecure-cookie
+    resp.set_cookie("session", "abc", secure=False)
+    # ruleid: achilles.python.insecure-cookie
+    resp.set_cookie("session", "abc", secure=True, httponly=False)
+    # ok: achilles.python.insecure-cookie
+    resp.set_cookie("session", "abc", secure=True, httponly=True)
+
+
+@app.route("/role", methods=["POST"])
+def set_role(session):
+    role = request.form.get("role")
+    # ruleid: achilles.python.trust-boundary
+    session["role"] = role
+    # ok: achilles.python.trust-boundary
+    session["visits"] = 1
+
+
+def paths(codecs, pathlib, base):
+    name = request.args.get("file")
+    # ruleid: achilles.python.path-traversal
+    codecs.open(f"/srv/files/{name}", "r", "utf-8")
+    # ruleid: achilles.python.path-traversal
+    (pathlib.Path("/srv/files") / name).read_text()
+
 
 
 if __name__ == "__main__":

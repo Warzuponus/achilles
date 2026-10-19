@@ -146,9 +146,10 @@ report schemas, not yet exercised on a GitLab instance). The [User Guides](docs/
   five deliberately vulnerable apps (DVWA, NodeGoat, PyGoat, RailsGoat, WebGoat), the
   scanners with Achilles' own rules find 31% (36% with the community rule pack), and
   that includes access-control and logic flaws no pattern rule can find. On the OWASP
-  Benchmark for Java, which has decoys and so measures false positives too, the own
-  rules score 68.8 (88% recall, 23% of decoys flagged). Both sets of rules were partly
-  written against these benchmarks, so expect less elsewhere. There is also an 18-case
+  Benchmark, which has decoys and so measures false positives too, the own rules score
+  69.7 for Java and 50.3 for Python (true-positive minus false-positive rate). The
+  rules were partly written against these benchmarks, so expect less elsewhere; their
+  out-of-sample scores, before that work, were 4.7 and 19.5. There is also an 18-case
   labeled triage corpus and a 24-issue synthetic regression benchmark. See
   [evals/](evals/README.md) and [Benchmarking Detection](docs/benchmarking.md).
 - **You choose the model and pay the provider.** `--dry-run` prints a cost estimate

@@ -134,8 +134,8 @@ func runScanners(ctx context.Context, scanners []scanner.Scanner, tgt scanner.Ta
 func buildScanner(tc config.ToolConfig, runner xexec.Runner, opengrepRules string) (scanner.Scanner, error) {
 	rulesHost := ""
 	if tc.Rules != "" {
-		// An on-disk directory wins; the default "configs/rules" falls back to the
-		// rules embedded in the binary (config.ResolveRulesDir has the precedence).
+		// The built-in registry arrives with the embedded rules already materialized;
+		// an explicit --config's rules: path resolves here (config.ResolveRulesDir).
 		dir, err := config.ResolveRulesDir(tc.Rules)
 		if err != nil {
 			return nil, err

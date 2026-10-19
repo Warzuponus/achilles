@@ -218,3 +218,35 @@ func TestEmbeddedGosecDeclaresItsIncompleteMarker(t *testing.T) {
 	}
 	t.Fatal("no gosec entry in the embedded registry")
 }
+
+// A configs/rules directory in the working directory (any project's, or one
+// planted in a repository being scanned) must not replace the built-in rules of
+// the built-in registry: only an explicit --config points at rules on disk.
+func TestLoadEmptyPathIgnoresConfigsRulesInWorkingDir(t *testing.T) {
+	isolate(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.MkdirAll("configs/rules", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("configs/rules/empty.yaml", []byte("rules: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rules string
+	for _, tc := range c.Tools {
+		if tc.ID == "opengrep" {
+			rules = tc.Rules
+		}
+	}
+	onDisk, _ := filepath.EvalSymlinks(filepath.Join(dir, "configs", "rules"))
+	if got, _ := filepath.EvalSymlinks(rules); got == onDisk {
+		t.Fatalf("built-in registry used the working directory's configs/rules (%s)", rules)
+	}
+	if _, err := os.Stat(filepath.Join(rules, "achilles-baseline.yaml")); err != nil {
+		t.Fatalf("built-in rules not used: %v", err)
+	}
+}

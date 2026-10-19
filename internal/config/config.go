@@ -6,6 +6,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 
 	"gopkg.in/yaml.v3"
@@ -119,8 +120,10 @@ type Config struct {
 
 // Load reads and validates a tools.yaml file. An empty path loads the copy
 // embedded in the binary (configs/tools.yaml, byte-identical) and points each
-// tool's rules at a real directory (see ResolveRulesDir), so a downloaded
-// `achilles` needs no repository checkout. An explicit path is read as-is.
+// tool's rules at the rules embedded in the binary (materialized into a real
+// directory; see ResolveRulesDir), so a downloaded `achilles` needs no repository
+// checkout and a configs/rules directory in the working directory is not used.
+// An explicit path is read as-is.
 func Load(path string) (*Config, error) {
 	if path == "" {
 		return loadEmbedded()
@@ -145,7 +148,17 @@ func loadEmbedded() (*Config, error) {
 		if c.Tools[i].Rules == "" {
 			continue
 		}
-		dir, err := ResolveRulesDir(c.Tools[i].Rules)
+		// The built-in registry always gets the built-in rules. A configs/rules
+		// directory that happens to be in the working directory (any project's,
+		// or one planted in a repository being scanned) must not replace them;
+		// pointing at rules on disk takes an explicit --config.
+		var dir string
+		var err error
+		if filepath.ToSlash(filepath.Clean(c.Tools[i].Rules)) == embeddedRulesPath {
+			dir, err = materializeRules()
+		} else {
+			dir, err = ResolveRulesDir(c.Tools[i].Rules)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("tool %q: rules: %w", c.Tools[i].ID, err)
 		}

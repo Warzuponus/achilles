@@ -203,7 +203,12 @@ What to know:
   written by the token's own user, so a note someone else plants is left alone. The
   project and API URL come from `CI_PROJECT_ID` and `CI_API_V4_URL`; outside GitLab CI
   pass `--gitlab-project` (and the API defaults to gitlab.com). With `--ai`, nothing is
-  posted if the AI review did not finish.
+  posted if the AI review did not finish. Checked on gitlab.com: a first run creates
+  the note, a second updates the same note.
+- **gitlab.com's shared runners need a verified account.** A pipeline from an account
+  that has not completed GitLab's identity verification fails before any job starts,
+  with "The pipeline failed due to the user not being verified" and no job log.
+  Verify the account (or register a runner of your own) first.
 - **Schema.** The security reports declare version 15.0.0 of GitLab's
   [security report schemas](https://gitlab.com/gitlab-org/security-products/security-report-schemas),
   the oldest of the 15.x line, and use only fields present in every 15.x version.

@@ -41,6 +41,11 @@ All notable changes to this project are recorded here. The format follows
   vulnerability report follows a finding through edits instead of resolving it and
   reporting a new one. Two identical matches in one file get different signatures.
 
+### Changed
+- `--gitlab-mr-comment` has now been run against gitlab.com: the first run creates the
+  note, later runs update it in place. The GitLab guide also says what happens on
+  gitlab.com when the account is not verified: the pipeline fails before any job runs.
+
 ### Fixed
 - **Three rules whose name checks never matched what they meant to.** Opengrep anchors
   `metavariable-regex` at the start of the value, so the JavaScript XSS rule did not

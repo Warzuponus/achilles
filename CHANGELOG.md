@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **Scans from a deep directory on Windows no longer come back "clean" having read
+  nothing.** Opengrep cannot open a file whose full path reaches Windows' 260-character
+  limit, and skips it without an error. Achilles now counts such files and, when there
+  are any, marks Opengrep's results incomplete and says how to fix it (a shorter
+  directory, `subst`, WSL or Docker). Found when a scan of the OWASP Benchmark,
+  unpacked in a deep temporary directory, reported no findings.
+
 ## [0.3.0] - 2026-10-18
 
 A first recall figure on real code (270 documented vulnerabilities in five vulnerable

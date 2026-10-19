@@ -23,7 +23,17 @@ type Dependency struct {
 type Inventory struct {
 	Languages    []string
 	Dependencies []Dependency
+	// LongPaths counts files whose full path is MaxPathChars characters or more,
+	// and LongPathExample names the first one. Windows programs that are not
+	// built for long paths (Opengrep among them) cannot open such files, and skip
+	// them without an error.
+	LongPaths       int
+	LongPathExample string
 }
+
+// MaxPathChars is Windows' MAX_PATH: a full path of this many characters or more
+// cannot be opened by a program that does not opt in to long paths.
+const MaxPathChars = 260
 
 var extLang = map[string]string{
 	".go": "go", ".py": "python", ".js": "javascript", ".jsx": "javascript",
@@ -42,6 +52,11 @@ var skipDirs = map[string]bool{
 func Scan(root string) (Inventory, error) {
 	langs := map[string]bool{}
 	var deps []Dependency
+	var long int
+	var longExample string
+	if abs, aerr := filepath.Abs(root); aerr == nil {
+		root = abs
+	}
 
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -55,6 +70,12 @@ func Scan(root string) (Inventory, error) {
 		}
 		if l, ok := extLang[strings.ToLower(filepath.Ext(d.Name()))]; ok {
 			langs[l] = true
+		}
+		if len(path) >= MaxPathChars {
+			if long == 0 {
+				longExample = path
+			}
+			long++
 		}
 		switch d.Name() {
 		case "go.mod":
@@ -70,7 +91,7 @@ func Scan(root string) (Inventory, error) {
 		return Inventory{}, err
 	}
 
-	out := Inventory{Languages: keys(langs), Dependencies: deps}
+	out := Inventory{Languages: keys(langs), Dependencies: deps, LongPaths: long, LongPathExample: longExample}
 	return out, nil
 }
 

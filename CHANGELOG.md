@@ -42,11 +42,17 @@ All notable changes to this project are recorded here. The format follows
   reporting a new one. Two identical matches in one file get different signatures.
 
 ### Changed
-- `--gitlab-mr-comment` has now been run against gitlab.com: the first run creates the
-  note, later runs update it in place. The GitLab guide also says what happens on
+- The GitLab integration has now run on gitlab.com: a merge request pipeline uploaded
+  all four reports and GitLab read them, and `--gitlab-mr-comment`'s first run created
+  the note while later runs updated it in place. The GitLab guide also says what happens on
   gitlab.com when the account is not verified: the pipeline fails before any job runs.
 
 ### Fixed
+- **The container image's `achilles --version` said `dev`.** The image is built without
+  the repository's .git, and the release workflow did not pass the version in, so the
+  v0.3.0 image reported `dev`, and `achilles init` run inside it pinned `latest` instead
+  of the release. The workflow now stamps the version, commit and date, as the release
+  binaries already had. Found running the image on gitlab.com.
 - **Three rules whose name checks never matched what they meant to.** Opengrep anchors
   `metavariable-regex` at the start of the value, so the JavaScript XSS rule did not
   recognize `DOMPurify.sanitize` or `_.escape` as escaping, and two checks added in

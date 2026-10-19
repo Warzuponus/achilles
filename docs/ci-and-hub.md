@@ -205,6 +205,9 @@ What to know:
   pass `--gitlab-project` (and the API defaults to gitlab.com). With `--ai`, nothing is
   posted if the AI review did not finish. Checked on gitlab.com: a first run creates
   the note, a second updates the same note.
+- **Checked on gitlab.com** (2026-10-19): a merge request pipeline running the v0.3.0
+  image uploaded all four reports, and GitLab read them: 24 SAST findings, 1 secret,
+  30 dependency advisories and the Code Quality entries, each with its file and line.
 - **gitlab.com's shared runners need a verified account.** A pipeline from an account
   that has not completed GitLab's identity verification fails before any job starts,
   with "The pipeline failed due to the user not being verified" and no job log.

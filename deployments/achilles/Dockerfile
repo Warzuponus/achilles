@@ -39,12 +39,18 @@ ARG TARGETOS=linux
 ARG TARGETARCH
 ARG GOSEC_VERSION=v2.27.1
 ARG OSV_SCANNER_VERSION=v2.4.0
+# Stamped into `achilles --version` (and so into what `achilles init` pins) by the
+# release workflow. The build context has no .git, so without them the binary says
+# "dev". Empty is fine for a local build.
+ARG VERSION=""
+ARG COMMIT=""
+ARG DATE=""
 ENV CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -trimpath -ldflags='-s -w' -o /out/achilles       ./cmd/achilles \
+RUN go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" -o /out/achilles ./cmd/achilles \
  && go build -trimpath -ldflags='-s -w' -o /out/achillesd      ./cmd/achillesd \
  && go build -trimpath -ldflags='-s -w' -o /out/achilles-fleet ./cmd/achilles-fleet \
  && go build -trimpath -ldflags='-s -w' -o /out/achilles-eval  ./cmd/achilles-eval

@@ -46,7 +46,7 @@ func run(argv []string) error {
 	fs := flag.NewFlagSet("achilles-eval", flag.ContinueOnError)
 	var (
 		corpusPath = fs.String("corpus", "evals/triage/corpus.yaml", "labeled corpus manifest")
-		mode       = fs.String("mode", "context", "context (hermetic, no model) | corpus (no model, needs gosec/bandit) | detect (recall + miss tracing; needs the real scanners) | verdict | remediate | threat-model (these three need a live model)")
+		mode       = fs.String("mode", "context", "context (hermetic, no model) | corpus (no model, needs gosec/bandit) | detect (recall + miss tracing; needs the real scanners) | owasp (OWASP Benchmark for Java scorecard; needs --owasp-dir) | verdict | remediate | threat-model (these three need a live model)")
 		outPath    = fs.String("out", "", "write the report as JSON to this file")
 		basePath   = fs.String("baseline", "", "compare against a previously written JSON report")
 		verbose    = fs.Bool("verbose", false, "print a per-case table")
@@ -66,6 +66,7 @@ func run(argv []string) error {
 		timeout     = fs.Duration("timeout", 30*time.Minute, "overall timeout for a verdict run")
 	)
 	dflags := registerDetectFlags(fs)
+	owaspDir := fs.String("owasp-dir", "", "owasp: a checkout of github.com/OWASP-Benchmark/BenchmarkJava")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "usage: achilles-eval [flags]\n\n")
 		fmt.Fprintf(fs.Output(), "Measures triage quality against a labeled corpus (--mode context|verdict|...) and\n")
@@ -74,6 +75,9 @@ func run(argv []string) error {
 	}
 	if err := fs.Parse(argv); err != nil {
 		return err
+	}
+	if *mode == "owasp" {
+		return runOWASP(*owaspDir, dflags.achillesBin, dflags.cacheDir, *outPath, *timeout)
 	}
 	if *mode == "detect" {
 		// Detect mode has its own ground truth and needs no triage corpus.

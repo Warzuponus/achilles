@@ -38,13 +38,33 @@ rules:
               - pattern: (java.sql.Statement $S).$EXEC($SQL, ...)
               - pattern: (java.sql.Connection $C).prepareStatement($SQL, ...)
               - pattern: (java.sql.Connection $C).prepareCall($SQL, ...)
+              - pattern: (java.sql.Statement $S).addBatch($SQL)
               - pattern: $JDBC.queryForObject($SQL, ...)
               - pattern: $JDBC.queryForList($SQL, ...)
               - pattern: $JDBC.update($SQL, ...)
+              - pattern: (JdbcTemplate $J).$Q($SQL, ...)
+              - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).$Q($SQL, ...)
+              - pattern: (JdbcTemplate $J).batchUpdate(..., $SQL, ...)
               - pattern: (javax.persistence.EntityManager $EM).createQuery($SQL, ...)
               - pattern: (javax.persistence.EntityManager $EM).createNativeQuery($SQL, ...)
               - pattern: (jakarta.persistence.EntityManager $EM).createQuery($SQL, ...)
               - pattern: (jakarta.persistence.EntityManager $EM).createNativeQuery($SQL, ...)
+              # Methods only Spring's JdbcTemplate has, whatever the receiver's
+              # declared type (a static field elsewhere, say).
+              - pattern: $JDBC.queryForRowSet($SQL, ...)
+              - pattern: $JDBC.queryForMap($SQL, ...)
+              - pattern: $JDBC.queryForStream($SQL, ...)
+          - focus-metavariable: $SQL
+      - patterns:
+          # query/execute are common names: only on a receiver named like a JDBC
+          # template (jdbcTemplate, JDBCtemplate, namedJdbc...).
+          - pattern-either:
+              - pattern: $JDBC.query($SQL, ...)
+              - pattern: $JDBC.execute($SQL, ...)
+              - pattern: $JDBC.batchUpdate(..., $SQL, ...)
+          - metavariable-regex:
+              metavariable: $JDBC
+              regex: (?i)jdbc
           - focus-metavariable: $SQL
 
   - id: achilles.java.sql-string-building
@@ -114,8 +134,18 @@ rules:
       - patterns:
           - pattern-either:
               - pattern: Runtime.getRuntime().exec($CMD, ...)
+              - pattern: java.lang.Runtime.getRuntime().exec($CMD, ...)
               - pattern: (Runtime $RT).exec($CMD, ...)
-              - pattern: new ProcessBuilder($CMD, ...)
+              - pattern: (java.lang.Runtime $RT).exec($CMD, ...)
+              # The environment is attacker-chosen too: LD_PRELOAD, PATH, a shell's
+              # startup variables.
+              - pattern: (Runtime $RT).exec($X, $CMD, ...)
+              - pattern: (java.lang.Runtime $RT).exec($X, $CMD, ...)
+              # Any argument: a later one is still argument injection (CWE-88).
+              - pattern: new ProcessBuilder(..., $CMD, ...)
+              - pattern: new java.lang.ProcessBuilder(..., $CMD, ...)
+              - pattern: (ProcessBuilder $PB).command($CMD, ...)
+              - pattern: (java.lang.ProcessBuilder $PB).command($CMD, ...)
           - focus-metavariable: $CMD
 
   - id: achilles.java.path-traversal
@@ -151,8 +181,20 @@ rules:
               - pattern: new FileInputStream($PATH, ...)
               - pattern: new FileOutputStream($PATH, ...)
               - pattern: new FileReader($PATH, ...)
+              - pattern: new FileWriter($PATH, ...)
+              - pattern: new RandomAccessFile($PATH, ...)
               - pattern: Paths.get($PATH, ...)
               - pattern: Path.of($PATH, ...)
+              # The same written out in full, as code often does.
+              - pattern: new java.io.File($PATH, ...)
+              - pattern: new java.io.File($DIR, $PATH)
+              - pattern: new java.io.FileInputStream($PATH, ...)
+              - pattern: new java.io.FileOutputStream($PATH, ...)
+              - pattern: new java.io.FileReader($PATH, ...)
+              - pattern: new java.io.FileWriter($PATH, ...)
+              - pattern: new java.io.RandomAccessFile($PATH, ...)
+              - pattern: java.nio.file.Paths.get($PATH, ...)
+              - pattern: java.nio.file.Path.of($PATH, ...)
           - focus-metavariable: $PATH
 
   - id: achilles.java.ssrf
@@ -249,19 +291,39 @@ rules:
       (which plain "AES" defaults to) for encryption. Use SHA-256 or better, a password
       hash for passwords, and AES/GCM/NoPadding for encryption.
     metadata:
-      cwe: ["CWE-327: Use of a Broken or Risky Cryptographic Algorithm"]
+      cwe:
+        - "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+        - "CWE-328: Use of Weak Hash"
       category: security
     pattern-either:
       - patterns:
-          - pattern: MessageDigest.getInstance($ALG, ...)
+          - pattern-either:
+              - pattern: MessageDigest.getInstance($ALG, ...)
+              - pattern: java.security.MessageDigest.getInstance($ALG, ...)
           - metavariable-regex:
               metavariable: $ALG
               regex: (?i)^"(md2|md4|md5|sha|sha1|sha-1)"$
       - patterns:
-          - pattern: Cipher.getInstance($ALG, ...)
+          - pattern-either:
+              - pattern: Cipher.getInstance($ALG, ...)
+              - pattern: javax.crypto.Cipher.getInstance($ALG, ...)
           - metavariable-regex:
               metavariable: $ALG
               regex: (?i)^"(des|desede|rc2|rc4|arcfour|blowfish)(/.*)?"$|(?i)^"aes"$|(?i)^".*/ecb/.*"$
+      - patterns:
+          - pattern-either:
+              - pattern: KeyGenerator.getInstance($ALG, ...)
+              - pattern: javax.crypto.KeyGenerator.getInstance($ALG, ...)
+              - pattern: SecretKeyFactory.getInstance($ALG, ...)
+              - pattern: javax.crypto.SecretKeyFactory.getInstance($ALG, ...)
+          - metavariable-regex:
+              metavariable: $ALG
+              regex: (?i)^"(des|desede|tripledes|rc2|rc4|arcfour|blowfish|pbewithmd5[a-z0-9]*)"$
+      - pattern-either:
+          - pattern: DigestUtils.md5(...)
+          - pattern: DigestUtils.md5Hex(...)
+          - pattern: DigestUtils.sha1(...)
+          - pattern: DigestUtils.sha1Hex(...)
 
   - id: achilles.java.trust-all-certificates
     languages: [java]
@@ -365,3 +427,301 @@ rules:
       - pattern-not-inside: |
           $X.addPermission(...);
           ...
+
+  # The rules below share one set of request sources: the servlet request's data
+  # (parameters, headers, cookies, query string, body, path) and Spring's bound
+  # parameters. Opengrep has no YAML anchors, so each rule lists them in full.
+  - id: achilles.java.xss
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >
+      Request data is written into the HTTP response without HTML encoding, so a
+      script in it runs in the user's browser. Encode it for the context it lands in
+      (OWASP Java Encoder Encode.forHtml, Spring HtmlUtils.htmlEscape, ESAPI
+      encodeForHTML), or render through a template that escapes by default.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletRequest $R).$GET(...)
+              - pattern: (javax.servlet.http.HttpServletRequest $R).$GET(...)
+              - pattern: (jakarta.servlet.http.HttpServletRequest $R).$GET(...)
+          - metavariable-regex:
+              metavariable: $GET
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getCookies|getQueryString|getInputStream|getReader|getRequestURI|getRequestURL|getPathInfo|getPart|getParts)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestHeader(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @CookieValue(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestBody $T $X, ...) { ... }
+          - pattern: $X
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: Encode.$FOR(...)
+          - pattern: org.owasp.encoder.Encode.$FOR(...)
+          - pattern: HtmlUtils.htmlEscape(...)
+          - pattern: org.springframework.web.util.HtmlUtils.htmlEscape(...)
+          - pattern: StringEscapeUtils.escapeHtml4(...)
+          - pattern: StringEscapeUtils.escapeHtml(...)
+          - pattern: org.apache.commons.text.StringEscapeUtils.escapeHtml4(...)
+          - pattern: org.apache.commons.lang.StringEscapeUtils.escapeHtml(...)
+          - pattern: ESAPI.encoder().encodeForHTML(...)
+          - pattern: ESAPI.encoder().encodeForHTMLAttribute(...)
+          - pattern: org.owasp.esapi.ESAPI.encoder().encodeForHTML(...)
+          - pattern: org.owasp.esapi.ESAPI.encoder().encodeForHTMLAttribute(...)
+          - pattern: Integer.parseInt(...)
+          - pattern: Long.parseLong(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletResponse $RESP).getWriter().$PRINT(..., $X, ...)
+              - pattern: (javax.servlet.http.HttpServletResponse $RESP).getWriter().$PRINT(..., $X, ...)
+              - pattern: (ServletOutputStream $OS).$PRINT(..., $X, ...)
+              # A writer taken from the response; a PrintWriter on a file is not
+              # the page.
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          $T $W = $RESP.getWriter();
+                          ...
+                      - pattern-inside: |
+                          $W = $RESP.getWriter();
+                          ...
+                  - pattern: $W.$PRINT(..., $X, ...)
+          - metavariable-regex:
+              metavariable: $PRINT
+              regex: ^(print|println|write|printf|format|append)$
+          - focus-metavariable: $X
+
+  - id: achilles.java.ldap-injection
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >
+      Request data is put into an LDAP search filter, so characters such as * ( ) |
+      in it change which entries the search returns (and can bypass a login check).
+      Escape it for LDAP filters (Spring LdapEncoder.filterEncode, ESAPI
+      encodeForLDAP), or build the filter with a filter API.
+    metadata:
+      cwe: ["CWE-90: Improper Neutralization of Special Elements used in an LDAP Query (LDAP Injection)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletRequest $R).$GET(...)
+              - pattern: (javax.servlet.http.HttpServletRequest $R).$GET(...)
+              - pattern: (jakarta.servlet.http.HttpServletRequest $R).$GET(...)
+          - metavariable-regex:
+              metavariable: $GET
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getCookies|getQueryString|getInputStream|getReader|getRequestURI|getRequestURL|getPathInfo|getPart|getParts)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestHeader(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @CookieValue(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestBody $T $X, ...) { ... }
+          - pattern: $X
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: LdapEncoder.filterEncode(...)
+          - pattern: org.springframework.ldap.support.LdapEncoder.filterEncode(...)
+          - pattern: ESAPI.encoder().encodeForLDAP(...)
+          - pattern: org.owasp.esapi.ESAPI.encoder().encodeForLDAP(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (DirContext $C).search($BASE, $FILTER, ...)
+              - pattern: (javax.naming.directory.DirContext $C).search($BASE, $FILTER, ...)
+              - pattern: (InitialDirContext $C).search($BASE, $FILTER, ...)
+              - pattern: (javax.naming.directory.InitialDirContext $C).search($BASE, $FILTER, ...)
+              - pattern: (LdapContext $C).search($BASE, $FILTER, ...)
+              - pattern: (LdapTemplate $T).search($BASE, $FILTER, ...)
+          - focus-metavariable: $FILTER
+
+  - id: achilles.java.xpath-injection
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >
+      Request data is put into an XPath expression, so it can change what the query
+      selects (for example, every user's record instead of one). Bind it as an XPath
+      variable (XPath.setXPathVariableResolver) instead of building the expression.
+    metadata:
+      cwe: ["CWE-643: Improper Neutralization of Data within XPath Expressions (XPath Injection)"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletRequest $R).$GET(...)
+              - pattern: (javax.servlet.http.HttpServletRequest $R).$GET(...)
+              - pattern: (jakarta.servlet.http.HttpServletRequest $R).$GET(...)
+          - metavariable-regex:
+              metavariable: $GET
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getCookies|getQueryString|getInputStream|getReader|getRequestURI|getRequestURL|getPathInfo|getPart|getParts)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestHeader(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @CookieValue(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestBody $T $X, ...) { ... }
+          - pattern: $X
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: ESAPI.encoder().encodeForXPath(...)
+          - pattern: org.owasp.esapi.ESAPI.encoder().encodeForXPath(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (XPath $XP).evaluate($EXPR, ...)
+              - pattern: (javax.xml.xpath.XPath $XP).evaluate($EXPR, ...)
+              - pattern: (XPath $XP).compile($EXPR)
+              - pattern: (javax.xml.xpath.XPath $XP).compile($EXPR)
+          - focus-metavariable: $EXPR
+
+  - id: achilles.java.weak-random
+    mode: taint
+    languages: [java]
+    severity: WARNING
+    message: >
+      A value from java.util.Random or Math.random() becomes a cookie, a session
+      attribute or a token. Those generators are predictable: a few outputs give away
+      the rest. Use java.security.SecureRandom for anything an attacker must not
+      guess.
+    metadata:
+      cwe: ["CWE-330: Use of Insufficiently Random Values"]
+      category: security
+    pattern-sources:
+      - pattern-either:
+          - pattern: new Random(...).$NEXT(...)
+          - pattern: new java.util.Random(...).$NEXT(...)
+          - pattern: (Random $R).$NEXT(...)
+          - pattern: (java.util.Random $R).$NEXT(...)
+          - pattern: Math.random()
+          - pattern: java.lang.Math.random()
+          - pattern: ThreadLocalRandom.current().$NEXT(...)
+          - pattern: RandomStringUtils.$GEN(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new Cookie($NAME, $V)
+              - pattern: new javax.servlet.http.Cookie($NAME, $V)
+              - pattern: new jakarta.servlet.http.Cookie($NAME, $V)
+              - pattern: (Cookie $C).setValue($V)
+              - pattern: (HttpSession $S).setAttribute($NAME, $V)
+              - pattern: (javax.servlet.http.HttpSession $S).setAttribute($NAME, $V)
+          - focus-metavariable: $V
+      - patterns:
+          # A variable whose name says it is a secret.
+          - pattern: $VAR = $E
+          - metavariable-regex:
+              metavariable: $VAR
+              regex: (?i)^[a-z_]*(token|secret|password|passwd|nonce|salt|otp|apikey|api_key|sessionid|session_id|resetcode|reset_code|rememberme)[a-z_0-9]*$
+          - focus-metavariable: $E
+
+  - id: achilles.java.insecure-cookie
+    languages: [java]
+    severity: WARNING
+    message: >
+      The cookie is explicitly marked as not Secure (so it is also sent over plain
+      HTTP, where anyone on the path can read it) or not HttpOnly (so a script on the
+      page can read it). Set both to true for any cookie that identifies a user.
+    metadata:
+      cwe:
+        - "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute"
+        - "CWE-1004: Sensitive Cookie Without 'HttpOnly' Flag"
+      category: security
+    pattern-either:
+      - pattern: (Cookie $C).setSecure(false)
+      - pattern: (javax.servlet.http.Cookie $C).setSecure(false)
+      - pattern: (jakarta.servlet.http.Cookie $C).setSecure(false)
+      - pattern: (Cookie $C).setHttpOnly(false)
+      - pattern: (javax.servlet.http.Cookie $C).setHttpOnly(false)
+      - pattern: (jakarta.servlet.http.Cookie $C).setHttpOnly(false)
+      - pattern: ResponseCookie.from(...). ... .secure(false)
+      - pattern: ResponseCookie.from(...). ... .httpOnly(false)
+
+  - id: achilles.java.trust-boundary
+    mode: taint
+    languages: [java]
+    severity: INFO
+    message: >
+      Request data is stored in the HTTP session, where the rest of the application
+      may treat it as trusted (set by the server). Validate it before storing it, and
+      do not let the request choose the attribute's name.
+    metadata:
+      cwe: ["CWE-501: Trust Boundary Violation"]
+      category: security
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletRequest $R).$GET(...)
+              - pattern: (javax.servlet.http.HttpServletRequest $R).$GET(...)
+              - pattern: (jakarta.servlet.http.HttpServletRequest $R).$GET(...)
+          - metavariable-regex:
+              metavariable: $GET
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getCookies|getQueryString|getInputStream|getReader|getRequestURI|getRequestURL|getPathInfo|getPart|getParts)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @PathVariable(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestHeader(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @CookieValue(...) $T $X, ...) { ... }
+              - pattern-inside: |
+                  $RET $M(..., @RequestBody $T $X, ...) { ... }
+          - pattern: $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpSession $S).setAttribute($X, ...)
+              - pattern: (HttpSession $S).setAttribute($N, $X)
+              - pattern: (HttpSession $S).putValue($X, ...)
+              - pattern: (HttpSession $S).putValue($N, $X)
+              - pattern: (javax.servlet.http.HttpSession $S).setAttribute($X, ...)
+              - pattern: (javax.servlet.http.HttpSession $S).setAttribute($N, $X)
+              - pattern: $REQ.getSession().setAttribute($X, ...)
+              - pattern: $REQ.getSession().setAttribute($N, $X)
+              - pattern: $REQ.getSession().putValue($X, ...)
+              - pattern: $REQ.getSession().putValue($N, $X)
+          - focus-metavariable: $X

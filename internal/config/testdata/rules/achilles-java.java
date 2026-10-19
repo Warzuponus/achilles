@@ -175,4 +175,89 @@ public class Demo {
         return xstream.fromXML(payload);
     }
 
+
+
+    public void fullyQualified(HttpServletRequest request) throws Exception {
+        String name = request.getHeader("X-File");
+        // ruleid: achilles.java.path-traversal
+        new java.io.FileInputStream(new java.io.File(name));
+        String host = request.getParameter("host");
+        // ruleid: achilles.java.command-injection
+        new java.lang.ProcessBuilder("nslookup", host).start();
+        Runtime rt = Runtime.getRuntime();
+        String[] env = {"FOO=" + request.getParameter("foo")};
+        // ruleid: achilles.java.command-injection
+        rt.exec(new String[] {"ls"}, env);
+        // ruleid: achilles.java.weak-crypto
+        java.security.MessageDigest.getInstance("MD5");
+        // ruleid: achilles.java.weak-crypto
+        javax.crypto.KeyGenerator.getInstance("DES");
+        // ok: achilles.java.weak-crypto
+        javax.crypto.KeyGenerator.getInstance("AES");
+    }
+
+    public void springJdbc(HttpServletRequest request, org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
+        String sql = "SELECT * FROM users WHERE name = '" + request.getParameter("name") + "'";
+        // ruleid: achilles.java.sql-injection
+        jdbcTemplate.queryForRowSet(sql);
+        // ruleid: achilles.java.sql-injection
+        jdbcTemplate.execute(sql);
+    }
+
+    public void xss(HttpServletRequest request, javax.servlet.http.HttpServletResponse response) throws Exception {
+        String name = request.getParameter("name");
+        // ruleid: achilles.java.xss
+        response.getWriter().println("<p>Hello " + name + "</p>");
+        java.io.PrintWriter out = response.getWriter();
+        // ruleid: achilles.java.xss
+        out.format(java.util.Locale.US, "<p>%s</p>", name);
+        // ok: achilles.java.xss
+        out.println("<p>Hello " + org.owasp.encoder.Encode.forHtml(name) + "</p>");
+        java.io.PrintWriter log = new java.io.PrintWriter(new java.io.File("/var/log/app.log"));
+        // ok: achilles.java.xss
+        log.println(name);
+    }
+
+    public void ldapAndXpath(HttpServletRequest request, javax.naming.directory.DirContext ctx, javax.xml.xpath.XPath xp) throws Exception {
+        String uid = request.getParameter("uid");
+        // ruleid: achilles.java.ldap-injection
+        ctx.search("ou=people", "(uid=" + uid + ")", null);
+        // ok: achilles.java.ldap-injection
+        ctx.search("ou=people", "(uid={0})", new Object[] {uid}, null);
+        // ruleid: achilles.java.xpath-injection
+        xp.evaluate("/users/user[@name='" + uid + "']", null);
+        // ok: achilles.java.xpath-injection
+        xp.evaluate("/users/user[@name=$name]", null);
+    }
+
+    public void randomness(javax.servlet.http.HttpServletResponse response, javax.servlet.http.HttpSession session) {
+        String value = Integer.toString(new java.util.Random().nextInt());
+        // ruleid: achilles.java.weak-random
+        response.addCookie(new javax.servlet.http.Cookie("rememberMe", value));
+        // ruleid: achilles.java.weak-random
+        String resetToken = Double.toString(Math.random());
+        // ok: achilles.java.weak-random
+        String sessionToken = Long.toString(new java.security.SecureRandom().nextLong());
+        // ok: achilles.java.weak-random
+        int jitter = new java.util.Random().nextInt(100);
+    }
+
+    public void cookies(javax.servlet.http.HttpServletResponse response) {
+        javax.servlet.http.Cookie c = new javax.servlet.http.Cookie("session", "abc");
+        // ruleid: achilles.java.insecure-cookie
+        c.setSecure(false);
+        // ruleid: achilles.java.insecure-cookie
+        c.setHttpOnly(false);
+        // ok: achilles.java.insecure-cookie
+        c.setSecure(true);
+    }
+
+    public void session(HttpServletRequest request) {
+        String role = request.getParameter("role");
+        // ruleid: achilles.java.trust-boundary
+        request.getSession().setAttribute("role", role);
+        // ok: achilles.java.trust-boundary
+        request.getSession().setAttribute("visits", 1);
+    }
+
 }

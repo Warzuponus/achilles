@@ -6,6 +6,21 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Achilles' own Java rules, rebuilt from the OWASP Benchmark's verdict.** On the
+  Benchmark (2,740 Java cases, half of them decoys) the own rules scored 4.7, catching
+  SQL and command injection only. New rules for XSS (`response.getWriter()`), LDAP and
+  XPath injection, `java.util.Random` or `Math.random()` feeding cookies, sessions and
+  tokens, cookies marked not Secure or not HttpOnly, and request data stored in the
+  session (informational); classes written out in full (`new java.io.File`,
+  `java.security.MessageDigest`, `javax.crypto.Cipher`); the environment argument of
+  `Runtime.exec` and every argument of `ProcessBuilder`; Spring `JdbcTemplate` queries;
+  DES key generators. The own rules now score 68.8 (88% recall, 23% of decoys flagged),
+  in-sample. On the five vulnerable apps they added seven findings, all real.
+- **`achilles-eval --mode owasp --owasp-dir BenchmarkJava`** scans an OWASP Benchmark
+  checkout and prints its scorecard (true-positive minus false-positive rate per
+  category), by the Benchmark's CWE rule and with related CWEs accepted.
+
 ## [0.3.0] - 2026-10-18
 
 A first recall figure on real code (270 documented vulnerabilities in five vulnerable

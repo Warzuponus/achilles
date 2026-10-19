@@ -19,6 +19,12 @@ All notable changes to this project are recorded here. The format follows
   reporting a new one. Two identical matches in one file get different signatures.
 
 ### Fixed
+- **Scans from a deep directory on Windows no longer come back "clean" having read
+  nothing.** Opengrep cannot open a file whose full path reaches Windows' 260-character
+  limit, and skips it without an error. Achilles now counts such files and, when there
+  are any, marks Opengrep's results incomplete and says how to fix it (a shorter
+  directory, `subst`, WSL or Docker). Found when a scan of the OWASP Benchmark,
+  unpacked in a deep temporary directory, reported no findings.
 - The GitLab guide said dependency advisories were not written as a dependency
   scanning report; `--gitlab-dependency-scanning` has done that since v0.3.0.
 

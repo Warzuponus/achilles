@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/Warzuponus/achilles/internal/inventory"
@@ -45,4 +47,18 @@ func resetInventory() {
 	inventoryCache.mu.Lock()
 	inventoryCache.byID = nil
 	inventoryCache.mu.Unlock()
+}
+
+// longPathDiag reports Opengrep's scan as incomplete when, on Windows, the target
+// holds files whose full path reaches MAX_PATH. Opengrep cannot open them and
+// skips them without a word (its SARIF still says the run succeeded), so a scan
+// from a deep directory came back "clean" having read nothing. The Go-based
+// scanners handle long paths and are not affected.
+func longPathDiag(goos string, inv inventory.Inventory, ran []string) (toolDiag, bool) {
+	if goos != "windows" || inv.LongPaths == 0 || !slices.Contains(ran, "opengrep") {
+		return toolDiag{}, false
+	}
+	return toolDiag{Tool: "opengrep", Stage: "partial", Error: fmt.Sprintf(
+		"it cannot open the %d file(s) whose full path is %d characters or more (Windows' limit), for example %s; scan from a shorter directory (or map one to a drive letter with subst), or run Achilles in WSL or Docker",
+		inv.LongPaths, inventory.MaxPathChars, inv.LongPathExample)}, true
 }

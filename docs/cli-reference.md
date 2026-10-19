@@ -177,6 +177,8 @@ Full walkthrough: [LLM Triage & Agents](llm-and-agents.md).
 | `--gitlab-secret-detection` | — | GitLab secret detection security report (`artifacts:reports:secret_detection`): credential findings, never the matched text |
 | `--gitlab-dependency-scanning` | — | GitLab dependency scanning security report (`artifacts:reports:dependency_scanning`): dependency advisories, each with its package, version and manifest |
 | `--gitlab-code-quality` | — | GitLab Code Quality report (`artifacts:reports:codequality`): every finding, shown in the merge request widget on every GitLab tier |
+| `--gitlab-mr-comment` | `0` | post/update a sticky summary note on this GitLab merge request IID (`$CI_MERGE_REQUEST_IID`); needs `ACHILLES_GITLAB_TOKEN` with the `api` scope |
+| `--gitlab-project` | `$CI_PROJECT_ID` | the project for `--gitlab-mr-comment` (numeric id or `group/project`) |
 | `--junit` | — | JUnit XML report (for CI test panels) |
 | `--markdown` | — | Markdown summary (good for a PR comment) |
 | `--github` | `false` | emit GitHub Actions annotations to stdout |

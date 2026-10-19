@@ -63,6 +63,8 @@ type options struct {
 	gitlabSecrets     string    // --gitlab-secret-detection: GitLab secret detection security report
 	gitlabDeps        string    // --gitlab-dependency-scanning: GitLab dependency scanning security report
 	gitlabCodeQuality string    // --gitlab-code-quality: GitLab Code Quality report
+	gitlabMRComment   int       // --gitlab-mr-comment: sticky summary note on this merge request IID
+	gitlabProject     string    // --gitlab-project: project id or path for --gitlab-mr-comment
 	startedAt         time.Time // when this run began; GitLab reports state the scan's start and end
 	junitOut          string
 	markdownOut       string
@@ -181,6 +183,8 @@ func defineFlags() (*flag.FlagSet, *options) {
 	fs.StringVar(&o.markdownOut, "markdown", "", "write a Markdown summary to this file")
 	fs.StringVar(&o.htmlReport, "html-report", "", "write a self-contained HTML report (findings + AI review/advice/threat-model) to this file")
 	fs.BoolVar(&o.githubAnn, "github", false, "emit GitHub Actions annotations to stdout")
+	fs.IntVar(&o.gitlabMRComment, "gitlab-mr-comment", 0, "post/update a sticky summary note on this GitLab merge request IID (; needs ACHILLES_GITLAB_TOKEN with the api scope)")
+	fs.StringVar(&o.gitlabProject, "gitlab-project", os.Getenv("CI_PROJECT_ID"), "GitLab project id or group/project path for --gitlab-mr-comment (default )")
 	fs.IntVar(&o.prComment, "pr-comment", 0, "post/update a sticky summary comment on this PR number (needs GITHUB_TOKEN + --repo/$GITHUB_REPOSITORY)")
 	fs.IntVar(&o.prReview, "pr-review", 0, "post findings as inline review comments on this PR number (needs --pr-head-sha)")
 	fs.StringVar(&o.prHeadSHA, "pr-head-sha", "", "the PR head commit SHA for --pr-review (github.event.pull_request.head.sha)")

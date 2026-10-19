@@ -6,6 +6,22 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **A summary note on GitLab merge requests.** `--gitlab-mr-comment $CI_MERGE_REQUEST_IID`
+  posts the Markdown summary as a note and updates that same note on later runs, on
+  every GitLab tier. The token is `ACHILLES_GITLAB_TOKEN` (a project access token with
+  the `api` scope); a note that carries Achilles' marker but was written by anyone else
+  is never edited. Nothing is posted when the AI review did not finish.
+- **GitLab keeps a vulnerability's history when its line moves.** The SAST and secret
+  detection reports give each finding a tracking signature built from Achilles'
+  fingerprint (a hash of the matched code, not its line), so GitLab Ultimate's
+  vulnerability report follows a finding through edits instead of resolving it and
+  reporting a new one. Two identical matches in one file get different signatures.
+
+### Fixed
+- The GitLab guide said dependency advisories were not written as a dependency
+  scanning report; `--gitlab-dependency-scanning` has done that since v0.3.0.
+
 ## [0.3.0] - 2026-10-18
 
 A first recall figure on real code (270 documented vulnerabilities in five vulnerable

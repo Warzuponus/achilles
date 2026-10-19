@@ -73,6 +73,11 @@ func writeReports(ctx context.Context, o *options, absTarget string, scan model.
 			fmt.Fprintf(os.Stderr, "achilles: pr-comment: %v\n", err)
 		}
 	}
+	if o.gitlabMRComment > 0 && !o.dryRun {
+		if err := runGitLabMRComment(ctx, o.gitlabMRComment, o.gitlabProject, scan); err != nil {
+			fmt.Fprintf(os.Stderr, "achilles: gitlab-mr-comment: %v\n", err)
+		}
+	}
 	if o.prReview > 0 && !o.dryRun {
 		if err := runPRReview(ctx, o.prReview, o.prHeadSHA, o.repoFlag, scan); err != nil {
 			fmt.Fprintf(os.Stderr, "achilles: pr-review: %v\n", err)

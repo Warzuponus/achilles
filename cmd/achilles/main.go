@@ -237,8 +237,12 @@ func run(argv []string) error {
 		offline.reviewOn, offline.scaAdvice, offline.threatModelOut = false, false, ""
 		offline.researchOn, offline.mineRules = false, false
 		offline.prComment, offline.prReview, offline.fileIssues, offline.fixPR = 0, 0, false, false
+		offline.gitlabMRComment = 0
 		if o.prComment > 0 || o.prReview > 0 || o.fileIssues || o.fixPR {
 			fmt.Fprintln(os.Stderr, "achilles: not posting to GitHub (comments, issues, fix PR): the findings were not reviewed")
+		}
+		if o.gitlabMRComment > 0 {
+			fmt.Fprintln(os.Stderr, "achilles: not posting to GitLab (merge request note): the findings were not reviewed")
 		}
 		o = &offline
 	} else if err != nil {

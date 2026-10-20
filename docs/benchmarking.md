@@ -346,8 +346,11 @@ no SpotBugs/find-sec-bugs) and AI review off:
 | Own rules, after the 2026-10-18/19 Java rules | 90.6% | 20.9% | **69.7** |
 | With community rules (`--mode oss`), before | 90.9% | 24.6% | 66.3 |
 | With community rules, after | 94.0% | 26.9% | 67.1 |
+| Own rules, after the 2026-10-20 weak-randomness fix | 91.3% | 20.1% | **71.2** |
+| With community rules, after that fix | 94.0% | 26.1% | 67.9 |
 
-All three columns are averages over the 11 categories, as the scorecard reports
+The last two rows come from [the comparison with other tools](comparison.md), which
+also explains the fix. All three columns are averages over the 11 categories, as the scorecard reports
 them.
 
 How to read it:
@@ -375,7 +378,7 @@ How to read it:
 ### The Python edition
 
 [BenchmarkPython](https://github.com/OWASP-Benchmark/BenchmarkPython) (version 0.1,
-2026) is the same idea for Flask: 1,230 cases in 15 categories, 452 of them real. The
+2026) is the same idea for Flask: 1,230 cases in 14 categories, 452 of them real. The
 same command scores it (`--owasp-dir BenchmarkPython`). Measured on 2026-10-19 at
 commit `f129148`, binary scanners, AI review off:
 

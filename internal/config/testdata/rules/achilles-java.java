@@ -240,6 +240,39 @@ public class Demo {
         String sessionToken = Long.toString(new java.security.SecureRandom().nextLong());
         // ok: achilles.java.weak-random
         int jitter = new java.util.Random().nextInt(100);
+        byte[] bytes = new byte[16];
+        new java.util.Random().nextBytes(bytes);
+        // ruleid: achilles.java.weak-random
+        response.addCookie(new javax.servlet.http.Cookie("rememberMe", java.util.Base64.getEncoder().encodeToString(bytes)));
+        java.util.Random weak = new java.util.Random();
+        // ruleid: achilles.java.weak-random
+        String apiToken = Long.toString(weak.nextLong());
+    }
+
+    // A Random parameter may hold a SecureRandom (its subclass): not flagged here.
+    double nextFrom(java.util.Random generator) {
+        return generator.nextDouble();
+    }
+
+    void bytesFrom(java.util.Random generator, byte[] out) {
+        generator.nextBytes(out);
+    }
+
+    public void secureThroughHelper(javax.servlet.http.HttpServletResponse response) throws Exception {
+        java.util.Random gen = java.security.SecureRandom.getInstance("SHA1PRNG");
+        String value = Double.toString(nextFrom(gen));
+        // ok: achilles.java.weak-random
+        response.addCookie(new javax.servlet.http.Cookie("rememberMe", value));
+        byte[] buf = new byte[16];
+        bytesFrom(gen, buf);
+        // ok: achilles.java.weak-random
+        response.addCookie(new javax.servlet.http.Cookie("rememberMe2", java.util.Base64.getEncoder().encodeToString(buf)));
+    }
+
+    public void weakThroughHelper(javax.servlet.http.HttpServletResponse response) {
+        String value = Double.toString(nextFrom(new java.util.Random()));
+        // ruleid: achilles.java.weak-random
+        response.addCookie(new javax.servlet.http.Cookie("rememberMe", value));
     }
 
     public void cookies(javax.servlet.http.HttpServletResponse response) {

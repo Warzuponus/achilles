@@ -1,6 +1,6 @@
 # Runs the native Anthropic client against a live Messages API: the key-gated
 # tests in internal/triage/llm, then an --ai scan of the bundled sample. Each run
-# costs real money, so it runs only when the client changes, and on demand.
+# costs real money, so it runs only when started by hand (Actions, Run workflow).
 #
 # Secrets (any, both or neither; with neither every step is skipped):
 #   ACHILLES_TEST_ANTHROPIC_API_KEY   Anthropic's own API: the live tests, and a
@@ -12,10 +12,6 @@
 name: Live Anthropic
 
 on:
-  pull_request:
-    paths:
-      - "internal/triage/llm/**"
-      - ".github/workflows/live-anthropic.yml"
   workflow_dispatch:
     inputs:
       models:
@@ -27,7 +23,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read

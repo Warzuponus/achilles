@@ -34,6 +34,7 @@ GUIDES = [
     ("deep-verify", "Deep Verification"),
     ("verifying-fixes", "Verifying Fixes"),
     ("benchmarking", "Benchmarking Detection"),
+    ("comparison", "Comparison with Other Tools"),
     ("ci-and-hub", "CI & the Scan Hub"),
     ("fleet", "Fleet"),
     ("containers", "Running in Containers"),

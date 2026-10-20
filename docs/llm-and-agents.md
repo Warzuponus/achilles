@@ -52,14 +52,14 @@ of Achilles' own (no SDK, no new dependency), for any `--llm-base-url` on
   decoded answer is still validated).
 
 It is still marked experimental. Its unit tests run against a fake of the Messages
-API, and the live tests have passed through OpenRouter's Messages-compatible endpoint
-(`anthropic/claude-sonnet-5.5`, October 2026), which checks the requests, streaming,
-structured outputs and error handling against a real server; they have not yet run
-against `api.anthropic.com` itself. Live tests (`TestLive*` in `internal/triage/llm`, skipped unless
+API. The live tests (`TestLive*` in `internal/triage/llm`, skipped unless
 `ACHILLES_TEST_ANTHROPIC_API_KEY` is set; `ACHILLES_TEST_ANTHROPIC_BASE_URL` points
-them at another Messages-compatible server such as OpenRouter's) and the `Live
-Anthropic` workflow run it against a live service. OpenRouter (`--llm-provider openrouter --llm-model
-anthropic/<model>`) remains an exercised path for Claude models.
+them at another Messages-compatible server) and the `Live Anthropic` workflow, started
+by hand, run it against a live service. They have passed through OpenRouter's
+Messages-compatible endpoint (`anthropic/claude-sonnet-5.5`, October 2026), which
+checks the requests, streaming, structured outputs and error handling against a real
+server, but not yet against `api.anthropic.com` itself. OpenRouter (`--llm-provider
+openrouter --llm-model anthropic/<model>`) remains an exercised path for Claude models.
 
 Anything else (vLLM, LiteLLM, Azure OpenAI, a gateway) is `--llm-base-url`. An
 explicit `--llm-base-url` always wins over a provider preset. There is deliberately

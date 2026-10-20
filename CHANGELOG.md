@@ -20,10 +20,18 @@ All notable changes to this project are recorded here. The format follows
   string (`{ _id: req.body.id }`), which can carry `{"$ne": null}`; `serve-index`
   directory listings; and a rate limiter keyed on `X-Forwarded-For` or another header
   the client sets. On the five vulnerable apps they changed nothing.
+- **A comparison with other open-source SAST tools** ([docs/comparison.md](docs/comparison.md)):
+  Achilles, Semgrep CE, Bearer, Find Security Bugs and Bandit on the OWASP Benchmark for
+  Java and Python, scored by the same code, with recall, decoys flagged, precision and
+  run time, and where Achilles loses. `evals/compare/run.sh` reproduces every number.
+- **`achilles-eval --mode owasp --owasp-sarif <report>`** scores a SARIF report from any
+  tool instead of running Achilles, and the scorecard now prints pooled precision.
 - **Live tests for the native Anthropic client.** `TestLive*` in
   `internal/triage/llm` call the real Messages API (skipped unless
-  `ACHILLES_TEST_ANTHROPIC_API_KEY` is set), and the `Live Anthropic` workflow runs
-  them plus a full `--ai --deep-verify` scan of the sample when the client changes.
+  `ACHILLES_TEST_ANTHROPIC_API_KEY` is set; `ACHILLES_TEST_ANTHROPIC_BASE_URL` aims
+  them at another Messages-compatible server such as OpenRouter's). The `Live
+  Anthropic` workflow, started by hand, runs them plus an `--ai --deep-verify` scan of
+  the sample.
 
 ### Fixed
 - One taint sink that several sources reach was reported once per source by Opengrep:
@@ -34,6 +42,12 @@ All notable changes to this project are recorded here. The format follows
   every rule's message.
 - The MongoDB `$where` rule fired on a value converted with `Number()` or `parseInt()`
   first, and the hard-coded secret rule on Ethereum addresses.
+- **Java weak-randomness rule:** `new java.util.Random().nextBytes(buf)` was missed (it
+  fills its argument), and a `Random` parameter holding a `SecureRandom` was flagged.
+  Weak randomness on the OWASP Benchmark goes from 83.0 to 100, the own Java rules from
+  69.7 to 71.2; findings on WebGoat are unchanged.
+- **The OWASP scorer read no CWE from SpotBugs reports**, which give it as a SARIF
+  relationship to the CWE taxonomy rather than a tag.
 - **`--llm-provider anthropic`: structured outputs for every schema.** Schemas sent to
   the Messages API now get `additionalProperties: false` on every object and lose the
   constraints structured outputs reject. The deep-verify step schema had neither, so

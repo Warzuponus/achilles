@@ -80,7 +80,8 @@ var (
 
 // OWASPFlags reads a SARIF report and returns, per test case, the CWEs reported
 // in its file. A result's CWEs come from its rule's tags (external/cwe/cwe-89),
-// the form Achilles' unified report writes, or from the result's own properties.
+// the form Achilles' unified report writes, from its rule's relationships to the
+// CWE taxonomy, or from the result's own properties.
 func OWASPFlags(r io.Reader) (map[string]map[int]bool, error) {
 	var doc struct {
 		Runs []struct {
@@ -91,6 +92,14 @@ func OWASPFlags(r io.Reader) (map[string]map[int]bool, error) {
 						Properties struct {
 							Tags []string `json:"tags"`
 						} `json:"properties"`
+						Relationships []struct {
+							Target struct {
+								ID            string `json:"id"`
+								ToolComponent struct {
+									Name string `json:"name"`
+								} `json:"toolComponent"`
+							} `json:"target"`
+						} `json:"relationships"`
 					} `json:"rules"`
 				} `json:"driver"`
 			} `json:"tool"`
@@ -128,6 +137,14 @@ func OWASPFlags(r io.Reader) (map[string]map[int]bool, error) {
 		for _, rule := range run.Tool.Driver.Rules {
 			set := map[int]bool{}
 			cwes(rule.Properties.Tags, set)
+			// SARIF's own form (SpotBugs, gosec): a relationship to the CWE taxonomy.
+			for _, rel := range rule.Relationships {
+				if strings.EqualFold(rel.Target.ToolComponent.Name, "CWE") {
+					if n, err := strconv.Atoi(strings.TrimPrefix(strings.ToUpper(rel.Target.ID), "CWE-")); err == nil {
+						set[n] = true
+					}
+				}
+			}
 			byRule[rule.ID] = set
 		}
 		for _, res := range run.Results {
@@ -171,6 +188,10 @@ type OWASPResult struct {
 	// Averages over categories, as the Benchmark's scorecard reports them.
 	StrictTPR, StrictFPR, StrictScore    float64
 	RelatedTPR, RelatedFPR, RelatedScore float64
+	// StrictPrecision is the share of flagged test cases that are real, pooled
+	// over every case rather than averaged over categories. The scorecard does not
+	// report it; a comparison of tools needs it (docs/comparison.md).
+	StrictPrecision float64
 }
 
 // OWASPScore scores flags against the answer key.
@@ -229,6 +250,14 @@ func OWASPScore(cases []OWASPCase, flags map[string]map[int]bool) OWASPResult {
 	var r OWASPResult
 	r.Strict, r.StrictTPR, r.StrictFPR, r.StrictScore = score(false)
 	r.Related, r.RelatedTPR, r.RelatedFPR, r.RelatedScore = score(true)
+	var tp, fp int
+	for _, c := range r.Strict {
+		tp += c.TP
+		fp += c.FP
+	}
+	if tp+fp > 0 {
+		r.StrictPrecision = 100 * float64(tp) / float64(tp+fp)
+	}
 	return r
 }
 
@@ -241,4 +270,5 @@ func WriteOWASPScorecard(w io.Writer, r OWASPResult) {
 			fmt.Sprintf("%s/%d", c.Category, c.CWE), c.TP, c.FN, c.FP, c.TN, c.TPR, c.FPR, c.Score, rel.Score)
 	}
 	fmt.Fprintf(w, "%-17s %23s %6.1f%% %6.1f%% %7.1f   %.1f\n", "AVERAGE", "", r.StrictTPR, r.StrictFPR, r.StrictScore, r.RelatedScore)
+	fmt.Fprintf(w, "PRECISION %.1f%% (flagged cases that are real, over all categories)\n", r.StrictPrecision)
 }

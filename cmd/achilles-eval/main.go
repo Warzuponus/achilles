@@ -68,6 +68,7 @@ func run(argv []string) error {
 	)
 	dflags := registerDetectFlags(fs)
 	owaspDir := fs.String("owasp-dir", "", "owasp: a checkout of github.com/OWASP-Benchmark/BenchmarkJava or BenchmarkPython")
+	owaspSARIF := fs.String("owasp-sarif", "", "owasp: score this SARIF report (from any tool) instead of running achilles; see docs/comparison.md")
 	juiceDir := fs.String("juice-shop-dir", "", "juice-shop: a checkout of OWASP Juice Shop at the pinned commit (default: check it out into --cache-dir)")
 	juiceTruth := fs.String("juice-shop-truth", "evals/juice-shop/truth.json", "juice-shop: the pinned commit, the out-of-reach challenges and the hand judgements")
 	fs.Usage = func() {
@@ -83,7 +84,7 @@ func run(argv []string) error {
 		return runJuiceShop(*juiceDir, *juiceTruth, dflags.achillesBin, dflags.cacheDir, *outPath, *timeout)
 	}
 	if *mode == "owasp" {
-		return runOWASP(*owaspDir, dflags.achillesBin, dflags.cacheDir, *outPath, *timeout)
+		return runOWASP(*owaspDir, *owaspSARIF, dflags.achillesBin, dflags.cacheDir, *outPath, *timeout)
 	}
 	if *mode == "detect" {
 		// Detect mode has its own ground truth and needs no triage corpus.

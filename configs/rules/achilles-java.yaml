@@ -628,12 +628,35 @@ rules:
       - pattern-either:
           - pattern: new Random(...).$NEXT(...)
           - pattern: new java.util.Random(...).$NEXT(...)
-          - pattern: (Random $R).$NEXT(...)
-          - pattern: (java.util.Random $R).$NEXT(...)
+          # The generator itself, so one handed to a helper taints what it returns.
+          - pattern: new Random(...)
+          - pattern: new java.util.Random(...)
           - pattern: Math.random()
           - pattern: java.lang.Math.random()
           - pattern: ThreadLocalRandom.current().$NEXT(...)
           - pattern: RandomStringUtils.$GEN(...)
+      # A variable declared as Random. Not when it is a method's parameter:
+      # SecureRandom is a subclass of Random, so a helper that takes a Random says
+      # nothing about which one it gets; the caller that builds it decides.
+      - patterns:
+          - pattern-either:
+              - pattern: (Random $R).$NEXT(...)
+              - pattern: (java.util.Random $R).$NEXT(...)
+          - pattern-not-inside: $RET $M(..., Random $R, ...) { ... }
+          - pattern-not-inside: $RET $M(..., java.util.Random $R, ...) { ... }
+      # nextBytes fills the array it is given rather than returning a value.
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: new Random(...).nextBytes($B)
+              - pattern: new java.util.Random(...).nextBytes($B)
+              - patterns:
+                  - pattern-either:
+                      - pattern: (Random $R).nextBytes($B)
+                      - pattern: (java.util.Random $R).nextBytes($B)
+                  - pattern-not-inside: $RET $M(..., Random $R, ...) { ... }
+                  - pattern-not-inside: $RET $M(..., java.util.Random $R, ...) { ... }
+          - focus-metavariable: $B
     pattern-sinks:
       - patterns:
           - pattern-either:

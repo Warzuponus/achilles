@@ -415,10 +415,93 @@ Opengrep's results vary slightly from run to run: one community-pack finding in
 NodeGoat appeared in one of two identical scans, which moves the five-app figure with
 the community pack between 35.6% and 35.9%. `achilles-eval --repeat` measures this.
 
+## OWASP Juice Shop
+
+The OWASP Benchmark numbers above are in-sample once the rules were rebuilt from it.
+[OWASP Juice Shop](https://github.com/juice-shop/juice-shop) (TypeScript: Express on
+the server, Angular in the browser) is the first application measured that no rule
+was written against beforehand, and it brings its own labels: each of its coding
+challenges marks the vulnerable line in the source
+(`// vuln-code-snippet vuln-line loginAdminChallenge`), and ships three or four
+candidate fixes per challenge in `data/static/codefixes/`, one of them correct.
+
+```bash
+make build && ./bin/achilles tools install opengrep
+echo 'mode: commercial' > /tmp/commercial.yaml     # own rules only
+ACHILLES_SETTINGS=/tmp/commercial.yaml go run ./cmd/achilles-eval --mode juice-shop
+```
+
+The runner checks out the commit pinned in `evals/juice-shop/truth.json` into
+`.achilles/detect-cache/` (about 55 MB; `--juice-shop-dir` takes a checkout you
+already have, at that commit) and scores three things:
+
+- **Recall:** a challenge is found when a finding sits within two lines of its marked
+  line. Only JavaScript and TypeScript marks count (the Solidity, YAML and Terraform
+  challenges are other scanners' work). Twelve of the 25 are marked out of reach in the
+  truth file, with the reason: a hidden route, a missing authorization check, a
+  password policy, an LLM tool. Those are for the AI review or a person.
+- **Precision:** of the findings in the application, outside its tests, the share that
+  are real. Juice Shop has many more flaws than coding challenges, so a finding off a
+  marked line is looked up in the truth file's hand judgements; one nobody has judged
+  yet is printed as such and left out, never guessed.
+- **Fix variants:** how many of the wrong fixes (still vulnerable) and of the correct
+  fixes have a finding in the file.
+
+Measured on 2026-10-20 at commit `399fba7`, Opengrep 1.25.0, AI review off, own rules:
+
+| | Before (v0.3.1) | After |
+|---|---|---|
+| Challenges found, of the 13 in reach | 5 (38.5%) | **12 (92.3%)** |
+| Challenges found, of all 25 | 5 (20.0%) | 13 (52.0%) |
+| Findings in the application | 27 | 41 |
+| Real | 17 | 30 |
+| Wrong | 10 | 11 |
+| **Precision** | **63.0%** | **73.2%** |
+| Wrong fixes with a finding (in reach) | 4 of 36 | 21 of 36 |
+| Correct fixes with a finding (in reach) | 0 of 13 | 2 of 13 |
+
+How to read it:
+
+- **"Before" is the out-of-sample result.** The own rules found the two SQL injections
+  and nothing else Juice Shop marks: no rule for Angular's `bypassSecurityTrustHtml`
+  (three XSS challenges), a MongoDB filter field taken from the JSON body (`{ _id:
+  req.body.id }`), `serve-index` directory listings (two challenges) or a rate limiter
+  keyed on `X-Forwarded-For`. Four of its 27 findings were the same SQL injection
+  reported again, see below.
+- **"After" is in-sample**: the four new rules were written after reading Juice Shop.
+  Each is a general API pattern, and on the five vulnerable applications above they
+  changed nothing (209 findings before and after, line for line).
+- **The one in-reach miss** is the open redirect, an allow-list checked with
+  `url.includes(allowed)`. `forgedReviewChallenge` (out of reach) counts as found
+  because it marks the same line as the NoSQL injection.
+- **The 11 wrong findings:** four `res.write` calls that stream server-sent events of
+  JSON from the chatbot, which the XSS rule takes for HTML; an `eval` of arithmetic the
+  server generated (the CAPTCHA); two upload paths built from the user's id and a
+  checked extension; MD5 as a release-file checksum; Angular's bypass on a CAPTCHA
+  image the server draws and on the challenge descriptions; and the `/.well-known`
+  listing, which is public by design.
+- **The two correct fixes with a finding** still hold another challenge's flaw: the
+  fixed `/ftp` listing keeps the `/support/logs` one and the reverse, and the fixed
+  review author check still takes the review id from the body. Twelve of the 92 fix
+  files are fragments Opengrep cannot parse, so the fix-variant rows undercount.
+
+What changed besides the four rules:
+
+- Opengrep reports one taint sink once per source that reaches it. Juice Shop's search
+  reads `req.query.q` three times, and the query came out as three SQL injections.
+  Copies at the same exact span are now one finding.
+- The JavaScript SQL rule's message showed `db.query("... WHERE id = $1", [id])`.
+  Opengrep fills `$1` in a message with matched text, so each copy carried a different
+  piece of the scanned file there. It reads `?` now, and a test keeps metavariables out
+  of every rule's message.
+- The `$where` rule no longer fires when the value is converted with `Number()` or
+  `parseInt()` first, and an Ethereum address (40 hex digits) is no longer a
+  hard-coded secret.
+
 ## External targets
 
-Point the benchmark at pinned commits of public intentionally-vulnerable apps (OWASP
-Juice Shop, NodeGoat, WebGoat) with `evals/detect/ground_truth/external.example.json`
+Point the benchmark at pinned commits of public intentionally-vulnerable apps (NodeGoat,
+WebGoat; Juice Shop has its own mode, above) with `evals/detect/ground_truth/external.example.json`
 as the template. The example carries no real commit SHA and the runner refuses it,
 with instructions, until you pin one and verify every label against that commit. See
 `evals/detect/README.md` for the steps.

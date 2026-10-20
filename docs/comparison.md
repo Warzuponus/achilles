@@ -50,9 +50,9 @@ remove decoys, so it is not measured here.
 - **Seconds** is wall-clock time for one scan of all cases (2,740 Java, 1,230 Python).
   Achilles' time includes the other scanners it runs on every scan (gitleaks,
   osv-scanner, trivy), which find nothing here. Find Security Bugs' time leaves out
-  compiling the Benchmark, which it needs. Times moved by up to a third between
-  identical runs (Achilles' own rules on Java took 55 to 82 seconds), so read them as
-  rough.
+  compiling the Benchmark, which it needs. Times varied a lot between identical
+  runs (Achilles' own rules on Java took between 55 and 138 seconds in four runs), so
+  read them as rough.
 
 ### Score per category
 

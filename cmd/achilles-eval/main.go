@@ -11,6 +11,7 @@
 //	achilles-eval --mode context                      # hermetic: no model, no key, CI-safe
 //	achilles-eval --mode verdict --llm-model MODEL     # needs a live model
 //	achilles-eval --mode detect                        # recall on known-vulnerable code; needs the real scanners
+//	achilles-eval --mode juice-shop                    # precision and recall on OWASP Juice Shop (see juiceshop.go)
 //
 // All write JSON with --out and diff against a previous run with --baseline,
 // which is the point: a metric with no baseline proves nothing. The detect mode
@@ -46,7 +47,7 @@ func run(argv []string) error {
 	fs := flag.NewFlagSet("achilles-eval", flag.ContinueOnError)
 	var (
 		corpusPath = fs.String("corpus", "evals/triage/corpus.yaml", "labeled corpus manifest")
-		mode       = fs.String("mode", "context", "context (hermetic, no model) | corpus (no model, needs gosec/bandit) | detect (recall + miss tracing; needs the real scanners) | owasp (OWASP Benchmark scorecard, Java or Python; needs --owasp-dir) | verdict | remediate | threat-model (these three need a live model)")
+		mode       = fs.String("mode", "context", "context (hermetic, no model) | corpus (no model, needs gosec/bandit) | detect (recall + miss tracing; needs the real scanners) | owasp (OWASP Benchmark scorecard, Java or Python; needs --owasp-dir) | juice-shop (precision and recall on OWASP Juice Shop, out of sample) | verdict | remediate | threat-model (these three need a live model)")
 		outPath    = fs.String("out", "", "write the report as JSON to this file")
 		basePath   = fs.String("baseline", "", "compare against a previously written JSON report")
 		verbose    = fs.Bool("verbose", false, "print a per-case table")
@@ -68,6 +69,8 @@ func run(argv []string) error {
 	dflags := registerDetectFlags(fs)
 	owaspDir := fs.String("owasp-dir", "", "owasp: a checkout of github.com/OWASP-Benchmark/BenchmarkJava or BenchmarkPython")
 	owaspSARIF := fs.String("owasp-sarif", "", "owasp: score this SARIF report (from any tool) instead of running achilles; see docs/comparison.md")
+	juiceDir := fs.String("juice-shop-dir", "", "juice-shop: a checkout of OWASP Juice Shop at the pinned commit (default: check it out into --cache-dir)")
+	juiceTruth := fs.String("juice-shop-truth", "evals/juice-shop/truth.json", "juice-shop: the pinned commit, the out-of-reach challenges and the hand judgements")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "usage: achilles-eval [flags]\n\n")
 		fmt.Fprintf(fs.Output(), "Measures triage quality against a labeled corpus (--mode context|verdict|...) and\n")
@@ -76,6 +79,9 @@ func run(argv []string) error {
 	}
 	if err := fs.Parse(argv); err != nil {
 		return err
+	}
+	if *mode == "juice-shop" {
+		return runJuiceShop(*juiceDir, *juiceTruth, dflags.achillesBin, dflags.cacheDir, *outPath, *timeout)
 	}
 	if *mode == "owasp" {
 		return runOWASP(*owaspDir, *owaspSARIF, dflags.achillesBin, dflags.cacheDir, *outPath, *timeout)

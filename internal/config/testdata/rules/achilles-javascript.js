@@ -164,6 +164,14 @@ app.post("/profile", (req, res) => {
   allocations.find({ $where: "this.stocks > 0" });
   // ok: achilles.javascript.nosql-where-injection
   allocations.find({ userId: userId, stocks: { $gt: threshold } });
+  // Juice Shop's chatbot: a number cannot carry JavaScript.
+  const productId = Number(req.body.id);
+  // ok: achilles.javascript.nosql-where-injection
+  reviews.find({ $where: "this.product == " + productId });
+  // ok: achilles.javascript.nosql-where-injection
+  reviews.find({ $where: "this.product == " + parseInt(req.body.id) });
+  // ruleid: achilles.javascript.nosql-where-injection
+  reviews.find({ $where: "this.product == " + req.body.id });
   // ruleid: achilles.javascript.unsafe-deserialization
   const profile = serialize.unserialize(req.cookies.profile);
   // ok: achilles.javascript.unsafe-deserialization
@@ -209,5 +217,76 @@ function templates(swig, nunjucks, Handlebars, src) {
   Handlebars.compile(src);
 }
 
+
+// Juice Shop's review update: a JSON body can put {"$ne": -1} where the id goes.
+app.patch("/rest/products/reviews", (req, res) => {
+  reviews.update(
+    // ruleid: achilles.javascript.nosql-operator-injection
+    { _id: req.body.id },
+    { $set: { message: req.body.message } },
+    { multi: true });
+  const name = req.query.name;
+  // ruleid: achilles.javascript.nosql-operator-injection
+  Item.deleteMany({ name: name });
+  // ok: achilles.javascript.nosql-operator-injection
+  User.findOne({ email: String(req.body.email) });
+  // ok: achilles.javascript.nosql-operator-injection
+  User.findOne({ email: { $eq: req.body.email } });
+  // ok: achilles.javascript.nosql-operator-injection
+  User.findOne({ password: hash(req.body.password) });
+  // Route parameters are always strings.
+  // ok: achilles.javascript.nosql-operator-injection
+  User.findOne({ _id: req.params.id });
+  // ok: achilles.javascript.nosql-operator-injection
+  items.find((x) => x.id === req.body.id);
+  // Sequelize: {where: ...}, and a model instance's own update.
+  // ok: achilles.javascript.nosql-operator-injection
+  WalletModel.findOne({ where: { UserId: req.body.UserId } });
+  // ok: achilles.javascript.nosql-operator-injection
+  user.update({ username: req.body.username });
+  // ruleid: achilles.javascript.nosql-operator-injection
+  reviews.findOne({ _id: req.body.id });
+  if (typeof req.body.id !== "string") {
+    return res.status(400).send();
+  }
+  // ok: achilles.javascript.nosql-operator-injection
+  reviews.update({ _id: req.body.id }, { $set: { message: req.body.message } });
+});
+
+// Angular: bypassSecurityTrust* on anything but a fixed string turns the sanitizer off.
+class SearchResult {
+  show(queryParam) {
+    // ruleid: achilles.javascript.angular-sanitizer-bypass
+    this.searchValue = this.sanitizer.bypassSecurityTrustHtml(queryParam);
+    // ok: achilles.javascript.angular-sanitizer-bypass
+    this.banner = this.sanitizer.bypassSecurityTrustHtml("<b>Welcome</b>");
+    // ok: achilles.javascript.angular-sanitizer-bypass
+    this.clean = this.sanitizer.bypassSecurityTrustHtml(DOMPurify.sanitize(queryParam));
+  }
+}
+
+const serveIndex = require("serve-index");
+// ruleid: achilles.javascript.directory-listing
+app.use("/ftp", serveIndex("ftp", { icons: true }));
+// ok: achilles.javascript.directory-listing
+app.use("/ftp", express.static("ftp"));
+
+// Juice Shop's password reset: the limit is keyed by a header the client sets.
+app.use("/rest/user/reset-password", rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 100,
+  // ruleid: achilles.javascript.rate-limit-key-from-header
+  keyGenerator({ headers, ip }) { return headers["X-Forwarded-For"] ?? ip; },
+}));
+app.use("/login", rateLimit({
+  // ruleid: achilles.javascript.rate-limit-key-from-header
+  keyGenerator: (req) => req.get("x-real-ip") || req.ip,
+}));
+app.use("/api", rateLimit({
+  // ok: achilles.javascript.rate-limit-key-from-header
+  keyGenerator: (req) => req.ip,
+}));
+// ok: achilles.javascript.rate-limit-key-from-header
+const forwarded = req.headers["x-forwarded-for"];
 
 app.listen(3000);

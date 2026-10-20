@@ -53,8 +53,9 @@ of Achilles' own (no SDK, no new dependency), for any `--llm-base-url` on
 
 It is still marked experimental: its unit tests run against a fake of the Messages
 API. Live tests (`TestLive*` in `internal/triage/llm`, skipped unless
-`ACHILLES_TEST_ANTHROPIC_API_KEY` is set) and the `Live Anthropic` workflow run it
-against the real service. OpenRouter (`--llm-provider openrouter --llm-model
+`ACHILLES_TEST_ANTHROPIC_API_KEY` is set; `ACHILLES_TEST_ANTHROPIC_BASE_URL` points
+them at another Messages-compatible server such as OpenRouter's) and the `Live
+Anthropic` workflow run it against a live service. OpenRouter (`--llm-provider openrouter --llm-model
 anthropic/<model>`) remains an exercised path for Claude models.
 
 Anything else (vLLM, LiteLLM, Azure OpenAI, a gateway) is `--llm-base-url`. An

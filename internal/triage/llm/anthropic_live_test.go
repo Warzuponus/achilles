@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// These tests call Anthropic's live Messages API. They are skipped unless
+// These tests call a live Messages API. They are skipped unless
 // ACHILLES_TEST_ANTHROPIC_API_KEY is set, and cost a few cents a run:
 //
 //	ACHILLES_TEST_ANTHROPIC_API_KEY=... go test -count=1 -run Live ./internal/triage/llm
@@ -18,6 +18,12 @@ import (
 // ACHILLES_TEST_ANTHROPIC_MODELS is a comma-separated list of models to try
 // (default claude-opus-5-5). A dedicated variable keeps a key exported for other
 // tools from running them by accident.
+//
+// ACHILLES_TEST_ANTHROPIC_BASE_URL points them at another server speaking the
+// Messages API, such as OpenRouter's (https://openrouter.ai/api, with an
+// OpenRouter key and models such as anthropic/claude-sonnet-5.5). Anywhere but
+// api.anthropic.com the key is sent as a Bearer token, which is what such
+// gateways take.
 
 func liveAnthropic(t *testing.T) (key string, models []string) {
 	t.Helper()
@@ -33,7 +39,16 @@ func liveAnthropic(t *testing.T) (key string, models []string) {
 }
 
 func liveClient(key, model string) *AnthropicClient {
-	return NewAnthropic(Providers["anthropic"], key, model, Options{Timeout: 5 * time.Minute})
+	base := os.Getenv("ACHILLES_TEST_ANTHROPIC_BASE_URL")
+	if base == "" {
+		base = Providers["anthropic"]
+	}
+	o := Options{Timeout: 5 * time.Minute}
+	if !IsAnthropicBaseURL(base) {
+		o.AuthHeader = AuthNone
+		o.Headers = map[string]string{"Authorization": "Bearer " + key}
+	}
+	return NewAnthropic(base, key, model, o)
 }
 
 // liveSystem is long enough to pass the minimum cacheable prefix, so the second

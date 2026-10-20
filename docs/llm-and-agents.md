@@ -51,8 +51,11 @@ of Achilles' own (no SDK, no new dependency), for any `--llm-base-url` on
   `additionalProperties: false`, and length and range constraints are dropped (the
   decoded answer is still validated).
 
-It is still marked experimental: its unit tests run against a fake of the Messages
-API. Live tests (`TestLive*` in `internal/triage/llm`, skipped unless
+It is still marked experimental. Its unit tests run against a fake of the Messages
+API, and the live tests have passed through OpenRouter's Messages-compatible endpoint
+(`anthropic/claude-sonnet-5.5`, October 2026), which checks the requests, streaming,
+structured outputs and error handling against a real server; they have not yet run
+against `api.anthropic.com` itself. Live tests (`TestLive*` in `internal/triage/llm`, skipped unless
 `ACHILLES_TEST_ANTHROPIC_API_KEY` is set; `ACHILLES_TEST_ANTHROPIC_BASE_URL` points
 them at another Messages-compatible server such as OpenRouter's) and the `Live
 Anthropic` workflow run it against a live service. OpenRouter (`--llm-provider openrouter --llm-model

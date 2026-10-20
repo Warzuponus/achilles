@@ -147,7 +147,7 @@ rules:
     severity: ERROR
     message: >
       Request data is built into an SQL string. Pass values as query parameters
-      (db.query("... WHERE id = $1", [id])) instead.
+      (db.query("... WHERE id = ?", [id])) instead.
     metadata:
       cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
       category: security
@@ -303,6 +303,165 @@ rules:
       - pattern-not: '{..., $where: "...", ...}'
       - pattern-not: '{..., "$where": "...", ...}'
       - pattern-not: '{..., $where: function (...) { ... }, ...}'
+      # A number cannot carry JavaScript (Juice Shop's chatbot reads reviews with
+      # `const productId = Number(id)` and then `'this.product == ' + productId`).
+      - pattern-not: '{..., $where: $S + Number(...), ...}'
+      - pattern-not: '{..., $where: $S + parseInt(...), ...}'
+      - pattern-not-inside: |
+          $N = Number(...);
+          ...
+          <... {..., $where: $S + $N, ...} ...>;
+      - pattern-not-inside: |
+          $N = parseInt(...);
+          ...
+          <... {..., $where: $S + $N, ...} ...>;
+
+  - id: achilles.javascript.nosql-operator-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      A request value is used as a field of a MongoDB query filter. A JSON body or a
+      query string can carry an object there ({"$ne": null}), which turns the match
+      into "any document", so one request reads, changes or deletes every record.
+      Convert it first (String(id)), or compare with {$eq: value}.
+    metadata:
+      cwe: ["CWE-943: Improper Neutralization of Special Elements in Data Query Logic"]
+      category: security
+    pattern-sources:
+      # Only the body and the query string: Express parses both into objects. Route
+      # parameters and headers are always strings.
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(query|body)$
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: String(...)
+          - pattern: Number(...)
+          - pattern: parseInt(...)
+          - pattern: parseFloat(...)
+          - pattern: Boolean(...)
+          - pattern: $X.toString()
+          - pattern: new ObjectId(...)
+          - pattern: ObjectId(...)
+      # A hash or a sanitizer returns a string (mongo-sanitize removes "$" keys).
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i).*(hash|sanitiz|escape)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: '$COLL.$METHOD({..., $KEY: $V, ...}, ...)'
+                  - metavariable-regex:
+                      metavariable: $METHOD
+                      regex: ^(find|findOne|findOneAndDelete|deleteOne|deleteMany|remove|count|countDocuments|exists)$
+              # An update takes a filter and then the change. With one argument it
+              # is an ORM instance's own update (Sequelize's user.update({...})).
+              - patterns:
+                  - pattern-inside: '$COLL.$METHOD({..., $KEY: $V, ...}, $CHANGE, ...)'
+                  - metavariable-regex:
+                      metavariable: $METHOD
+                      regex: ^(update|updateOne|updateMany|findOneAndUpdate|findOneAndReplace|replaceOne)$
+          # Sequelize, TypeORM and Prisma take {where: {...}}, and reject an object
+          # where a value belongs instead of reading it as an operator.
+          - pattern-not-inside: '$COLL.$M({..., where: $W, ...}, ...)'
+          # $where has its own rule, and {$eq: value} is the safe form.
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: ^(?!["']?\$where["']?$)
+          - pattern: $V
+          # Rejecting anything but a string first is the other safe form (Juice
+          # Shop's correct fix for its review update).
+          - pattern-not-inside: |
+              if (typeof $V !== 'string') { ... }
+              ...
+          - pattern-not-inside: |
+              if (typeof $V != 'string') { ... }
+              ...
+          - pattern-not: '{$eq: $X}'
+          - pattern-not: '{"$eq": $X}'
+
+  - id: achilles.javascript.angular-sanitizer-bypass
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      Angular's sanitizer is switched off for a value that is not a fixed string, so
+      any markup or script in it reaches the page as is. Bind the value without
+      bypassSecurityTrust*, or sanitize it (DOMPurify.sanitize) first.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+    patterns:
+      - pattern: $S.$BYPASS($X)
+      - metavariable-regex:
+          metavariable: $BYPASS
+          regex: ^bypassSecurityTrust(Html|Script|Style|Url|ResourceUrl)$
+      - pattern-not: $S.$BYPASS("...")
+      - pattern-not: $S.$BYPASS(DOMPurify.sanitize(...))
+
+  - id: achilles.javascript.directory-listing
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      serve-index lists the files in a directory to anyone who asks, including
+      backups, logs and keys nobody meant to publish. Serve only the files that
+      should be public, without a listing.
+    metadata:
+      cwe: ["CWE-548: Exposure of Information Through Directory Listing"]
+      category: security
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  import $SI from 'serve-index'
+                  ...
+              - pattern-inside: |
+                  import * as $SI from 'serve-index'
+                  ...
+              - pattern-inside: |
+                  $SI = require('serve-index')
+                  ...
+          - pattern: $SI(...)
+      - pattern: require('serve-index')(...)
+      # The name its documentation imports it under, for code that gets it from
+      # elsewhere.
+      - pattern: serveIndex(...)
+
+  - id: achilles.javascript.rate-limit-key-from-header
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      The rate limiter counts requests by a header the client writes itself
+      (X-Forwarded-For, Forwarded, X-Real-IP), so a new value on each request starts
+      a new count and the limit never applies. Key on req.ip, with Express's "trust
+      proxy" set to the proxies you run.
+    metadata:
+      cwe: ["CWE-348: Use of Less Trusted Source"]
+      category: security
+    patterns:
+      - pattern-inside: '$RL({...})'
+      - pattern-either:
+          - pattern-inside: '{..., keyGenerator: $KG, ...}'
+          - pattern-inside: |
+              keyGenerator(...) { ... }
+      - metavariable-regex:
+          metavariable: $RL
+          regex: ^(rateLimit|RateLimit|slowDown)$
+      - pattern-either:
+          - pattern: $H[$NAME]
+          - pattern: $R.get($NAME)
+          - pattern: $R.header($NAME)
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: (?i)^["'](x-forwarded-for|forwarded|x-real-ip|x-client-ip|true-client-ip|cf-connecting-ip)["']$
 
   - id: achilles.javascript.unsafe-deserialization
     languages: [javascript, typescript]

@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Live tests for the native Anthropic client.** `TestLive*` in
+  `internal/triage/llm` call the real Messages API (skipped unless
+  `ACHILLES_TEST_ANTHROPIC_API_KEY` is set), and the `Live Anthropic` workflow runs
+  them plus a full `--ai --deep-verify` scan of the sample when the client changes.
+
+### Fixed
+- **`--llm-provider anthropic`: structured outputs for every schema.** Schemas sent to
+  the Messages API now get `additionalProperties: false` on every object and lose the
+  constraints structured outputs reject. The deep-verify step schema had neither, so
+  the API would have refused it and those calls fell back to unenforced JSON.
+
 ## [0.3.1] - 2026-10-19
 
 Achilles' own rules measured against the OWASP Benchmark and rebuilt from what it

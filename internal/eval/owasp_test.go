@@ -61,6 +61,10 @@ func TestOWASPScoreMatchesTheBenchmarkRule(t *testing.T) {
 	if r.StrictScore != 0 || r.RelatedScore < 33.3 || r.RelatedScore > 33.4 {
 		t.Errorf("averages: strict %.2f related %.2f", r.StrictScore, r.RelatedScore)
 	}
+	// Flagged: tests 1 (real) and 2 (decoy) by CWE-22; test 3's CWE-327 is not 328.
+	if r.StrictPrecision != 50 {
+		t.Errorf("precision = %.1f; want 50", r.StrictPrecision)
+	}
 	var b strings.Builder
 	WriteOWASPScorecard(&b, r)
 	if !strings.Contains(b.String(), "pathtraver/22") || !strings.Contains(b.String(), "AVERAGE") {
@@ -74,5 +78,31 @@ func TestParseOWASPExpectedRejectsGarbage(t *testing.T) {
 	}
 	if _, err := ParseOWASPExpected(strings.NewReader("BenchmarkTest1,sqli,true,eighty-nine\n")); err == nil {
 		t.Error("a non-numeric CWE was accepted")
+	}
+}
+
+// Other tools put the CWE elsewhere: SpotBugs relates the rule to the CWE
+// taxonomy, Bearer (converted with docs/comparison.md's jq filter) puts it on the
+// result. Both must count, or a comparison scores those tools at zero.
+func TestOWASPFlagsReadsOtherToolsCWEs(t *testing.T) {
+	const sarif = `{"runs":[{"tool":{"driver":{"rules":[
+  {"id":"SQL_INJECTION","relationships":[{"target":{"id":"89","toolComponent":{"name":"CWE"}}}]},
+  {"id":"OTHER","relationships":[{"target":{"id":"22","toolComponent":{"name":"OWASP"}}}]}]}},
+ "results":[
+  {"ruleId":"SQL_INJECTION","locations":[{"physicalLocation":{"artifactLocation":{"uri":"org/x/BenchmarkTest00005.java"}}}]},
+  {"ruleId":"OTHER","locations":[{"physicalLocation":{"artifactLocation":{"uri":"BenchmarkTest00001.java"}}}]},
+  {"ruleId":"b","properties":{"cwe":["CWE-328"]},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"BenchmarkTest00003.py"}}}]}]}]}`
+	flags, err := OWASPFlags(strings.NewReader(sarif))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !flags["BenchmarkTest00005"][89] {
+		t.Errorf("a CWE taxonomy relationship was not read: %v", flags)
+	}
+	if flags["BenchmarkTest00001"][22] {
+		t.Error("a relationship to a taxonomy other than CWE was read as a CWE")
+	}
+	if !flags["BenchmarkTest00003"][328] {
+		t.Errorf("a result's own cwe property was not read: %v", flags)
 	}
 }

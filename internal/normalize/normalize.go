@@ -65,6 +65,13 @@ func Normalize(format, fallbackTool string, data []byte) ([]model.Finding, error
 // would otherwise be triaged, counted, gated and filed on its own, under the
 // same id. The same rule matching the same text at two places is two findings
 // and stays two.
+//
+// When the region is an exact span (start and end columns), the fingerprint is
+// left out of the comparison: Opengrep reports one taint sink once per source that
+// reaches it, numbering the copies in matchBasedId (hash_0, hash_1, ...), so Juice
+// Shop's search query, which reads req.query.q three times, came out as three
+// identical SQL injections. Two different findings cannot share a rule, a message
+// and an exact span.
 func dropExactDuplicates(fs []model.Finding) []model.Finding {
 	type key struct {
 		fingerprint, rule, file, message string
@@ -74,6 +81,9 @@ func dropExactDuplicates(fs []model.Finding) []model.Finding {
 	out := fs[:0]
 	for _, f := range fs {
 		k := key{f.Fingerprint, f.RuleID, f.Location.File, f.Message, f.Location.Region}
+		if r := f.Location.Region; r.StartCol > 0 && r.EndCol > 0 && r.EndLine > 0 {
+			k.fingerprint = ""
+		}
 		if seen[k] {
 			continue
 		}

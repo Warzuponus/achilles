@@ -67,3 +67,32 @@ func TestNormalize_DropsExactDuplicates(t *testing.T) {
 		t.Fatalf("got %d findings, want 3 (one of the three identical ones, the one at line 7, the one with another message)", len(fs))
 	}
 }
+
+// Opengrep reports a taint sink once per source that reaches it, with the copies
+// numbered in matchBasedId. At one exact span they are one finding; the same rule at
+// another span of the same line is another.
+func TestNormalize_DropsOpengrepCopiesOfOneSink(t *testing.T) {
+	result := func(id string, startCol, endCol int) string {
+		return `{"ruleId":"achilles.javascript.sql-injection","level":"error","message":{"text":"sql"},` +
+			`"fingerprints":{"matchBasedId/v1":"` + id + `"},` +
+			`"locations":[{"physicalLocation":{"artifactLocation":{"uri":"routes/search.ts"},` +
+			`"region":{"startLine":23,"startColumn":` + strconv.Itoa(startCol) + `,"endLine":23,"endColumn":` + strconv.Itoa(endCol) + `}}}]}`
+	}
+	doc := `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"opengrep"}},"results":[` +
+		strings.Join([]string{
+			result("abc_0", 28, 160),
+			result("abc_1", 28, 160),
+			result("abc_2", 28, 160),
+			result("def_0", 170, 200),
+		}, ",") + `]}]}`
+	fs, err := Normalize("sarif", "opengrep", []byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fs) != 2 {
+		t.Fatalf("got %d findings, want 2 (one of the three copies at 28-160, and the one at 170-200)", len(fs))
+	}
+	if fs[0].Fingerprint != "abc_0" {
+		t.Errorf("kept fingerprint %q, want the first copy's, abc_0", fs[0].Fingerprint)
+	}
+}

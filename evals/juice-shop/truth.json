@@ -1,0 +1,265 @@
+{
+  "url": "https://github.com/juice-shop/juice-shop",
+  "commit": "399fba76194305a312693eee44f4df64bdf0c3ce",
+  "outOfReach": {
+    "adminSectionChallenge": "a route anyone can open; access control, not a code shape",
+    "scoreBoardChallenge": "a hidden route; nothing in the code is unsafe",
+    "web3SandboxChallenge": "a hidden route; nothing in the code is unsafe",
+    "tokenSaleChallenge": "an obfuscated route; nothing in the code is unsafe",
+    "weakPasswordChallenge": "no password policy; a missing check",
+    "changeProductChallenge": "the authorization line is commented out; a missing check",
+    "registerAdminChallenge": "the role from the request is kept; a missing check",
+    "forgedReviewChallenge": "the author is not checked against the session; a missing check",
+    "exposedMetricsChallenge": "an unauthenticated metrics endpoint; a deployment decision",
+    "redirectCryptoCurrencyChallenge": "retired addresses left on an allow-list; data, not code",
+    "chatbotPromptInjectionChallenge": "an LLM tool trusts the model's arguments; not a pattern",
+    "chatbotGreedyInjectionChallenge": "an LLM tool trusts the model's arguments; not a pattern"
+  },
+  "judgements": [
+    {
+      "rule": "achilles.generic.hardcoded-secret",
+      "file": "data/static/users.yml",
+      "line": 88,
+      "verdict": "real",
+      "note": "a seeded account's password, base64 of the reversed e-mail (loginBjoernChallenge)"
+    },
+    {
+      "rule": "achilles.generic.hardcoded-secret",
+      "file": "frontend/src/app/faucet/faucet.component.ts",
+      "line": 34,
+      "verdict": "wrong",
+      "note": "a public Ethereum contract address"
+    },
+    {
+      "rule": "achilles.javascript.angular-sanitizer-bypass",
+      "file": "frontend/src/app/about/about.component.ts",
+      "line": 120,
+      "verdict": "real",
+      "note": "customer feedback shown as HTML (persisted XSS)"
+    },
+    {
+      "rule": "achilles.javascript.angular-sanitizer-bypass",
+      "file": "frontend/src/app/administration/administration.component.ts",
+      "line": 74,
+      "verdict": "real",
+      "note": "a user's e-mail shown as HTML (persistedXssUserChallenge)"
+    },
+    {
+      "rule": "achilles.javascript.angular-sanitizer-bypass",
+      "file": "frontend/src/app/administration/administration.component.ts",
+      "line": 92,
+      "verdict": "real",
+      "note": "customer feedback shown as HTML (persistedXssFeedbackChallenge)"
+    },
+    {
+      "rule": "achilles.javascript.angular-sanitizer-bypass",
+      "file": "frontend/src/app/data-export/data-export.component.ts",
+      "line": 58,
+      "verdict": "wrong",
+      "note": "a CAPTCHA image the server draws itself"
+    },
+    {
+      "rule": "achilles.javascript.angular-sanitizer-bypass",
+      "file": "frontend/src/app/last-login-ip/last-login-ip.component.ts",
+      "line": 40,
+      "verdict": "real",
+      "note": "the last login IP comes from a request header (httpHeaderXssChallenge)"
+    },
+    {
+      "rule": "achilles.javascript.angular-sanitizer-bypass",
+      "file": "frontend/src/app/score-board/score-board.component.ts",
+      "line": 83,
+      "verdict": "wrong",
+      "note": "challenge descriptions are the application's own data"
+    },
+    {
+      "rule": "achilles.javascript.angular-sanitizer-bypass",
+      "file": "frontend/src/app/track-result/track-result.component.ts",
+      "line": 49,
+      "verdict": "real",
+      "note": "the order id from the URL comes back in HTML (reflectedXssChallenge)"
+    },
+    {
+      "rule": "achilles.javascript.weak-crypto",
+      "file": "lib/insecurity.ts",
+      "line": 41,
+      "verdict": "real",
+      "note": "passwords are stored as unsalted MD5"
+    },
+    {
+      "rule": "achilles.javascript.weak-crypto",
+      "file": "scripts/package.mjs",
+      "line": 121,
+      "verdict": "wrong",
+      "note": "MD5 as a release-file checksum, not for security"
+    },
+    {
+      "rule": "achilles.javascript.dangerous-eval",
+      "file": "routes/captcha.ts",
+      "line": 22,
+      "verdict": "wrong",
+      "note": "evaluates arithmetic the server generated from random numbers"
+    },
+    {
+      "rule": "achilles.javascript.dangerous-eval",
+      "file": "routes/userProfile.ts",
+      "line": 65,
+      "verdict": "real",
+      "note": "evaluates part of the username (server-side template injection)"
+    },
+    {
+      "rule": "achilles.javascript.reflected-xss",
+      "file": "routes/userProfile.ts",
+      "line": 101,
+      "verdict": "real",
+      "note": "a Pug template built from the username is rendered (SSTI)"
+    },
+    {
+      "rule": "achilles.javascript.nosql-where-injection",
+      "file": "routes/chat.ts",
+      "line": 149,
+      "verdict": "wrong",
+      "note": "the id is converted with Number() first"
+    },
+    {
+      "rule": "achilles.javascript.nosql-where-injection",
+      "file": "routes/showProductReviews.ts",
+      "line": 36,
+      "verdict": "real",
+      "note": "route id in $where (noSqlCommandChallenge)"
+    },
+    {
+      "rule": "achilles.javascript.nosql-where-injection",
+      "file": "routes/trackOrder.ts",
+      "line": 18,
+      "verdict": "real",
+      "note": "order id in $where (noSqlOrdersChallenge)"
+    },
+    {
+      "rule": "achilles.javascript.nosql-operator-injection",
+      "file": "routes/likeProductReviews.ts",
+      "line": 25,
+      "verdict": "real",
+      "note": "the review id comes from the JSON body"
+    },
+    {
+      "rule": "achilles.javascript.nosql-operator-injection",
+      "file": "routes/likeProductReviews.ts",
+      "line": 36,
+      "verdict": "real",
+      "note": "the review id comes from the JSON body"
+    },
+    {
+      "rule": "achilles.javascript.nosql-operator-injection",
+      "file": "routes/likeProductReviews.ts",
+      "line": 43,
+      "verdict": "real",
+      "note": "the review id comes from the JSON body"
+    },
+    {
+      "rule": "achilles.javascript.nosql-operator-injection",
+      "file": "routes/likeProductReviews.ts",
+      "line": 51,
+      "verdict": "real",
+      "note": "the review id comes from the JSON body"
+    },
+    {
+      "rule": "achilles.javascript.path-traversal",
+      "file": "routes/profileImageFileUpload.ts",
+      "line": 42,
+      "verdict": "wrong",
+      "note": "the name is the user's id and the detected image type"
+    },
+    {
+      "rule": "achilles.javascript.path-traversal",
+      "file": "routes/profileImageUrlUpload.ts",
+      "line": 29,
+      "verdict": "wrong",
+      "note": "the extension is checked against a fixed list"
+    },
+    {
+      "rule": "achilles.javascript.ssrf",
+      "file": "routes/profileImageUrlUpload.ts",
+      "line": 24,
+      "verdict": "real",
+      "note": "fetches any image URL the user gives (ssrfChallenge)"
+    },
+    {
+      "rule": "achilles.javascript.path-traversal",
+      "file": "routes/vulnCodeFixes.ts",
+      "line": 82,
+      "verdict": "real",
+      "note": "the challenge key from the body is put in a path unchecked (reaches only *.info.yml files)"
+    },
+    {
+      "rule": "achilles.javascript.path-traversal",
+      "file": "routes/vulnCodeFixes.ts",
+      "line": 83,
+      "verdict": "real",
+      "note": "the challenge key from the body is put in a path unchecked (reaches only *.info.yml files)"
+    },
+    {
+      "rule": "achilles.javascript.path-traversal",
+      "file": "routes/vulnCodeSnippet.ts",
+      "line": 89,
+      "verdict": "real",
+      "note": "the challenge key from the body is put in a path unchecked (reaches only *.info.yml files)"
+    },
+    {
+      "rule": "achilles.javascript.path-traversal",
+      "file": "routes/vulnCodeSnippet.ts",
+      "line": 90,
+      "verdict": "real",
+      "note": "the challenge key from the body is put in a path unchecked (reaches only *.info.yml files)"
+    },
+    {
+      "rule": "achilles.javascript.reflected-xss",
+      "file": "routes/chat.ts",
+      "line": 218,
+      "verdict": "wrong",
+      "note": "a server-sent event stream of JSON, not HTML"
+    },
+    {
+      "rule": "achilles.javascript.reflected-xss",
+      "file": "routes/chat.ts",
+      "line": 228,
+      "verdict": "wrong",
+      "note": "a server-sent event stream of JSON, not HTML"
+    },
+    {
+      "rule": "achilles.javascript.reflected-xss",
+      "file": "routes/chat.ts",
+      "line": 241,
+      "verdict": "wrong",
+      "note": "a server-sent event stream of JSON, not HTML"
+    },
+    {
+      "rule": "achilles.javascript.reflected-xss",
+      "file": "routes/chat.ts",
+      "line": 259,
+      "verdict": "wrong",
+      "note": "a server-sent event stream of JSON, not HTML"
+    },
+    {
+      "rule": "achilles.javascript.directory-listing",
+      "file": "server.ts",
+      "line": 269,
+      "verdict": "real",
+      "note": "lists the infrastructure code, which holds a private key (iacLeakedKeyChallenge)"
+    },
+    {
+      "rule": "achilles.javascript.directory-listing",
+      "file": "server.ts",
+      "line": 294,
+      "verdict": "wrong",
+      "note": "/.well-known is public by design"
+    },
+    {
+      "rule": "achilles.javascript.directory-listing",
+      "file": "server.ts",
+      "line": 298,
+      "verdict": "real",
+      "note": "lists the JWT signing material and premium.key"
+    }
+  ]
+}

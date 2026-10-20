@@ -6,6 +6,31 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **`achilles-eval --mode juice-shop`: the first out-of-sample score on real code.** It
+  checks out OWASP Juice Shop at a pinned commit and scores Achilles' own rules against
+  Juice Shop's own labels: the line each coding challenge marks as vulnerable, and the
+  wrong and correct fixes it ships for each. Findings off a marked line are judged by
+  hand in `evals/juice-shop/truth.json`. Out of sample (v0.3.1), the own rules found 5
+  of the 13 challenges a static rule can reach, at 63.0% precision; with the rules
+  below, 12 of 13 at 73.2% (in-sample). See docs/benchmarking.md.
+- **JavaScript and TypeScript rules from that run:** Angular's
+  `bypassSecurityTrustHtml` (and the other `bypassSecurityTrust*`) on a value that is
+  not a fixed string; a MongoDB filter field taken from the request body or query
+  string (`{ _id: req.body.id }`), which can carry `{"$ne": null}`; `serve-index`
+  directory listings; and a rate limiter keyed on `X-Forwarded-For` or another header
+  the client sets. On the five vulnerable apps they changed nothing.
+
+### Fixed
+- One taint sink that several sources reach was reported once per source by Opengrep:
+  Juice Shop's product search came out as three identical SQL injections. Copies at
+  the same exact span are now one finding.
+- The JavaScript SQL injection message showed `$1` as example code, and Opengrep
+  replaced it with a piece of the scanned file. A test now keeps metavariables out of
+  every rule's message.
+- The MongoDB `$where` rule fired on a value converted with `Number()` or `parseInt()`
+  first, and the hard-coded secret rule on Ethereum addresses.
+
 ## [0.3.1] - 2026-10-19
 
 Achilles' own rules measured against the OWASP Benchmark and rebuilt from what it

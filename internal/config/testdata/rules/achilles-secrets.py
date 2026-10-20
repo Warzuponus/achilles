@@ -40,6 +40,11 @@ config = {
 JWT_SECRET = "changeme-super-secret-signing-key-2024"
 # ok: achilles.generic.hardcoded-secret
 API_KEY = os.environ.get("API_KEY")
+# Juice Shop's faucet: an Ethereum contract address is public, a private key is not.
+# ok: achilles.generic.hardcoded-secret
+BEE_TOKEN_ADDRESS = "0x36435796Ca9be2bf150CE0dECc2D8Fab5C4d6E13"
+# ruleid: achilles.generic.hardcoded-secret
+WALLET_PRIVATE_KEY = "0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318"
 # ok: achilles.generic.hardcoded-secret
 API_KEY_PLACEHOLDER = "your-api-key-here"
 # ok: achilles.generic.hardcoded-secret

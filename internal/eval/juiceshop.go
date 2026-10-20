@@ -135,7 +135,14 @@ func isScript(p string) bool {
 func ParseJuiceShop(root string) ([]JuiceShopLabel, []JuiceShopVariant, error) {
 	var labels []JuiceShopLabel
 	var variants []JuiceShopVariant
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	// Files are opened through the root, so a symlink swapped in during the walk
+	// cannot lead outside the checkout.
+	rt, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rt.Close()
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -160,7 +167,7 @@ func ParseJuiceShop(root string) ([]JuiceShopLabel, []JuiceShopVariant, error) {
 		if isJuiceShopTest(rel) {
 			return nil
 		}
-		f, err := os.Open(p) // #nosec G304 -- a file in the checkout being scored
+		f, err := rt.Open(rel)
 		if err != nil {
 			return err
 		}

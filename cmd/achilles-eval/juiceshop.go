@@ -83,7 +83,7 @@ func runJuiceShop(dir, truthPath, achillesBin, cacheDir, out string, timeout tim
 	}
 	if out != "" {
 		b, _ := json.MarshalIndent(res, "", "  ")
-		if err := os.WriteFile(out, append(b, '\n'), 0o600); err != nil {
+		if err := os.WriteFile(out, append(b, '\n'), 0o600); err != nil { // #nosec G703 -- the operator's own --out path
 			return err
 		}
 	}

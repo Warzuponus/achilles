@@ -1,0 +1,104 @@
+# Runs the native Anthropic client against a live Messages API: the key-gated
+# tests in internal/triage/llm, then an --ai scan of the bundled sample. Each run
+# costs real money, so it runs only when started by hand (Actions, Run workflow).
+#
+# Secrets (any, both or neither; with neither every step is skipped):
+#   ACHILLES_TEST_ANTHROPIC_API_KEY   Anthropic's own API: the live tests, and a
+#                                     scan with --llm-provider anthropic.
+#   ACHILLES_TEST_OPENROUTER_API_KEY  OpenRouter: the live tests against its
+#                                     Messages-compatible endpoint, and a scan
+#                                     through the OpenAI-compatible path, to
+#                                     compare with the native one.
+name: Live Anthropic
+
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Comma-separated Anthropic model ids (the scan uses the first)"
+        default: "claude-opus-5-5"
+      openrouter_model:
+        description: "OpenRouter model id"
+        default: "anthropic/claude-sonnet-5.5"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANTHROPIC_MODELS: ${{ inputs.models || 'claude-opus-5-5' }}
+      OPENROUTER_MODEL: ${{ inputs.openrouter_model || 'anthropic/claude-sonnet-5.5' }}
+    steps:
+      - name: Keys present?
+        id: key
+        env:
+          ANTHROPIC_KEY: ${{ secrets.ACHILLES_TEST_ANTHROPIC_API_KEY }}
+          OPENROUTER_KEY: ${{ secrets.ACHILLES_TEST_OPENROUTER_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_KEY" ]; then echo "anthropic=true" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$OPENROUTER_KEY" ]; then echo "openrouter=true" >> "$GITHUB_OUTPUT"; fi
+          if [ -z "$ANTHROPIC_KEY$OPENROUTER_KEY" ]; then
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No live API key secret is set; skipping the live run"
+          else
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.key.outputs.any == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.key.outputs.any == 'true'
+        with:
+          go-version: '1.27'
+      - name: Build and install opengrep
+        if: steps.key.outputs.any == 'true'
+        run: |
+          go build -o bin/achilles ./cmd/achilles
+          ./bin/achilles tools install opengrep
+
+      - name: Live client tests (Anthropic)
+        if: steps.key.outputs.anthropic == 'true'
+        env:
+          ACHILLES_TEST_ANTHROPIC_API_KEY: ${{ secrets.ACHILLES_TEST_ANTHROPIC_API_KEY }}
+          ACHILLES_TEST_ANTHROPIC_MODELS: ${{ env.ANTHROPIC_MODELS }}
+        run: go test -count=1 -v -run Live ./internal/triage/llm
+      - name: Scan the sample with the native client (Anthropic)
+        if: steps.key.outputs.anthropic == 'true'
+        env:
+          ACHILLES_LLM_API_KEY: ${{ secrets.ACHILLES_TEST_ANTHROPIC_API_KEY }}
+        run: |
+          model="${ANTHROPIC_MODELS%%,*}"
+          ./bin/achilles --ai --deep-verify 1 --llm-provider anthropic --llm-model "$model" \
+            --report-dir out/anthropic --json-report out/anthropic/scan.json examples/quickstart || true
+          scripts/check-live-scan.sh out/anthropic/scan.json
+
+      - name: Live client tests (OpenRouter's Messages endpoint)
+        if: steps.key.outputs.openrouter == 'true'
+        env:
+          ACHILLES_TEST_ANTHROPIC_API_KEY: ${{ secrets.ACHILLES_TEST_OPENROUTER_API_KEY }}
+          ACHILLES_TEST_ANTHROPIC_BASE_URL: https://openrouter.ai/api
+          ACHILLES_TEST_ANTHROPIC_MODELS: ${{ env.OPENROUTER_MODEL }}
+        run: go test -count=1 -v -run Live ./internal/triage/llm
+      - name: Scan the sample through the OpenAI-compatible path (OpenRouter)
+        if: steps.key.outputs.openrouter == 'true'
+        env:
+          ACHILLES_LLM_API_KEY: ${{ secrets.ACHILLES_TEST_OPENROUTER_API_KEY }}
+        run: |
+          ./bin/achilles --ai --deep-verify 1 --llm-provider openrouter --llm-model "$OPENROUTER_MODEL" \
+            --report-dir out/openrouter --json-report out/openrouter/scan.json examples/quickstart || true
+          scripts/check-live-scan.sh out/openrouter/scan.json
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.key.outputs.any == 'true'
+        with:
+          name: live-anthropic-reports
+          path: out/
+          if-no-files-found: ignore

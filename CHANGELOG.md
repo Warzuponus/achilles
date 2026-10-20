@@ -26,6 +26,12 @@ All notable changes to this project are recorded here. The format follows
   run time, and where Achilles loses. `evals/compare/run.sh` reproduces every number.
 - **`achilles-eval --mode owasp --owasp-sarif <report>`** scores a SARIF report from any
   tool instead of running Achilles, and the scorecard now prints pooled precision.
+- **Live tests for the native Anthropic client.** `TestLive*` in
+  `internal/triage/llm` call the real Messages API (skipped unless
+  `ACHILLES_TEST_ANTHROPIC_API_KEY` is set; `ACHILLES_TEST_ANTHROPIC_BASE_URL` aims
+  them at another Messages-compatible server such as OpenRouter's). The `Live
+  Anthropic` workflow, started by hand, runs them plus an `--ai --deep-verify` scan of
+  the sample.
 
 ### Fixed
 - One taint sink that several sources reach was reported once per source by Opengrep:
@@ -42,6 +48,10 @@ All notable changes to this project are recorded here. The format follows
   69.7 to 71.2; findings on WebGoat are unchanged.
 - **The OWASP scorer read no CWE from SpotBugs reports**, which give it as a SARIF
   relationship to the CWE taxonomy rather than a tag.
+- **`--llm-provider anthropic`: structured outputs for every schema.** Schemas sent to
+  the Messages API now get `additionalProperties: false` on every object and lose the
+  constraints structured outputs reject. The deep-verify step schema had neither, so
+  the API would have refused it and those calls fell back to unenforced JSON.
 
 ## [0.3.1] - 2026-10-19
 

@@ -6,6 +6,22 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **A comparison with other open-source SAST tools** ([docs/comparison.md](docs/comparison.md)):
+  Achilles, Semgrep CE, Bearer, Find Security Bugs and Bandit on the OWASP Benchmark for
+  Java and Python, scored by the same code, with recall, decoys flagged, precision and
+  run time, and where Achilles loses. `evals/compare/run.sh` reproduces every number.
+- **`achilles-eval --mode owasp --owasp-sarif <report>`** scores a SARIF report from any
+  tool instead of running Achilles, and the scorecard now prints pooled precision.
+
+### Fixed
+- **Java weak-randomness rule:** `new java.util.Random().nextBytes(buf)` was missed (it
+  fills its argument), and a `Random` parameter holding a `SecureRandom` was flagged.
+  Weak randomness on the OWASP Benchmark goes from 83.0 to 100, the own Java rules from
+  69.7 to 71.2; findings on WebGoat are unchanged.
+- **The OWASP scorer read no CWE from SpotBugs reports**, which give it as a SARIF
+  relationship to the CWE taxonomy rather than a tag.
+
 ## [0.3.1] - 2026-10-19
 
 Achilles' own rules measured against the OWASP Benchmark and rebuilt from what it

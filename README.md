@@ -26,6 +26,10 @@ scan:
 | Suggested fixes | none, or unchecked | applied to a copy and re-scanned before being called a fix |
 | New findings only | per-tool baselines | one baseline and `--diff` across all tools |
 
+How Achilles' own rules score against Semgrep, Bearer, Find Security Bugs and Bandit
+on the OWASP Benchmark, run the same way and including where Achilles loses, is in
+[docs/comparison.md](docs/comparison.md), with the commands to reproduce it.
+
 ## Quickstart
 
 **On GitHub** (recommended). Add one secret (`LLM_API_KEY`) and one variable

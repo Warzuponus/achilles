@@ -67,6 +67,7 @@ func run(argv []string) error {
 	)
 	dflags := registerDetectFlags(fs)
 	owaspDir := fs.String("owasp-dir", "", "owasp: a checkout of github.com/OWASP-Benchmark/BenchmarkJava or BenchmarkPython")
+	owaspSARIF := fs.String("owasp-sarif", "", "owasp: score this SARIF report (from any tool) instead of running achilles; see docs/comparison.md")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "usage: achilles-eval [flags]\n\n")
 		fmt.Fprintf(fs.Output(), "Measures triage quality against a labeled corpus (--mode context|verdict|...) and\n")
@@ -77,7 +78,7 @@ func run(argv []string) error {
 		return err
 	}
 	if *mode == "owasp" {
-		return runOWASP(*owaspDir, dflags.achillesBin, dflags.cacheDir, *outPath, *timeout)
+		return runOWASP(*owaspDir, *owaspSARIF, dflags.achillesBin, dflags.cacheDir, *outPath, *timeout)
 	}
 	if *mode == "detect" {
 		// Detect mode has its own ground truth and needs no triage corpus.

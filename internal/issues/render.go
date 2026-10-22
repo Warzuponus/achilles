@@ -237,6 +237,13 @@ func (r *renderer) writeDetail(b *strings.Builder, f model.Finding, withDiff boo
 			fmt.Fprintf(b, "\n%s\n", reason)
 		}
 	}
+	if steps, from := f.SourcePath(); len(steps) > 0 {
+		lines := make([]string, len(steps))
+		for i, s := range steps {
+			lines[i] = fmt.Sprintf("%d. %s", i+1, redactCode(r.strip(s.String())))
+		}
+		fmt.Fprintf(b, "\n**Path** (traced by %s)\n\n%s\n", from, fenced("", strings.Join(lines, "\n")))
+	}
 	r.writeFix(b, f, withDiff)
 }
 

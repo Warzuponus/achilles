@@ -84,6 +84,9 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 			// data handed to a helper (WebGoat's SQL lessons, Zip Slip, SSRF) is
 			// otherwise lost at the call. About 55% more time on WebGoat.
 			"--taint-intrafile",
+			// Write each taint finding's source-to-sink path as SARIF codeFlows,
+			// so reports can show the path instead of only the sink.
+			"--dataflow-traces",
 			"--sarif-output={out}/results.sarif",
 			"-f", "{rules}",
 			"{src}",

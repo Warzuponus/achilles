@@ -175,6 +175,12 @@ func WriteHuman(w io.Writer, s model.Scan) {
 				fmt.Fprintf(w, "    fix: %s\n", v.SuggestedFix)
 			}
 		}
+		if steps, from := f.SourcePath(); len(steps) > 0 {
+			fmt.Fprintf(w, "    path (traced by %s):\n", from)
+			for i, s := range steps {
+				fmt.Fprintf(w, "      %d. %s\n", i+1, redact.Secrets(s.String()))
+			}
+		}
 		if d := f.Deep; d != nil {
 			if d.Aborted != "" {
 				fmt.Fprintf(w, "    deep check stopped after %d step(s): %s\n", d.Steps, d.Aborted)

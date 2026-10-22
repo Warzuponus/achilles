@@ -104,3 +104,31 @@ func TestSession_OnlyShownLinesCanBeCited(t *testing.T) {
 		t.Errorf("kept %v, dropped %d: a line outside what read_file returned must not count", kept, dropped)
 	}
 }
+
+// A path the verifier reports keeps only the steps whose line a tool showed it.
+// Fewer than two surviving steps is no path at all.
+func TestFilterPath(t *testing.T) {
+	seen := map[string]bool{"app.py": true, "db.py": true}
+	lines := map[string]map[int]bool{"app.py": {3: true}, "db.py": {12: true}}
+	kept, dropped := filterPath([]string{
+		"app.py:3 — request.args['q'] read",
+		"./db.py:12: cursor.execute(sql)",
+		"db.py:99 never shown",
+		"other.py:1 never read",
+		"not a step at all",
+	}, seen, lines)
+	if len(kept) != 2 || dropped != 3 {
+		t.Fatalf("kept %+v, dropped %d", kept, dropped)
+	}
+	if kept[0].File != "app.py" || kept[0].Line != 3 || kept[0].Note != "request.args['q'] read" {
+		t.Errorf("first step = %+v", kept[0])
+	}
+	if kept[1].File != "db.py" || kept[1].Note != "cursor.execute(sql)" {
+		t.Errorf("second step = %+v", kept[1])
+	}
+
+	kept, dropped = filterPath([]string{"app.py:3", "db.py:99"}, seen, lines)
+	if kept != nil || dropped != 2 {
+		t.Errorf("a one-step path should be dropped whole: kept %+v, dropped %d", kept, dropped)
+	}
+}

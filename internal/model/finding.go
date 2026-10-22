@@ -84,6 +84,17 @@ type Location struct {
 	Region Region `json:"region"`
 }
 
+// FlowStep is one step of a source-to-sink path: where it is and, when known, what
+// happens to the data there.
+type FlowStep struct {
+	File string `json:"file"`
+	Line int    `json:"line"`
+	Note string `json:"note,omitempty"`
+}
+
+// MaxFlowSteps bounds a path kept on a finding.
+const MaxFlowSteps = 20
+
 // Finding is one normalized result from one tool. The triage fields (Verdict,
 // Explanation, SuggestedFix) are filled in by the model review and are absent
 // on a scanner-only run.
@@ -120,6 +131,17 @@ type Finding struct {
 	Commit     string `json:"commit,omitempty"`
 	CommitDate string `json:"commitDate,omitempty"`
 
+	// Flow is the source-to-sink path the scanner reported (SARIF codeFlows), in
+	// order from where the data enters to where it is used. Empty for scanners
+	// that report no path.
+	Flow []FlowStep `json:"flow,omitempty"`
+
+	// Hunted marks a finding that hunt mode (--hunt) proposed rather than a
+	// scanner. Its verdict decides where it goes: one the AI review confirms stays
+	// in Findings like any other; the rest are moved to Scan.Hunted as
+	// unconfirmed leads, outside the gate.
+	Hunted bool `json:"hunted,omitempty"`
+
 	// Shadow marks a finding produced by a generated rule still inside its
 	// shadow window (§9.4 rule flywheel): it is reported for observation but
 	// does NOT affect the --fail-on gate, issue filing, or a written baseline.
@@ -144,6 +166,19 @@ type Finding struct {
 	// Deep is set when --deep-verify let the model read the repository to settle this
 	// finding; nil otherwise.
 	Deep *DeepVerification `json:"deep,omitempty"`
+}
+
+// SourcePath returns the best source-to-sink path known for the finding and where
+// it came from: the deep verifier's path (every step a line a tool showed it) when
+// there is one, else the scanner's own data-flow path.
+func (f Finding) SourcePath() (steps []FlowStep, from string) {
+	if f.Deep != nil && len(f.Deep.Path) > 0 {
+		return f.Deep.Path, "deep verification"
+	}
+	if len(f.Flow) > 0 {
+		return f.Flow, f.Tool
+	}
+	return nil, ""
 }
 
 // Suppression is a comment in the scanned code that says a finding is to be
@@ -193,6 +228,10 @@ type Scan struct {
 	// Triage summarizes how much of the scan the AI review actually covered; nil
 	// when no triage was requested.
 	Triage *TriageStats `json:"triage,omitempty"`
+	// Hunted holds findings hunt mode proposed that the AI review did not
+	// confirm. Like Dismissed they are not in Findings, so they do not gate, file
+	// issues or count; reports list them as leads.
+	Hunted []Finding `json:"hunted,omitempty"`
 }
 
 // TriageStats is the coverage of the AI review over a scan. A report that shows
@@ -242,6 +281,25 @@ func (s *Scan) PartitionDismissed() int {
 	for _, f := range s.Findings {
 		if f.Dismissed() {
 			s.Dismissed = append(s.Dismissed, f)
+			n++
+			continue
+		}
+		kept = append(kept, f)
+	}
+	s.Findings = kept
+	return n
+}
+
+// PartitionUnconfirmedHunts moves every hunted finding the AI review did not
+// confirm (no verdict, or one that is not surfaced) from Findings to Hunted, and
+// returns how many it moved. Call it after PartitionDismissed: a dismissed hunted
+// finding is already in Dismissed.
+func (s *Scan) PartitionUnconfirmedHunts() int {
+	kept := s.Findings[:0:0]
+	n := 0
+	for _, f := range s.Findings {
+		if f.Hunted && (f.Verdict == nil || !f.Verdict.Surfaced()) {
+			s.Hunted = append(s.Hunted, f)
 			n++
 			continue
 		}
@@ -361,4 +419,16 @@ func (f Finding) IsDependencyAdvisory() bool {
 		return true
 	}
 	return advisoryID.MatchString(strings.TrimSpace(f.RuleID))
+}
+
+// String renders a step as file:line, then what happens there when known.
+func (s FlowStep) String() string {
+	loc := s.File
+	if s.Line > 0 {
+		loc = s.File + ":" + strconv.Itoa(s.Line)
+	}
+	if s.Note == "" {
+		return loc
+	}
+	return loc + " " + s.Note
 }

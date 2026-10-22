@@ -23,7 +23,9 @@ import (
 // PromptVersion is recorded with every deep verification.
 // v2: evidence must point at lines that were shown, not merely at a file that was
 // read in part; the prompt says so.
-const PromptVersion = "deep/v2"
+// v3: conclude may carry "route", the source-to-sink trace, entry first; each step
+// must be a line a tool showed, like evidence.
+const PromptVersion = "deep/v3"
 
 // Hard ceilings: a flag cannot raise a bound past these.
 const (
@@ -309,6 +311,7 @@ func (v *Verifier) Deep(ctx context.Context, f model.Finding) (model.DeepVerific
 			d.Confidence = float64(act.Confidence)
 			d.Reasoning = redact.Prompt(capBytes(cleanText(act.Reasoning), maxReasoningBytes, " …"))
 			d.Evidence, d.EvidenceDropped = filterEvidence(act.Evidence, sess.seen, sess.lines)
+			d.Path, d.PathDropped = filterPath(act.Route, sess.seen, sess.lines)
 			return finish(), nil
 		}
 		if final {
@@ -407,6 +410,40 @@ func filterEvidence(refs []string, seen map[string]bool, lines map[string]map[in
 		}
 		dup[key] = true
 		kept = append(kept, capBytes(key, 200, ""))
+	}
+	return kept, dropped
+}
+
+// pathStep matches one step of a traced path: "file:line" then an optional note,
+// separated by whitespace, a dash or a colon.
+var pathStep = regexp.MustCompile(`^(\S+?):(\d+)(?:\s*[-–—:]\s*|\s+|$)(.*)$`)
+
+// filterPath keeps the steps of a traced path whose line a tool showed the model,
+// in order, with the note bounded. A path the model could not have read is not a
+// path: unshown steps are dropped and counted. Fewer than two surviving steps is
+// no path at all.
+func filterPath(steps []string, seen map[string]bool, lines map[string]map[int]bool) (kept []model.FlowStep, dropped int) {
+	for _, raw := range steps {
+		m := pathStep.FindStringSubmatch(strings.TrimSpace(cleanText(raw)))
+		if m == nil {
+			dropped++
+			continue
+		}
+		p := strings.TrimPrefix(path.Clean(strings.ReplaceAll(m[1], `\`, "/")), "./")
+		n, err := strconv.Atoi(m[2])
+		if err != nil || !seen[p] || !linesShown(lines[p], m[2], "") {
+			dropped++
+			continue
+		}
+		if len(kept) >= model.MaxFlowSteps {
+			dropped++
+			continue
+		}
+		kept = append(kept, model.FlowStep{File: capBytes(p, 200, ""), Line: n,
+			Note: redact.Prompt(capBytes(strings.TrimSpace(m[3]), 200, " …"))})
+	}
+	if len(kept) < 2 {
+		return nil, dropped + len(kept)
 	}
 	return kept, dropped
 }

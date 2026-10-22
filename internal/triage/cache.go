@@ -117,14 +117,25 @@ func (e *Engine) cacheKey(pf model.Finding, codeContext string, examples []strin
 		File     string   `json:"file"`
 		Code     []string `json:"code"`
 		Examples []string `json:"examples"`
+		Flow     []string `json:"flow,omitempty"`
 	}{
 		Prompt: PromptVersion, Scope: e.cache.scope, NoCode: e.noCode, Samples: e.Samples(), Blind: e.blindJudge,
 		Tool: pf.Tool, Rule: pf.RuleID, Severity: string(pf.Severity), CWE: pf.CWE, Message: pf.Message,
-		File: pf.Location.File, Code: code, Examples: examples,
+		File: pf.Location.File, Code: code, Examples: examples, Flow: flowKey(pf.Flow),
 	}
 	b, _ := json.Marshal(in)
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+// flowKey is the data-flow path as the cache compares it: files and notes, not line
+// numbers, so a path through code that only moved still matches.
+func flowKey(steps []model.FlowStep) []string {
+	var out []string
+	for _, s := range steps {
+		out = append(out, s.File+"\x00"+s.Note)
+	}
+	return out
 }
 
 // fromCache looks for an earlier verdict on the same question and, if there is

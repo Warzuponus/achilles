@@ -28,3 +28,14 @@ func TestBody_CarriesVerdictDetail(t *testing.T) {
 		t.Error("model-written detail must go through the same mention defusing as the rest of the body")
 	}
 }
+
+func TestBody_CarriesSourcePath(t *testing.T) {
+	f := fnd("py.sqli", "/work/proj/db.py", 12, model.SeverityHigh)
+	f.Flow = []model.FlowStep{{File: "app.py", Line: 3, Note: "request.args"}, {File: "db.py", Line: 12, Note: "cursor.execute"}}
+	_, body := renderOne(t, f, baseOpts())
+	for _, want := range []string{"**Path** (traced by", "1. app.py:3 request.args", "2. db.py:12 cursor.execute"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q\n%s", want, body)
+		}
+	}
+}

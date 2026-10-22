@@ -88,3 +88,17 @@ func TestAction_DescribeAndCompactAreBounded(t *testing.T) {
 		t.Errorf("compact echoed a free-text field: %s", c)
 	}
 }
+
+func TestParseAction_Route(t *testing.T) {
+	a, err := ParseAction(`{"action":"conclude","classification":"true_positive","confidence":0.9,"reasoning":"r","route":["app.py:3 read","db.py:12 sink"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.Route) != 2 || a.Route[1] != "db.py:12 sink" {
+		t.Errorf("route = %v", a.Route)
+	}
+	a, err = ParseAction(`{"action":"conclude","classification":"true_positive","confidence":0.9,"reasoning":"r","route":"app.py:3"}`)
+	if err != nil || len(a.Route) != 1 {
+		t.Errorf("a single string route should parse as one step: %v %v", a.Route, err)
+	}
+}

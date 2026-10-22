@@ -120,7 +120,7 @@ baseline and diff gating, inline suppressions (`achilles:ignore`), the GitHub Ac
 issue filing, `achilles init`, `achilles tools install` and `achilles doctor`.
 
 **Experimental** (they work and are tested, but have had less real-world use, and
-their flags or behavior may change): `--fix-pr`, `--deep-verify`, `--llm-samples`,
+their flags or behavior may change): `--fix-pr`, `--deep-verify`, `--hunt`, `--llm-samples`,
 `--calibrate` and `--feedback`, `--rag`, `--threat-model`, `--sbom`, the research
 agents (`--research`, `--mine-rules`), the `anthropic` provider preset, the War Room
 (`achillesd`), the fleet dispatcher (`achilles-fleet`), `--profile full` with its

@@ -291,6 +291,49 @@ achilles --remediate --llm-model gpt-4o --html-report report.html .
 Verdicts and fixes show up per-finding in the HTML report and are recorded to the
 vault.
 
+**A regression test with every fix** (prompt `remediation/v2`). The fix proposal also
+asks for a test that fails on the vulnerable code and passes once it is fixed: it
+sends the attacker's input and checks it is refused or neutralised, in the project's
+language and, where the code shows it, its test style. The model may leave it out
+when writing one would mean guessing at code it was not shown. A proposed test has a
+suggested location (dropped if it is absolute or climbs out of the repository) and is
+bounded to 6 KB. It is shown under the fix in the HTML and text reports and in issues,
+exported to SARIF as `achilles/regressionTest`, and listed in the `--fix-pr`
+description. **Achilles never runs it and never commits it**: a model wrote it,
+nothing has checked it fails without the fix, and a test that passes for the wrong
+reason is worse than none. Add the ones that hold up.
+
+### Source-to-sink paths
+
+When the scanner traces how data reaches a finding (Opengrep runs with
+`--dataflow-traces`; any SARIF `codeFlows` are read), the finding carries the path,
+source first. Triage sees it, fenced as untrusted text and framed as the scanner's
+claim to check against the code. A deep verification that confirms a finding can
+report its own `route`, which takes precedence because every step is a line a tool
+showed the model. Either way the path is shown in every report and issue as numbered
+`file:line` steps, with who traced it, and exported to SARIF as `codeFlows`, so code
+scanning draws it. The verdict cache keys on the path's files and notes but not its
+line numbers, so code added above it does not cost a fresh review. Under
+`--llm-no-code` the path is not sent (its notes quote code).
+
+### Findings in code that calls AI models
+
+The built-in rules include `achilles-llm.yaml`, for code that calls a model through
+the OpenAI or Anthropic SDKs, the Vercel AI SDK's `generateText`, or LangChain. They
+fire where model output reaches a shell or an interpreter, an SQL statement, or the
+page as HTML; where an agent is given a tool that runs code (`PythonREPLTool`,
+`ShellTool`, `allow_dangerous_code=True`); and where `trust_remote_code=True` loads a
+model without a pinned `revision`.
+
+For any finding that involves a model (by its rule, its CWE, or a model call in the
+code shown), triage and the judge get one more instruction (prompt `triage/v8`).
+Model output is as trusted as the least trusted text the model read: a user's prompt,
+or a page, file, email or tool result. A prompt that can be steered is not by itself a
+vulnerability; what counts is the action the output reaches, or a secret the prompt
+exposes. Only a control on the output counts as sanitized (an allowlist of actions,
+parameters, escaping, a sandbox). Instructions in the system prompt telling the model
+to behave do not. Other findings do not pay the tokens for this.
+
 ### Gates: the attacker-first questions behind a verdict
 
 Since prompt `triage/v4` the model answers five questions as separate structured

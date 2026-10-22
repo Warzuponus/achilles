@@ -95,6 +95,20 @@ func sarifResult(f model.Finding, suppressed bool) model.SarifResult {
 		}},
 		Fingerprints: map[string]string{"achilles/v1": f.Fingerprint},
 	}
+	if steps, _ := f.SourcePath(); len(steps) > 0 {
+		locs := make([]model.SarifThreadFlowLocation, 0, len(steps))
+		for _, s := range steps {
+			fl := model.SarifFlowLocation{PhysicalLocation: model.SarifPhysicalLocation{
+				ArtifactLocation: model.SarifArtifactLocation{URI: s.File},
+				Region:           model.SarifRegion{StartLine: s.Line},
+			}}
+			if s.Note != "" {
+				fl.Message = &model.SarifMessage{Text: redact.Secrets(s.Note)}
+			}
+			locs = append(locs, model.SarifThreadFlowLocation{Location: fl})
+		}
+		r.CodeFlows = []model.SarifCodeFlow{{ThreadFlows: []model.SarifThreadFlow{{Locations: locs}}}}
+	}
 	props := map[string]any{}
 	if len(f.CWE) > 0 {
 		props["cwe"] = f.CWE
@@ -137,6 +151,11 @@ func sarifResult(f model.Finding, suppressed bool) model.SarifResult {
 	}
 	if r := f.Remediation; r != nil && r.Verification != nil {
 		props["achilles/fixVerification"] = string(r.Verification.Status)
+	}
+	if r := f.Remediation; r != nil && r.RegressionTest != nil && !f.IsSecret() {
+		t := *r.RegressionTest
+		t.Code, t.Description = redact.Secrets(t.Code), redact.Secrets(t.Description)
+		props["achilles/regressionTest"] = t
 	}
 	if d := f.Deep; d != nil && d.Aborted == "" {
 		props["achilles/deepVerdict"] = map[string]any{
@@ -389,6 +408,17 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 		}
 		fmt.Fprint(w, "\n</details>\n")
 	}
+	if len(s.Hunted) > 0 {
+		fmt.Fprintf(w, "\n<details><summary>%d hunt candidate(s) the AI review did not confirm</summary>\n\n", len(s.Hunted))
+		fmt.Fprint(w, "Leads from `--hunt`, not findings: they did not gate the build.\n\n")
+		fmt.Fprintln(w, "| Class | Location | What the hunt claimed |")
+		fmt.Fprintln(w, "|-------|----------|-----------------------|")
+		for _, f := range s.Hunted {
+			loc := fmt.Sprintf("%s:%d", f.Location.File, f.Location.Region.StartLine)
+			fmt.Fprintf(w, "| `%s` | %s | %s |\n", markdownCode(f.RuleID), MarkdownText(loc), MarkdownText(f.Message))
+		}
+		fmt.Fprint(w, "\n</details>\n")
+	}
 	return nil
 }
 
@@ -418,6 +448,24 @@ func MarkdownText(s string) string {
 		s = s[:cut] + " ... (truncated)"
 	}
 	return s
+}
+
+// MarkdownCodeBlock fences model-written code for Markdown with credentials
+// masked, using a fence longer than any run of backticks inside so the code
+// cannot close it early.
+func MarkdownCodeBlock(code string) string {
+	code = redact.Secrets(code)
+	longest, run := 0, 0
+	for _, c := range code {
+		if c == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
+		}
+	}
+	fence := strings.Repeat("`", max(3, longest+1))
+	return fence + "\n" + strings.TrimRight(code, "\n") + "\n" + fence
 }
 
 // FindingMessage is a finding's message made safe for Markdown. A credential

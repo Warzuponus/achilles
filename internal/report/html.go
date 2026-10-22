@@ -41,6 +41,7 @@ type htmlView struct {
 	Dismissed  []findingView   // ruled out by the AI review; listed so the call is auditable
 	Hardening  []findingView   // dismissed as hardening notes: real weaknesses another control already stops
 	Suppressed []findingView   // suppressed by a comment in the scanned code; listed with the reason
+	Hunted     []findingView   // hunt-mode candidates the AI review did not confirm
 	Confirmed  int             // actionable findings the AI review confirmed
 	HasReview  bool
 	HasAdvice  bool
@@ -79,6 +80,23 @@ func (v findingView) DetailRows() []model.DetailLine {
 		rows[i].Text = redact.Secrets(rows[i].Text)
 	}
 	return rows
+}
+
+// PathRows is the source-to-sink path for the finding, one step per row,
+// credentials masked; PathSource says who traced it.
+func (v findingView) PathRows() []string {
+	steps, _ := v.SourcePath()
+	rows := make([]string, 0, len(steps))
+	for _, s := range steps {
+		rows = append(rows, redact.Secrets(s.String()))
+	}
+	return rows
+}
+
+// PathSource names who traced the path PathRows shows.
+func (v findingView) PathSource() string {
+	_, from := v.SourcePath()
+	return from
 }
 
 // gateRow is one answered question of the AI review, for display.
@@ -125,6 +143,18 @@ func (v findingView) StabilityLine() string {
 		line += ". The answers disagreed, so this is never dismissed automatically."
 	}
 	return line
+}
+
+// RegressionTestView is the proposed test with credentials masked; nil when there
+// is none or the finding is a credential.
+func (v findingView) RegressionTestView() *model.RegressionTest {
+	if v.Secret || v.Remediation == nil || v.Remediation.RegressionTest == nil {
+		return nil
+	}
+	t := *v.Remediation.RegressionTest
+	t.Code = redact.Secrets(t.Code)
+	t.Description = redact.Secrets(t.Description)
+	return &t
 }
 
 // FixLine describes the re-scan result of the suggested patch; empty when the
@@ -251,6 +281,10 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 			suppressed = append(suppressed, toView(f))
 		}
 	}
+	var hunted []findingView
+	for _, f := range r.Scan.Hunted {
+		hunted = append(hunted, toView(f))
+	}
 	sort.SliceStable(findings, func(i, j int) bool {
 		a, b := findings[i], findings[j]
 		if severityRank[a.Severity] != severityRank[b.Severity] {
@@ -276,6 +310,7 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 		Dismissed:  dismissed,
 		Hardening:  hardening,
 		Suppressed: suppressed,
+		Hunted:     hunted,
 		Confirmed:  confirmed,
 		HasReview:  r.Review != nil && (r.Review.Summary != "" || len(r.Review.Risks) > 0),
 		HasAdvice:  r.Advice != nil && len(r.Advice.Upgrades) > 0,
@@ -332,6 +367,9 @@ func summaryLine(v htmlView) string {
 	}
 	if n := len(v.Suppressed); n > 0 {
 		s += fmt.Sprintf("; %d suppressed by comments in the code (listed at the end)", n)
+	}
+	if n := len(v.Hunted); n > 0 {
+		s += fmt.Sprintf("; %d hunt candidate(s) the AI review did not confirm (listed at the end)", n)
 	}
 	return s + "."
 }
@@ -413,6 +451,7 @@ const htmlDoc = `<!doctype html>
     text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
   table.gates{margin:8px 0;font-size:13px}
   table.gates td{padding:3px 10px 3px 0;border:0;color:var(--muted)}
+  ol.path{margin:4px 0 8px 20px;padding:0;font-size:13px;color:var(--muted)}
   .s-confirmed{color:var(--critical);border-color:var(--critical)}
   .s-overturned,.s-needs-review,.s-needs-validation{color:var(--medium);border-color:var(--medium)}
 </style>
@@ -505,6 +544,7 @@ const htmlDoc = `<!doctype html>
       {{if .Reasoning}}<div class="kv">{{.Reasoning}}</div>{{end}}
       {{end}}
       {{with .DetailRows}}<table class="gates">{{range .}}<tr><td>{{.Label}}</td><td colspan="2">{{.Text}}</td></tr>{{end}}</table>{{end}}
+      {{if .PathRows}}<div class="kv"><strong>Path</strong> (traced by {{.PathSource}}):</div><ol class="path">{{range .PathRows}}<li><code>{{.}}</code></li>{{end}}</ol>{{end}}
       {{with .GateRows}}<table class="gates">{{range .}}<tr><td>{{.Question}}</td><td><strong>{{.Answer}}</strong></td><td>{{.Evidence}}</td></tr>{{end}}</table>{{end}}
       {{with .StabilityLine}}<div class="kv">{{.}}</div>{{end}}
       {{with .DeepLine}}<div class="kv">{{.}}</div>{{end}}
@@ -516,6 +556,14 @@ const htmlDoc = `<!doctype html>
         <div>{{.Summary}}</div>
         {{if .Guidance}}<div class="kv" style="margin-top:6px">{{.Guidance}}</div>{{end}}
         {{if .Diff}}<pre>{{.Diff}}</pre>{{end}}
+      </div>
+      {{end}}
+      {{with .RegressionTestView}}
+      <div class="fix">
+        <h4>Proposed regression test{{if .File}} <span class="kv">for {{.File}}</span>{{end}}</h4>
+        {{if .Description}}<div>{{.Description}}</div>{{end}}
+        <pre>{{.Code}}</pre>
+        <div class="kv">A model wrote this test and Achilles did not run it. Check it fails before the fix and passes after, then add it.</div>
       </div>
       {{end}}
     </div>
@@ -567,6 +615,22 @@ const htmlDoc = `<!doctype html>
       <td>{{.Location.File}}{{if .Location.Region.StartLine}}:{{.Location.Region.StartLine}}{{end}}</td>
       <td>{{with .Verdict}}{{printf "%.0f%%" (pct .Confidence)}}{{end}}</td>
       <td>{{with .Verdict}}{{if .RefuteReason}}{{.RefuteReason}}{{else}}{{.Reasoning}}{{end}}{{end}}</td></tr>
+    {{end}}
+  </table></div>
+</section>
+{{end}}
+
+{{if .Hunted}}
+<section>
+  <h2>Hunt candidates the AI review did not confirm <span class="tag">{{len .Hunted}}</span></h2>
+  <p class="lead">Hunt mode (<code>--hunt</code>) had the model follow the data from entry points and report what it could trace to a dangerous operation. The AI review did not confirm these, so they did not gate the build or open issues. They are leads, not findings: worth a look where the path is short.</p>
+  <div class="tbl-scroll"><table>
+    <tr><th>Class</th><th>Where</th><th>What the hunt claimed</th><th>Review</th></tr>
+    {{range .Hunted}}
+    <tr><td><span class="badge b-{{sev .Severity}}">{{sev .Severity}}</span> <span class="rule">{{.RuleID}}</span></td>
+      <td>{{.Location.File}}{{if .Location.Region.StartLine}}:{{.Location.Region.StartLine}}{{end}}</td>
+      <td>{{.Message}}{{if .PathRows}}<ol class="path">{{range .PathRows}}<li><code>{{.}}</code></li>{{end}}</ol>{{end}}</td>
+      <td>{{.Status}}{{with .Verdict}} · {{printf "%.0f%%" (pct .Confidence)}}{{if .Reasoning}}: {{.Reasoning}}{{end}}{{end}}</td></tr>
     {{end}}
   </table></div>
 </section>

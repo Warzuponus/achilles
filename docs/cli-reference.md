@@ -133,6 +133,8 @@ Needs `--llm-model` and an API key in `ACHILLES_LLM_API_KEY` (or `OPENAI_API_KEY
 | `--llm-samples` | `1` | ask the model this many times on borderline verdicts and keep the majority; a verdict the samples disagree on is never dismissed. The cost estimate becomes an upper bound |
 | `--deep-verify` | `0` | let the model read and search the repository (bounded, read-only, secrets-blocked) to settle the N highest-priority findings; see [Deep verification](deep-verify.md) |
 | `--deep-max-steps` | `6` | with `--deep-verify`: most tool calls per finding |
+| `--hunt` | `0` | follow the data from N entry points (HTTP routes first) with the deep-verification tools and review what the model reports; unconfirmed candidates never gate; see [Hunt mode](hunt.md) |
+| `--hunt-max-steps` | `10` | with `--hunt`: most tool calls per entry point |
 | `--verify-timeout` | `15m` | time allowed for all `--verify-fixes` re-scans combined; starts when verification starts, separate from `--timeout` |
 | `--verify-fixes` | `true` | with `--remediate`: re-scan each proposed patch in a temp copy; `--fix-pr` applies only verified ones; see [Verifying fixes](verifying-fixes.md) |
 | `--triage` | `false` | LLM triage + adversarial judge on each finding; confident false positives leave the gate (see [Reports & Gating](reports-and-gating.md#the-gate-and-the-ai-review)) |

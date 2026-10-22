@@ -28,7 +28,7 @@ func systemPrompt(maxSteps int) string {
 		`  {"action":"list_dir","path":"relative/dir"}` + "\n" +
 		`  {"action":"find_references","symbol":"identifierName"}   (whole-word search for callers and uses)` + "\n" +
 		`  {"action":"conclude","classification":"true_positive|false_positive|uncertain","confidence":0.0-1.0,` +
-		`"reasoning":"...","evidence":["path/file.ext:LINE", ...]}` + "\n\n" +
+		`"reasoning":"...","evidence":["path/file.ext:LINE", ...],"route":["file.ext:LINE where the data enters", ...,"file.ext:LINE the sink"]}` + "\n\n" +
 		fmt.Sprintf("You have at most %d tool calls; after that you must conclude. ", maxSteps) +
 		"Paths are relative to the repository root. Absolute paths, \"..\", secret-bearing files (.env, keys, " +
 		"credentials, terraform state) and .git are refused, and refusals count as calls. You cannot run code, use a " +
@@ -38,7 +38,9 @@ func systemPrompt(maxSteps int) string {
 		"at the specific code (file:line) that neutralizes it: the sanitizer, the validation, the authentication check, " +
 		"the constant. If you cannot, answer uncertain. \"evidence\" must list file:line references to lines a tool " +
 		"actually showed you, using the line numbers it printed; a reference to a line you were not shown is " +
-		"discarded, even in a file you read part of. Keep reasoning concrete and short." +
+		"discarded, even in a file you read part of. For a true_positive, \"route\" is the path the data takes, " +
+		"entry point first and the flagged sink last, one \"file:LINE what happens here\" per step, using only lines " +
+		"you were shown. Keep reasoning concrete and short." +
 		untrustedTools
 }
 

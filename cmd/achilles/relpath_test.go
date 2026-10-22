@@ -23,3 +23,15 @@ func TestRelativizeFindings(t *testing.T) {
 		}
 	}
 }
+
+func TestRelativizeFindings_FlowSteps(t *testing.T) {
+	root := t.TempDir()
+	fs := []model.Finding{{
+		Location: model.Location{File: filepath.Join(root, "db.py")},
+		Flow:     []model.FlowStep{{File: filepath.Join(root, "app.py"), Line: 3}, {File: "db.py", Line: 12}},
+	}}
+	relativizeFindings(root, fs)
+	if fs[0].Flow[0].File != "app.py" || fs[0].Flow[1].File != "db.py" {
+		t.Errorf("flow files = %+v", fs[0].Flow)
+	}
+}

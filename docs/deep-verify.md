@@ -36,7 +36,17 @@ OpenAI-compatible endpoint; it does not rely on native function calling.
 | `grep` | `pattern`, `path_glob`, optional `path` | `file:line: text` (max 40 matches). |
 | `list_dir` | `path` | Names in one directory (max 100). |
 | `find_references` | `symbol` | Whole-word `grep` for a plain identifier. |
-| `conclude` | `classification`, `confidence`, `reasoning`, `evidence` | Ends the investigation. |
+| `conclude` | `classification`, `confidence`, `reasoning`, `evidence`, optional `route` | Ends the investigation. |
+
+For a true positive, `route` is the path the data takes, entry point first and the
+flagged line last, one `"file:LINE what happens here"` per step. Like `evidence`,
+only steps at lines a tool showed the model are kept (prompt `deep/v3`); fewer than
+two surviving steps is no path. A kept route is the finding's
+[source-to-sink path](llm-and-agents.md#source-to-sink-paths) in every report, ahead
+of the scanner's own.
+
+[Hunt mode](hunt.md) uses the same tools and limits, starting from an entry point
+instead of a finding.
 
 A reply that is not valid JSON, names an unknown action or lacks required fields
 gets exactly one repair attempt per turn; a second bad reply aborts the finding

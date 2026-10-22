@@ -1,0 +1,216 @@
+# Achilles rules for code that calls AI models - original, written for this
+# project (Apache-2.0; not derived from the Semgrep registry), so they load in every
+# license mode. Each rule is tested by internal/config/testdata/rules/achilles-llm.py
+# and achilles-llm.js (opengrep --test). Keep this file ASCII-only: Opengrep reads
+# rule files as ASCII. Generated sources are repeated per rule because Opengrep
+# does not support YAML anchors.
+#
+# What a model writes is untrusted: anyone who can put text in front of it (a user,
+# a web page it reads, a document it summarises) can steer what it says. These rules
+# fire where model output reaches something that acts on it - a shell, an
+# interpreter, a database, the page - or where a framework is told to let the model
+# run code. A prompt that can be steered is not by itself a finding; the action the
+# output reaches is.
+#
+# Model calls covered: the OpenAI and Anthropic SDKs, the Vercel AI SDK's
+# generateText, and LangChain chat models and chains.
+rules:
+  - id: achilles.llm.python.output-to-code-execution
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Text a model wrote is run as code or as a shell command. Whoever can influence
+      the prompt (a user, or a document or page the model reads) can choose what
+      runs. Have the model pick from a fixed set of actions and run only those, or
+      run its output in a sandbox with no access to anything that matters.
+    metadata:
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code (Code Injection)"
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)"
+      category: security
+      subcategory: [llm-output]
+    pattern-sources:
+      - pattern: $C.chat.completions.create(...)
+      - pattern: $C.completions.create(...)
+      - pattern: $C.responses.create(...)
+      - pattern: $C.messages.create(...)
+      - pattern: openai.ChatCompletion.create(...)
+      - patterns:
+          - pattern-inside: |
+              $LLM = $CLS(...)
+              ...
+          - metavariable-regex:
+              metavariable: $CLS
+              regex: ^(Chat[A-Za-z]+|OpenAI|AzureOpenAI|Anthropic|Ollama|LLMChain|ConversationChain)$
+          - pattern-either:
+              - pattern: $LLM.invoke(...)
+              - pattern: $LLM.ainvoke(...)
+              - pattern: $LLM.predict(...)
+              - pattern: $LLM.run(...)
+    pattern-sinks:
+      - pattern: eval(...)
+      - pattern: exec(...)
+      - pattern: os.system(...)
+      - pattern: os.popen(...)
+      - pattern: subprocess.getoutput(...)
+      - pattern: subprocess.getstatusoutput(...)
+      - patterns:
+          - pattern: subprocess.$F($CMD, ..., shell=True, ...)
+          - focus-metavariable: $CMD
+
+  - id: achilles.llm.python.output-to-sql
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Text a model wrote becomes part of an SQL statement. Whoever can influence the
+      prompt can change the query. If the model chooses a filter, have it return the
+      values and pass them as parameters; if it writes the query, run it on a
+      read-only connection limited to the tables it may see.
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"]
+      category: security
+      subcategory: [llm-output]
+    pattern-sources:
+      - pattern: $C.chat.completions.create(...)
+      - pattern: $C.completions.create(...)
+      - pattern: $C.responses.create(...)
+      - pattern: $C.messages.create(...)
+      - pattern: openai.ChatCompletion.create(...)
+      - patterns:
+          - pattern-inside: |
+              $LLM = $CLS(...)
+              ...
+          - metavariable-regex:
+              metavariable: $CLS
+              regex: ^(Chat[A-Za-z]+|OpenAI|AzureOpenAI|Anthropic|Ollama|LLMChain|ConversationChain)$
+          - pattern-either:
+              - pattern: $LLM.invoke(...)
+              - pattern: $LLM.ainvoke(...)
+              - pattern: $LLM.predict(...)
+              - pattern: $LLM.run(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.execute($Q, ...)
+              - pattern: $DB.executemany($Q, ...)
+              - pattern: $DB.executescript($Q, ...)
+              - pattern: $DB.raw($Q, ...)
+              - pattern: sqlalchemy.text($Q)
+              - pattern: text($Q)
+          - focus-metavariable: $Q
+
+  - id: achilles.llm.python.agent-runs-code
+    languages: [python]
+    severity: WARNING
+    message: >
+      The model is given a tool that runs code or shell commands on this machine,
+      or a chain is told to allow it. Anything that can put text in front of the
+      model (a user, a page or file it reads) can then run commands here. Run such
+      tools in a sandbox, or give the model narrow tools that do one thing.
+    metadata:
+      cwe: ["CWE-94: Improper Control of Generation of Code (Code Injection)"]
+      category: security
+      subcategory: [llm-agent]
+    pattern-either:
+      - pattern: $F(..., allow_dangerous_code=True, ...)
+      - pattern: $F(..., allow_dangerous_requests=True, ...)
+      - pattern: PythonREPLTool(...)
+      - pattern: PythonAstREPLTool(...)
+      - pattern: ShellTool(...)
+      - pattern: load_tools([..., "terminal", ...], ...)
+      - pattern: load_tools([..., "python_repl", ...], ...)
+
+  - id: achilles.llm.python.trust-remote-code
+    languages: [python]
+    severity: WARNING
+    message: >
+      trust_remote_code=True runs Python that ships with the model repository when
+      the model loads. Whoever controls that repository, or a later revision of it,
+      runs code here. Pin a reviewed revision (revision="<commit>") or use a model
+      that needs no custom code.
+    metadata:
+      cwe: ["CWE-494: Download of Code Without Integrity Check"]
+      category: security
+      subcategory: [llm-supply-chain]
+    patterns:
+      - pattern: $F(..., trust_remote_code=True, ...)
+      - pattern-not: $F(..., revision=$R, ..., trust_remote_code=True, ...)
+      - pattern-not: $F(..., trust_remote_code=True, ..., revision=$R, ...)
+
+  - id: achilles.llm.javascript.output-to-code-execution
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      Text a model wrote is run as code or as a shell command. Whoever can influence
+      the prompt can choose what runs. Have the model pick from a fixed set of
+      actions and run only those, or run its output in a sandbox.
+    metadata:
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code (Code Injection)"
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)"
+      category: security
+      subcategory: [llm-output]
+    pattern-sources:
+      - pattern: $C.chat.completions.create(...)
+      - pattern: $C.responses.create(...)
+      - pattern: $C.messages.create(...)
+      - pattern: generateText(...)
+      - patterns:
+          - pattern-inside: |
+              $LLM = new $CLS(...);
+              ...
+          - metavariable-regex:
+              metavariable: $CLS
+              regex: ^(Chat[A-Za-z]+|OpenAI|Anthropic|Ollama)$
+          - pattern: $LLM.invoke(...)
+    pattern-sinks:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: $CP.exec(...)
+      - pattern: $CP.execSync(...)
+      - pattern: exec(...)
+      - pattern: execSync(...)
+      - patterns:
+          - pattern: $VM.runInNewContext($CODE, ...)
+          - focus-metavariable: $CODE
+
+  - id: achilles.llm.javascript.output-to-html
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      Text a model wrote is inserted into the page as HTML. Whoever can influence
+      the prompt can make it write a script tag or an event handler. Render the
+      text as text, or pass it through a sanitizer (DOMPurify) first; if it is
+      Markdown, use a renderer that escapes raw HTML.
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"]
+      category: security
+      subcategory: [llm-output]
+    pattern-sources:
+      - pattern: $C.chat.completions.create(...)
+      - pattern: $C.responses.create(...)
+      - pattern: $C.messages.create(...)
+      - pattern: generateText(...)
+      - patterns:
+          - pattern-inside: |
+              $LLM = new $CLS(...);
+              ...
+          - metavariable-regex:
+              metavariable: $CLS
+              regex: ^(Chat[A-Za-z]+|OpenAI|Anthropic|Ollama)$
+          - pattern: $LLM.invoke(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $EL.innerHTML = $H
+              - pattern: $EL.outerHTML = $H
+              - pattern: $EL.insertAdjacentHTML($POS, $H)
+              - pattern: document.write($H)
+          - focus-metavariable: $H
+    pattern-sanitizers:
+      - pattern: DOMPurify.sanitize(...)
+      - pattern: $P.sanitize(...)

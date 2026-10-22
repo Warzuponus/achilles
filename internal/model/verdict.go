@@ -12,6 +12,11 @@ const (
 	ClassTruePositive  Classification = "true_positive"
 	ClassFalsePositive Classification = "false_positive"
 	ClassUncertain     Classification = "uncertain"
+	// ClassHardening is a real weakness that another control in the code already
+	// stops: a missing extra layer of defense, not a vulnerability. A confident
+	// hardening verdict leaves the gate like a false positive, but reports list it
+	// on its own so the note is not lost or mistaken for "nothing here".
+	ClassHardening Classification = "hardening"
 )
 
 // Exploitability is whether the issue is actually reachable/attacker-triggerable.
@@ -66,6 +71,99 @@ type Verdict struct {
 	// finding (triage.Engine.SetSamples): how many answers were collected and how
 	// they split. Nil means the verdict is a single answer.
 	Stability *Stability `json:"stability,omitempty"`
+
+	// Blockers and ValidationPlan turn an "uncertain" verdict into something a
+	// person can act on: the exact facts the code shown does not settle, and how to
+	// settle them. Kept only on uncertain verdicts; reports call those "needs
+	// validation".
+	Blockers       []string        `json:"blockers,omitempty"`
+	ValidationPlan *ValidationPlan `json:"validationPlan,omitempty"`
+
+	// Attacker, Impact and AssessedSeverity describe a true positive in terms a
+	// team prioritizes by: who can exploit it, what they gain, and how bad that
+	// is on fixed anchors. AssessedSeverity is advisory: it is shown beside the
+	// scanner's severity and never changes the gate. Kept only on true positives.
+	Attacker         string   `json:"attacker,omitempty"`
+	Impact           string   `json:"impact,omitempty"`
+	AssessedSeverity Severity `json:"assessedSeverity,omitempty"`
+
+	// UnverifiedCitations are line references in the model-written text
+	// (reasoning, fix idea, judge's reason) that point at lines the model was
+	// never shown. The pipeline sets it; a model can never clear it. Reports flag
+	// them so a reader does not go looking for a line the model made up.
+	UnverifiedCitations []string `json:"unverifiedCitations,omitempty"`
+}
+
+// ValidationPlan is how to settle an uncertain verdict. Local is a check a
+// developer can run against the code (a unit test, a grep, reading a named
+// caller). Owner is a fact only someone who runs the system can observe (a proxy
+// rule, an IAM policy, whether a route is exposed). Either may be empty.
+type ValidationPlan struct {
+	Local string `json:"local,omitempty"`
+	Owner string `json:"owner,omitempty"`
+}
+
+// NeedsValidation reports whether this is an undecided verdict that names what
+// would decide it. Such a finding stays in the gate like any uncertain one;
+// reports put the open questions in front of the reader.
+func (v Verdict) NeedsValidation() bool {
+	return v.Classification == ClassUncertain && (len(v.Blockers) > 0 || v.ValidationPlan != nil)
+}
+
+// Hardening reports whether this verdict was dismissed as a hardening note rather
+// than as a false positive.
+func (v Verdict) Hardening() bool {
+	return v.Classification == ClassHardening && v.Dismissed()
+}
+
+// maxDetail bounds one model-written detail string kept on a verdict, and
+// maxBlockers how many open questions are kept.
+const (
+	maxDetail   = 400
+	maxBlockers = 5
+)
+
+// NormalizeDetail bounds the model-written detail fields and keeps each only on
+// the classification it belongs to: blockers and a validation plan on an
+// uncertain verdict, attacker, impact and assessed severity on a true positive.
+// An assessed severity outside the scale is dropped rather than guessed.
+func (v *Verdict) NormalizeDetail() {
+	if v.Classification == ClassUncertain {
+		var bs []string
+		for _, b := range v.Blockers {
+			if b = boundDetail(b); b != "" && len(bs) < maxBlockers {
+				bs = append(bs, b)
+			}
+		}
+		v.Blockers = bs
+		if p := v.ValidationPlan; p != nil {
+			p.Local, p.Owner = boundDetail(p.Local), boundDetail(p.Owner)
+			if p.Local == "" && p.Owner == "" {
+				v.ValidationPlan = nil
+			}
+		}
+	} else {
+		v.Blockers, v.ValidationPlan = nil, nil
+	}
+	if v.Classification == ClassTruePositive {
+		v.Attacker, v.Impact = boundDetail(v.Attacker), boundDetail(v.Impact)
+		switch s := Severity(strings.ToLower(strings.TrimSpace(string(v.AssessedSeverity)))); s {
+		case SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInfo:
+			v.AssessedSeverity = s
+		default:
+			v.AssessedSeverity = ""
+		}
+	} else {
+		v.Attacker, v.Impact, v.AssessedSeverity = "", "", ""
+	}
+}
+
+func boundDetail(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > maxDetail {
+		return string(r[:maxDetail]) + "..."
+	}
+	return s
 }
 
 // GateAnswer is one gate's answer. For every gate but Sanitized the vocabulary is
@@ -302,7 +400,9 @@ func (v Verdict) Dismissed() bool {
 		// sure. Anything else is two reviews disagreeing, which a human settles.
 		return v.Classification == ClassTruePositive && v.RefuteSupported && v.Confidence < SureFloor
 	}
-	return v.Classification == ClassFalsePositive && v.Confidence >= DismissFloor
+	// A hardening note leaves the gate on the same terms as a false positive: the
+	// review is confident the attack is already stopped. Reports list it apart.
+	return (v.Classification == ClassFalsePositive || v.Classification == ClassHardening) && v.Confidence >= DismissFloor
 }
 
 // Disputed reports whether the judge refuted this verdict without that refutation
@@ -328,4 +428,41 @@ type Provenance struct {
 	// shown, the prompt and the models were all unchanged. Empty for a verdict
 	// produced in this run.
 	ReusedFrom string `json:"reusedFrom,omitempty"`
+}
+
+// DetailLine is one labeled piece of a verdict's detail for display.
+type DetailLine struct{ Label, Text string }
+
+// Details lists the parts of a verdict a team acts on beyond the classification:
+// for a true positive who can exploit it, what they gain and the assessed
+// severity; for an uncertain verdict the open questions and how to settle them;
+// and any line reference the model made to code it was not shown. The text is
+// model-written: every renderer must still escape and redact it.
+func (v Verdict) Details() []DetailLine {
+	var out []DetailLine
+	if v.Attacker != "" {
+		out = append(out, DetailLine{"Attacker", v.Attacker})
+	}
+	if v.Impact != "" {
+		out = append(out, DetailLine{"Impact", v.Impact})
+	}
+	if v.AssessedSeverity != "" {
+		out = append(out, DetailLine{"AI-assessed severity", string(v.AssessedSeverity) + " (advisory; the gate uses the scanner's severity)"})
+	}
+	for _, b := range v.Blockers {
+		out = append(out, DetailLine{"Open question", b})
+	}
+	if p := v.ValidationPlan; p != nil {
+		if p.Local != "" {
+			out = append(out, DetailLine{"Check in the code", p.Local})
+		}
+		if p.Owner != "" {
+			out = append(out, DetailLine{"Ask whoever runs it", p.Owner})
+		}
+	}
+	if len(v.UnverifiedCitations) > 0 {
+		out = append(out, DetailLine{"Unchecked references", "the review cites " + strings.Join(v.UnverifiedCitations, ", ") +
+			", which it was not shown; do not rely on those references"})
+	}
+	return out
 }

@@ -175,6 +175,11 @@ type Scan struct {
 	// normalized. A scan with failures is incomplete, so "no findings" must never
 	// be presented as a clean result.
 	FailedTools []string `json:"failedTools,omitempty"`
+	// UncoveredLanguages are languages detected in the target that no scanner
+	// which ran declares support for (language-agnostic tools such as secret and
+	// dependency scanners do not count). Code in them was not analyzed for
+	// code-level flaws, so reports say so instead of letting silence read as safe.
+	UncoveredLanguages []string `json:"uncoveredLanguages,omitempty"`
 	// RepoConfig names the scanner configuration files found in the scanned
 	// repository that were in effect ("gitleaks: .gitleaks.toml"). Such a file can
 	// remove findings before Achilles sees them, so reports say when one was used.

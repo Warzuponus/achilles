@@ -53,6 +53,7 @@ func run(argv []string) error {
 		verbose    = fs.Bool("verbose", false, "print a per-case table")
 		failOnReg  = fs.Bool("fail-on-regression", false, "with --baseline: exit non-zero if any case lost evidence coverage")
 		repeat     = fs.Int("repeat", 1, "verdict mode: run each case N times (models are nondeterministic)")
+		blindJudge = fs.Bool("blind-judge", false, "verdict mode: the judge sees the claim and the code but not the first pass's reasoning or gates (compare against a run without it)")
 
 		contextRadius = fs.Int("context-radius", 3, "minimum lines of context either side (matches the scan default)")
 		maxScope      = fs.Int("max-scope-lines", 0, "cap on enclosing-scope context; 0 = the enricher default, -1 = disable scope widening")
@@ -123,7 +124,7 @@ func run(argv []string) error {
 			out: *outPath, baseline: *basePath, verbose: *verbose, repeat: *repeat,
 			baseURL: *baseURL, model: *llmModel, judge: *judgeModel,
 			modelConfig: *modelConfig, auth: *llmAuth, timeout: *timeout,
-			vaultPath: *vaultPath, noVault: *noVault,
+			vaultPath: *vaultPath, noVault: *noVault, blindJudge: *blindJudge,
 		})
 	default:
 		return fmt.Errorf("--mode must be context, corpus, detect, verdict, remediate or threat-model, got %q", *mode)
@@ -188,6 +189,7 @@ type verdictOpts struct {
 	timeout               time.Duration
 	vaultPath             string
 	noVault               bool
+	blindJudge            bool
 }
 
 // runModelMode builds the router once and then dispatches to the seat under test.
@@ -242,7 +244,7 @@ func runModelMode(mode string, corpus eval.Corpus, en *enrich.Enricher, o verdic
 		store = fst
 		fmt.Fprintf(os.Stderr, "achilles-eval: recording raw LLM responses to %s\n", o.vaultPath)
 	}
-	eng := triage.NewEngine(router, store, en, corpus.Root)
+	eng := triage.NewEngine(router, store, en, corpus.Root).SetBlindJudge(o.blindJudge)
 
 	switch mode {
 	case "remediate":
@@ -285,6 +287,7 @@ func runModelMode(mode string, corpus eval.Corpus, en *enrich.Enricher, o verdic
 	}
 	rep := runner.Run(ctx, corpus, "eval-"+time.Now().UTC().Format("20060102T150405Z"))
 	rep.Model = o.model
+	rep.BlindJudge = o.blindJudge
 	// Record what each pass really used. Only triage and judge fire in verdict
 	// mode, so naming just those two avoids implying the run exercised routing it
 	// never touched.

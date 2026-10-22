@@ -80,7 +80,7 @@ func (e *Engine) Plan(findings []model.Finding, o PlanOpts) []cost.Call {
 			Task: "judge",
 			// The judge prompt carries the verdict under review, so add the
 			// triage pass's projected output on top of the prompt scaffolding.
-			InputTokens:  messageTokens(judgeMessages(f, codeContext, model.Verdict{})) + estTriageOutputTokens,
+			InputTokens:  messageTokens(judgeMessages(f, codeContext, model.Verdict{}, false)) + estTriageOutputTokens,
 			OutputTokens: estJudgeOutputTokens,
 		})
 		if o.Remediate {

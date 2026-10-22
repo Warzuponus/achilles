@@ -113,12 +113,38 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 		if err := reg.Register(sc); err != nil {
 			return nil, nil, err
 		}
+		if o.toolLanguages == nil {
+			o.toolLanguages = map[string][]string{}
+		}
+		o.toolLanguages[tc.ID] = tc.Languages
 	}
 	var shadow *opengrep.Scanner
 	if haveOpengrep && shadowRules != "" {
 		shadow = opengrep.New(shadowRunner, shadowRules, opengrepOpts...)
 	}
 	return reg, shadow, nil
+}
+
+// uncoveredLanguages returns the detected languages that no tool which ran
+// declares. A tool that declares "generic" (secrets, dependencies, IaC) or no
+// languages at all does not cover a language's code, so it counts for none. A
+// language-specific tool that failed is not in ran, so its languages show up
+// here as well as in the failed-tool warning: both are true.
+func uncoveredLanguages(detected, ran []string, toolLangs map[string][]string) []string {
+	covered := map[string]bool{}
+	for _, id := range ran {
+		for _, l := range toolLangs[id] {
+			covered[strings.ToLower(l)] = true
+		}
+	}
+	var out []string
+	for _, l := range detected {
+		if l = strings.ToLower(l); !covered[l] {
+			out = append(out, l)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // runnerFor picks how one tool is launched. Under --runner docker a tool with no
@@ -213,6 +239,11 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 				fmt.Fprintf(os.Stderr, "achilles: %s sarif-out write failed: %v\n", r.id, err)
 			}
 		}
+	}
+	scan.UncoveredLanguages = uncoveredLanguages(tgt.Languages, scan.Tools, o.toolLanguages)
+	if len(scan.UncoveredLanguages) > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: no scanner that ran covers %s; code in those languages was not analyzed\n",
+			strings.Join(scan.UncoveredLanguages, ", "))
 	}
 	if d, ok := longPathDiag(runtime.GOOS, inv, scan.Tools); ok {
 		fmt.Fprintf(os.Stderr, "achilles: %s ran but could not analyze all of the target, so its results are INCOMPLETE: %s\n", d.Tool, d.Error)

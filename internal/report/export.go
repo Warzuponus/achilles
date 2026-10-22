@@ -408,6 +408,17 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 		}
 		fmt.Fprint(w, "\n</details>\n")
 	}
+	if len(s.Hunted) > 0 {
+		fmt.Fprintf(w, "\n<details><summary>%d hunt candidate(s) the AI review did not confirm</summary>\n\n", len(s.Hunted))
+		fmt.Fprint(w, "Leads from `--hunt`, not findings: they did not gate the build.\n\n")
+		fmt.Fprintln(w, "| Class | Location | What the hunt claimed |")
+		fmt.Fprintln(w, "|-------|----------|-----------------------|")
+		for _, f := range s.Hunted {
+			loc := fmt.Sprintf("%s:%d", f.Location.File, f.Location.Region.StartLine)
+			fmt.Fprintf(w, "| `%s` | %s | %s |\n", markdownCode(f.RuleID), MarkdownText(loc), MarkdownText(f.Message))
+		}
+		fmt.Fprint(w, "\n</details>\n")
+	}
 	return nil
 }
 

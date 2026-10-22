@@ -236,37 +236,15 @@ func (v *Verifier) Deep(ctx context.Context, f model.Finding) (model.DeepVerific
 	ctx, cancel := context.WithTimeout(ctx, v.cfg.Timeout)
 	defer cancel()
 
-	sess := &session{sb: v.sb, remaining: v.cfg.TotalBytes, shared: v.cfg.Budget, seen: map[string]bool{}, lines: map[string]map[int]bool{}}
 	nonce := newNonce()
 
 	// The finding's own file, through the sandbox: a finding inside a protected
 	// path (say a .tfvars file) is never shown.
 	file := v.relFile(f.Location.File)
-	lo := max(1, f.Location.Region.StartLine-v.cfg.ContextRadius)
-	hi := max(f.Location.Region.EndLine, f.Location.Region.StartLine) + v.cfg.ContextRadius
-	if f.Location.Region.StartLine <= 0 {
-		lo, hi = 1, 40
-	}
-	first := v.sb.ReadFile(file, lo, hi)
-	if first.Denied {
+	sess, ctxText, ok := v.open(file, f.Location.Region.StartLine, f.Location.Region.EndLine)
+	if !ok {
 		d.Aborted = "the finding's file is a protected path and is never shown to the model"
 		return d, nil
-	}
-	for _, p := range first.Paths {
-		sess.seen[p] = true
-	}
-	// The initial context also draws on the byte budget, so the cap is honest.
-	ctxText := redact.Prompt(first.Text)
-	if g := min(len(ctxText), sess.remaining); g < len(ctxText) {
-		ctxText = capBytes(ctxText, g, "\n[truncated]")
-	}
-	// Count the lines that are actually sent: a line dropped by the cap above was
-	// not shown. Taking a prefix is the cautious reading if the count is short for
-	// any other reason.
-	if n := strings.Count(ctxText, "\n") - first.header; n >= len(first.Lines) {
-		sess.sawLines(first.Lines)
-	} else if n > 0 {
-		sess.sawLines(first.Lines[:n])
 	}
 
 	msgs := []llm.Message{
@@ -291,7 +269,7 @@ func (v *Verifier) Deep(ctx context.Context, f model.Finding) (model.DeepVerific
 
 	for steps := 0; ; {
 		final := steps >= v.cfg.MaxSteps || sess.exhausted()
-		act, err := v.turn(ctx, &msgs)
+		act, err := v.turn(ctx, &msgs, stepSchema, ActionConclude)
 		if err != nil {
 			if parent.Err() != nil {
 				return finish(), parent.Err()
@@ -326,6 +304,39 @@ func (v *Verifier) Deep(ctx context.Context, f model.Finding) (model.DeepVerific
 	}
 }
 
+// open starts a session with the lines around line (to endLine, if later) of file
+// as the first context, read through the sandbox. ok is false when the file is a
+// protected path, which is never shown.
+func (v *Verifier) open(file string, line, endLine int) (sess *session, ctxText string, ok bool) {
+	sess = &session{sb: v.sb, remaining: v.cfg.TotalBytes, shared: v.cfg.Budget, seen: map[string]bool{}, lines: map[string]map[int]bool{}}
+	lo := max(1, line-v.cfg.ContextRadius)
+	hi := max(endLine, line) + v.cfg.ContextRadius
+	if line <= 0 {
+		lo, hi = 1, 40
+	}
+	first := v.sb.ReadFile(file, lo, hi)
+	if first.Denied {
+		return nil, "", false
+	}
+	for _, p := range first.Paths {
+		sess.seen[p] = true
+	}
+	// The initial context also draws on the byte budget, so the cap is honest.
+	ctxText = redact.Prompt(first.Text)
+	if g := min(len(ctxText), sess.remaining); g < len(ctxText) {
+		ctxText = capBytes(ctxText, g, "\n[truncated]")
+	}
+	// Count the lines that are actually sent: a line dropped by the cap above was
+	// not shown. Taking a prefix is the cautious reading if the count is short for
+	// any other reason.
+	if n := strings.Count(ctxText, "\n") - first.header; n >= len(first.Lines) {
+		sess.sawLines(first.Lines)
+	} else if n > 0 {
+		sess.sawLines(first.Lines[:n])
+	}
+	return sess, ctxText, true
+}
+
 // relFile makes a finding's file root-relative when it is an absolute path inside
 // the scan root; anything else is passed on as given and left to the sandbox.
 func (v *Verifier) relFile(file string) string {
@@ -347,13 +358,13 @@ func (e badReplyError) Error() string { return "deep: unusable model reply: " + 
 
 // turn asks the model for its next action. A reply that does not parse earns ONE
 // repair round-trip, then fails with badReplyError.
-func (v *Verifier) turn(ctx context.Context, msgs *[]llm.Message) (Action, error) {
-	resp, err := llm.CompleteJSON(ctx, v.client, *msgs, stepSchema)
+func (v *Verifier) turn(ctx context.Context, msgs *[]llm.Message, schema *llm.Schema, terminal string) (Action, error) {
+	resp, err := llm.CompleteJSON(ctx, v.client, *msgs, schema)
 	v.addUsage(resp.Usage)
 	if err != nil {
 		return Action{}, err
 	}
-	act, perr := ParseAction(resp.Content)
+	act, perr := parseAction(resp.Content, terminal)
 	if perr == nil {
 		return act, nil
 	}
@@ -361,13 +372,13 @@ func (v *Verifier) turn(ctx context.Context, msgs *[]llm.Message) (Action, error
 		llm.Message{Role: llm.RoleAssistant, Content: capBytes(cleanText(resp.Content), 1000, " …")},
 		llm.Message{Role: llm.RoleUser, Content: "That reply was not acceptable: " + perr.Error() +
 			". Reply with ONLY one JSON object, no prose and no markdown fences, whose \"action\" is one of " +
-			"read_file, grep, list_dir, find_references or conclude, with that action's fields."})
+			"read_file, grep, list_dir, find_references or " + terminal + ", with that action's fields."})
 	resp2, err := v.client.Complete(ctx, llm.Request{Messages: repair, Temperature: 0, JSON: true})
 	v.addUsage(resp2.Usage)
 	if err != nil {
 		return Action{}, err
 	}
-	act, perr2 := ParseAction(resp2.Content)
+	act, perr2 := parseAction(resp2.Content, terminal)
 	if perr2 != nil {
 		return Action{}, badReplyError{reason: perr2.Error()}
 	}

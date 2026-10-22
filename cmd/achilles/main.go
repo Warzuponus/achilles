@@ -223,9 +223,20 @@ func run(argv []string) error {
 	}
 	// Comments in the code that suppress a finding: honoured, reported, refusable.
 	applySuppressions(o, ev, runID, absTarget, &scan, os.Stderr)
+	// Hunt mode adds candidates for the AI review; it runs on the review's clock.
+	if o.triageOn {
+		if err := huntFindings(llmCtx, o, ev, runID, &scan); err != nil {
+			return err
+		}
+	}
 	clusters := correlateFindings(o, ev, runID, &scan)
 
 	llmUsage, err := triageScan(llmCtx, o, ev, runID, &scan, clusters, tasks)
+	// A hunted candidate the review did not confirm is listed apart, whatever
+	// became of the review: it is a model's guess until a second model agrees.
+	if n := scan.PartitionUnconfirmedHunts(); n > 0 {
+		fmt.Fprintf(os.Stderr, "achilles: hunt — %d candidate(s) the AI review did not confirm are listed apart and do not gate the build\n", n)
+	}
 	// The AI review giving up is not a reason to discard a finished scan. The
 	// reports are still written from what the scanners found, marked as unreviewed;
 	// nothing is published to GitHub on the strength of it; no further model calls

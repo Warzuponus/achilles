@@ -96,6 +96,13 @@ func WriteHuman(w io.Writer, s model.Scan) {
 				redact.Secrets(sup.Reason), added)
 		}
 	}
+	if n := len(s.Hunted); n > 0 {
+		fmt.Fprintf(w, "\n%d hunt candidate(s) the AI review did not confirm (--hunt; not counted above, never gate the build):\n", n)
+		for _, f := range s.Hunted {
+			fmt.Fprintf(w, "  [%s] %s at %s:%d — %s\n", f.Severity, f.RuleID, f.Location.File, f.Location.Region.StartLine,
+				redact.Secrets(firstSentence(f.Message)))
+		}
+	}
 	if len(s.Findings) == 0 {
 		switch {
 		case len(s.FailedTools) > 0:
@@ -322,4 +329,12 @@ func GatingSeverity(s model.Scan) model.Severity {
 		}
 	}
 	return best
+}
+
+// firstSentence is the text up to its first ". ", for a one-line listing.
+func firstSentence(s string) string {
+	if i := strings.Index(s, ". "); i > 0 {
+		return s[:i]
+	}
+	return s
 }

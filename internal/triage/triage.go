@@ -119,7 +119,16 @@ func (e *Engine) Samples() int {
 // credentials masked, and the code context is bounded by the privacy settings.
 func (e *Engine) promptView(f model.Finding) (model.Finding, string) {
 	f.Message = redact.Prompt(f.Message)
+	if len(f.Flow) > 0 {
+		flow := make([]model.FlowStep, len(f.Flow))
+		for i, s := range f.Flow {
+			s.Note = redact.Prompt(s.Note)
+			flow[i] = s
+		}
+		f.Flow = flow
+	}
 	if e.noCode {
+		f.Flow = nil // the notes quote code
 		return f, "(source code withheld by --llm-no-code)"
 	}
 	return f, redact.Prompt(e.enricher.Context(f, e.root))

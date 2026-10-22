@@ -458,17 +458,22 @@ func relativizeFindings(root string, fs []model.Finding) {
 	if real, err := filepath.EvalSymlinks(root); err == nil && real != root {
 		roots = append(roots, real) // e.g. /tmp -> /private/tmp on macOS
 	}
-	for i := range fs {
-		file := fs[i].Location.File
+	rel := func(file string) string {
 		if !filepath.IsAbs(file) {
-			continue
+			return file
 		}
 		for _, r := range roots {
 			rel, err := filepath.Rel(r, file)
 			if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				fs[i].Location.File = filepath.ToSlash(rel)
-				break
+				return filepath.ToSlash(rel)
 			}
+		}
+		return file
+	}
+	for i := range fs {
+		fs[i].Location.File = rel(fs[i].Location.File)
+		for j := range fs[i].Flow {
+			fs[i].Flow[j].File = rel(fs[i].Flow[j].File)
 		}
 	}
 }

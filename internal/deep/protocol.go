@@ -40,6 +40,9 @@ type Action struct {
 	Confidence     flexFloat   `json:"confidence,omitempty"`
 	Reasoning      string      `json:"reasoning,omitempty"`
 	Evidence       flexStrings `json:"evidence,omitempty"`
+	// Route is the source-to-sink path, entry first: "file:line what happens here".
+	// ("path" is taken: it is read_file's argument.)
+	Route flexStrings `json:"route,omitempty"`
 }
 
 // IsTool reports whether the action asks for a tool call.
@@ -166,7 +169,8 @@ var stepSchema = &llm.Schema{Name: "deep_step", Definition: json.RawMessage(`{
     "classification":{"type":"string","enum":["true_positive","false_positive","uncertain"]},
     "confidence":{"type":"number"},
     "reasoning":{"type":"string"},
-    "evidence":{"type":"array","items":{"type":"string"}}
+    "evidence":{"type":"array","items":{"type":"string"}},
+    "route":{"type":"array","items":{"type":"string"}}
   },
   "required":["action"]
 }`)}

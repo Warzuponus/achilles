@@ -95,6 +95,20 @@ func sarifResult(f model.Finding, suppressed bool) model.SarifResult {
 		}},
 		Fingerprints: map[string]string{"achilles/v1": f.Fingerprint},
 	}
+	if steps, _ := f.SourcePath(); len(steps) > 0 {
+		locs := make([]model.SarifThreadFlowLocation, 0, len(steps))
+		for _, s := range steps {
+			fl := model.SarifFlowLocation{PhysicalLocation: model.SarifPhysicalLocation{
+				ArtifactLocation: model.SarifArtifactLocation{URI: s.File},
+				Region:           model.SarifRegion{StartLine: s.Line},
+			}}
+			if s.Note != "" {
+				fl.Message = &model.SarifMessage{Text: redact.Secrets(s.Note)}
+			}
+			locs = append(locs, model.SarifThreadFlowLocation{Location: fl})
+		}
+		r.CodeFlows = []model.SarifCodeFlow{{ThreadFlows: []model.SarifThreadFlow{{Locations: locs}}}}
+	}
 	props := map[string]any{}
 	if len(f.CWE) > 0 {
 		props["cwe"] = f.CWE

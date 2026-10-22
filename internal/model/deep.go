@@ -19,4 +19,10 @@ type DeepVerification struct {
 	ToolBytes       int      `json:"toolBytes,omitempty"`       // bytes of tool output shown to the model
 	Trace           []string `json:"trace,omitempty"`           // each tool call, in order, e.g. "read_file a/b.go 10-40"
 	EvidenceDropped int      `json:"evidenceDropped,omitempty"` // cited references discarded because no tool showed that file
+
+	// Path is the source-to-sink path the deep pass traced, entry first. Every
+	// step is a line a tool showed the model; steps it was not shown are dropped
+	// and counted in PathDropped.
+	Path        []FlowStep `json:"path,omitempty"`
+	PathDropped int        `json:"pathDropped,omitempty"`
 }

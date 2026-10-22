@@ -81,6 +81,23 @@ func (v findingView) DetailRows() []model.DetailLine {
 	return rows
 }
 
+// PathRows is the source-to-sink path for the finding, one step per row,
+// credentials masked; PathSource says who traced it.
+func (v findingView) PathRows() []string {
+	steps, _ := v.SourcePath()
+	rows := make([]string, 0, len(steps))
+	for _, s := range steps {
+		rows = append(rows, redact.Secrets(s.String()))
+	}
+	return rows
+}
+
+// PathSource names who traced the path PathRows shows.
+func (v findingView) PathSource() string {
+	_, from := v.SourcePath()
+	return from
+}
+
 // gateRow is one answered question of the AI review, for display.
 type gateRow struct{ Question, Answer, Evidence string }
 
@@ -413,6 +430,7 @@ const htmlDoc = `<!doctype html>
     text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
   table.gates{margin:8px 0;font-size:13px}
   table.gates td{padding:3px 10px 3px 0;border:0;color:var(--muted)}
+  ol.path{margin:4px 0 8px 20px;padding:0;font-size:13px;color:var(--muted)}
   .s-confirmed{color:var(--critical);border-color:var(--critical)}
   .s-overturned,.s-needs-review,.s-needs-validation{color:var(--medium);border-color:var(--medium)}
 </style>
@@ -505,6 +523,7 @@ const htmlDoc = `<!doctype html>
       {{if .Reasoning}}<div class="kv">{{.Reasoning}}</div>{{end}}
       {{end}}
       {{with .DetailRows}}<table class="gates">{{range .}}<tr><td>{{.Label}}</td><td colspan="2">{{.Text}}</td></tr>{{end}}</table>{{end}}
+      {{if .PathRows}}<div class="kv"><strong>Path</strong> (traced by {{.PathSource}}):</div><ol class="path">{{range .PathRows}}<li><code>{{.}}</code></li>{{end}}</ol>{{end}}
       {{with .GateRows}}<table class="gates">{{range .}}<tr><td>{{.Question}}</td><td><strong>{{.Answer}}</strong></td><td>{{.Evidence}}</td></tr>{{end}}</table>{{end}}
       {{with .StabilityLine}}<div class="kv">{{.}}</div>{{end}}
       {{with .DeepLine}}<div class="kv">{{.}}</div>{{end}}

@@ -492,7 +492,7 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 		stats.Dismissed = scan.PartitionDismissed()
 	}
 	scan.Triage = &stats
-	fmt.Fprintf(os.Stderr, "achilles: AI review — verdict on %d of %d finding(s); %d dismissed as false positives, %d failed, %d withheld (credentials), %d not reached\n",
+	fmt.Fprintf(os.Stderr, "achilles: AI review — verdict on %d of %d finding(s); %d dismissed (false positives or hardening notes), %d failed, %d withheld (credentials), %d not reached\n",
 		stats.Triaged, stats.Total, stats.Dismissed, stats.Failed, stats.Withheld, stats.Skipped)
 	if stats.Advisories > 0 {
 		fmt.Fprintf(os.Stderr, "achilles: %d dependency advisory finding(s) (known CVEs in dependencies) are kept as reported and were not sent to the model: "+

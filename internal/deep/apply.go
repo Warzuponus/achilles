@@ -79,6 +79,7 @@ func confirm(f *model.Finding, d model.DeepVerification) {
 		v.Exploitability = model.ExploitUnknown
 	}
 	v.Reasoning = deepNote("confirms", d) + priorNote(prior)
+	v.NormalizeDetail() // an earlier uncertain verdict's open questions no longer apply
 	f.Verdict = &v
 }
 
@@ -115,6 +116,7 @@ func dismiss(f *model.Finding, d model.DeepVerification) {
 		v.Exploitability = model.ExploitNotReachable
 		v.Reasoning = deepNote("finds a false positive", d) + priorNote(prior)
 	}
+	v.NormalizeDetail() // keep only the detail that fits the merged classification
 	f.Verdict = &v
 }
 

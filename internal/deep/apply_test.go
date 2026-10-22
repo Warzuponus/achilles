@@ -388,3 +388,16 @@ func TestApply_NeverDismissesADependencyAdvisory(t *testing.T) {
 		t.Error("the outcome is still recorded")
 	}
 }
+
+// A deep confirmation settles the questions an uncertain verdict had left open, so
+// they must not still be shown as open.
+func TestApply_ConfirmDropsTheUncertainVerdictsOpenQuestions(t *testing.T) {
+	v := vd(model.ClassUncertain, 0.4)
+	v.Blockers = []string{"whether the caller sanitizes id"}
+	v.ValidationPlan = &model.ValidationPlan{Local: "read the caller"}
+	f := finding(model.SeverityHigh, v)
+	Apply(&f, deepRes(model.ClassTruePositive, 0.9, 2, "a.go:1"))
+	if f.Verdict.Classification != model.ClassTruePositive || f.Verdict.Blockers != nil || f.Verdict.ValidationPlan != nil {
+		t.Errorf("open questions survived a confirmation: %+v", f.Verdict)
+	}
+}

@@ -39,3 +39,15 @@ func TestBody_CarriesSourcePath(t *testing.T) {
 		}
 	}
 }
+
+func TestBody_CarriesRegressionTest(t *testing.T) {
+	f := fnd("py.sqli", "/work/proj/db.py", 12, model.SeverityHigh)
+	f.Remediation = &model.Remediation{Summary: "parameterise", Confidence: 0.8,
+		RegressionTest: &model.RegressionTest{File: "tests/test_db.py", Code: "def test_q(): pass", Description: "sends a quote"}}
+	_, body := renderOne(t, f, baseOpts())
+	for _, want := range []string{"#### Proposed regression test", "`tests/test_db.py`", "def test_q(): pass", "did not run it"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q\n%s", want, body)
+		}
+	}
+}

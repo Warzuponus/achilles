@@ -140,7 +140,12 @@ var remediationSchema = json.RawMessage(`{
     "summary":{"type":"string"},
     "diff":{"type":"string"},
     "guidance":{"type":"string"},
-    "confidence":{"type":"number"}
+    "confidence":{"type":"number"},
+    "regressionTest":{
+      "type":"object",
+      "properties":{"file":{"type":"string"},"code":{"type":"string"},"description":{"type":"string"}},
+      "additionalProperties":false
+    }
   },
   "required":["summary","confidence"],
   "additionalProperties":false
@@ -317,7 +322,7 @@ func gatesLine(g *model.Gates) string {
 // RemediationPromptVersion identifies the fix prompt below. It is part of the
 // key a cached fix proposal is stored under, so change it whenever the prompt
 // changes: a proposal made by the old prompt is then not reused for the new one.
-const RemediationPromptVersion = "remediation/v1"
+const RemediationPromptVersion = "remediation/v2"
 
 func remediationMessages(f model.Finding, codeContext string) []llm.Message {
 	system := untrustedRule +
@@ -326,7 +331,12 @@ func remediationMessages(f model.Finding, codeContext string) []llm.Message {
 		"- summary: a string.\n" +
 		"- diff: a unified diff patching the one file shown, or an empty string if a mechanical patch is not safe.\n" +
 		"- guidance: prose steps, when a diff is not provided.\n" +
-		"- confidence: a number from 0 to 1, how sure you are the fix is correct and complete.\n\n" +
+		"- confidence: a number from 0 to 1, how sure you are the fix is correct and complete.\n" +
+		"- regressionTest: {file, code, description}, a test that fails on the code shown and passes once fixed: " +
+		"it sends the attacker's input and checks it is refused or neutralised. file is where it would go, " +
+		"code is the test, description says what it proves in one sentence. Use the project's language and, " +
+		"where the code shows it, its test style. Omit it if writing one means guessing at code you cannot see. " +
+		"It is shown to a developer, never run.\n\n" +
 		"Prefer a minimal, correct diff. Change only the file shown. Never invent code you cannot see. " +
 		"In the code block each line is prefixed with its line number and a bar; the diff must contain the " +
 		"file's own text without that prefix."

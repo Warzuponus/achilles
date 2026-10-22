@@ -175,7 +175,7 @@ func triageMessages(f model.Finding, codeContext string, examples []string) []ll
 		"- " + evidencePrinciple + "\n" +
 		"- " + entryHintNote + "\n\n" +
 		"Respond with ONLY a JSON object, no prose outside it, with these keys:\n" +
-		"- classification: \"true_positive\", \"false_positive\" or \"uncertain\".\n" +
+		"- classification: \"true_positive\", \"false_positive\", \"hardening\" or \"uncertain\".\n" +
 		"- confidence: a number from 0 to 1, how sure you are that the classification is right given only what " +
 		"you were shown. 0.9 and above means the code shown settles it. Below 0.7 means you would need to see " +
 		"more code to be sure; the finding is then kept for a person and never dismissed on your word.\n" +

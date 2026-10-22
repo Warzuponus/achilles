@@ -5,14 +5,14 @@
   "evidenceTotal": 49,
   "evidenceVisible": 49,
   "meanContextLines": 6.833333333333333,
-  "totalPromptTokens": 17638,
+  "totalPromptTokens": 17692,
   "results": [
     {
       "caseId": "go-exec-allowlisted",
       "fixture": "testdata/go_exec_allowlist.go",
       "label": "fp",
       "contextLines": 8,
-      "promptTokens": 984,
+      "promptTokens": 987,
       "evidenceTotal": 4,
       "evidenceVisible": 4
     },
@@ -21,7 +21,7 @@
       "fixture": "testdata/go_exec_userinput.go",
       "label": "tp",
       "contextLines": 7,
-      "promptTokens": 984,
+      "promptTokens": 987,
       "evidenceTotal": 2,
       "evidenceVisible": 2
     },
@@ -30,7 +30,7 @@
       "fixture": "testdata/go_md5_cachekey.go",
       "label": "fp",
       "contextLines": 7,
-      "promptTokens": 964,
+      "promptTokens": 967,
       "evidenceTotal": 3,
       "evidenceVisible": 3
     },
@@ -39,7 +39,7 @@
       "fixture": "testdata/go_md5_password.go",
       "label": "tp",
       "contextLines": 7,
-      "promptTokens": 966,
+      "promptTokens": 969,
       "evidenceTotal": 2,
       "evidenceVisible": 2
     },
@@ -48,7 +48,7 @@
       "fixture": "testdata/go_rand_jitter.go",
       "label": "fp",
       "contextLines": 6,
-      "promptTokens": 985,
+      "promptTokens": 988,
       "evidenceTotal": 2,
       "evidenceVisible": 2
     },
@@ -57,7 +57,7 @@
       "fixture": "testdata/go_rand_token.go",
       "label": "tp",
       "contextLines": 6,
-      "promptTokens": 967,
+      "promptTokens": 970,
       "evidenceTotal": 2,
       "evidenceVisible": 2
     },
@@ -66,7 +66,7 @@
       "fixture": "testdata/go_readfile_validated.go",
       "label": "fp",
       "contextLines": 9,
-      "promptTokens": 1010,
+      "promptTokens": 1013,
       "evidenceTotal": 5,
       "evidenceVisible": 5
     },
@@ -75,7 +75,7 @@
       "fixture": "testdata/go_readfile_userpath.go",
       "label": "tp",
       "contextLines": 6,
-      "promptTokens": 965,
+      "promptTokens": 968,
       "evidenceTotal": 2,
       "evidenceVisible": 2
     },
@@ -84,7 +84,7 @@
       "fixture": "testdata/go_sqli_allowlist.go",
       "label": "fp",
       "contextLines": 10,
-      "promptTokens": 1015,
+      "promptTokens": 1018,
       "evidenceTotal": 5,
       "evidenceVisible": 5
     },
@@ -93,7 +93,7 @@
       "fixture": "testdata/go_sqli_concat.go",
       "label": "tp",
       "contextLines": 6,
-      "promptTokens": 963,
+      "promptTokens": 966,
       "evidenceTotal": 2,
       "evidenceVisible": 2
     },
@@ -102,7 +102,7 @@
       "fixture": "testdata/go_trap_md5_auth_compare.go",
       "label": "tp",
       "contextLines": 8,
-      "promptTokens": 991,
+      "promptTokens": 994,
       "evidenceTotal": 2,
       "evidenceVisible": 2
     },
@@ -111,7 +111,7 @@
       "fixture": "testdata/go_trap_readfile_allowlisted.go",
       "label": "fp",
       "contextLines": 9,
-      "promptTokens": 1004,
+      "promptTokens": 1007,
       "evidenceTotal": 5,
       "evidenceVisible": 5
     },
@@ -120,7 +120,7 @@
       "fixture": "testdata/go_trap_sqli_request_table.go",
       "label": "tp",
       "contextLines": 6,
-      "promptTokens": 971,
+      "promptTokens": 974,
       "evidenceTotal": 2,
       "evidenceVisible": 2
     },
@@ -129,7 +129,7 @@
       "fixture": "testdata/py_eval_constant.py",
       "label": "fp",
       "contextLines": 6,
-      "promptTokens": 974,
+      "promptTokens": 977,
       "evidenceTotal": 2,
       "evidenceVisible": 2
     },
@@ -138,7 +138,7 @@
       "fixture": "testdata/py_eval_request.py",
       "label": "tp",
       "contextLines": 6,
-      "promptTokens": 971,
+      "promptTokens": 974,
       "evidenceTotal": 3,
       "evidenceVisible": 3
     },
@@ -147,7 +147,7 @@
       "fixture": "testdata/py_subprocess_literal.py",
       "label": "fp",
       "contextLines": 5,
-      "promptTokens": 968,
+      "promptTokens": 971,
       "evidenceTotal": 1,
       "evidenceVisible": 1
     },
@@ -156,7 +156,7 @@
       "fixture": "testdata/py_subprocess_userinput.py",
       "label": "tp",
       "contextLines": 5,
-      "promptTokens": 972,
+      "promptTokens": 975,
       "evidenceTotal": 2,
       "evidenceVisible": 2
     },
@@ -165,7 +165,7 @@
       "fixture": "testdata/py_trap_shell_const.py",
       "label": "fp",
       "contextLines": 6,
-      "promptTokens": 984,
+      "promptTokens": 987,
       "evidenceTotal": 3,
       "evidenceVisible": 3
     }

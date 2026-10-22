@@ -133,6 +133,9 @@ type VerdictReport struct {
 	Routing map[string]string `json:"routing,omitempty"`
 	Model   string            `json:"model"`
 	Repeat  int               `json:"repeat"`
+	// BlindJudge records that the judge was not shown the first pass's reasoning
+	// (achilles-eval --blind-judge). Scores with and without it are the A/B.
+	BlindJudge bool `json:"blindJudge,omitempty"`
 
 	Cases   int `json:"cases"`
 	TPCases int `json:"tpCases"`
@@ -355,6 +358,9 @@ func (r VerdictReport) Write(w io.Writer, verbose bool) {
 			100*r.ErrorRate(), r.Errors, r.Cases*r.Repeat)
 		fmt.Fprintf(w, "  comparing these numbers to anything — a run that could not reach the\n")
 		fmt.Fprintf(w, "  model still scores 0%%, which is a plumbing fact, not a capability one.\n")
+	}
+	if r.BlindJudge {
+		fmt.Fprintf(w, "  judge: blind (not shown the first pass's reasoning or gates)\n")
 	}
 	if len(r.Routing) == 0 {
 		fmt.Fprintf(w, "  model: %s\n\n", r.Model)

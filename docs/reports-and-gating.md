@@ -80,6 +80,17 @@ verdict, and are never ruled out. They stay in the gate exactly as the scanner
 reported them and are fixed by upgrading; `--sca-advice` plans the upgrades. Reports
 say how many there were, separately from findings the review failed to reach.
 
+A finding the review is confident is a **hardening note** (the weakness is real, but
+another control in the code already stops the attack, such as a weak hash of a value
+that is not a secret) leaves the gate on the same terms as a false positive. Reports
+list hardening notes in their own section, separate from false positives, because they
+are worth acting on when the code is next touched. The judge can overturn one by
+showing the control does not hold, and then the finding stays.
+
+An **uncertain** verdict is shown as **needs validation**, with the exact questions
+the code did not settle and how to settle them (a check in the code, or a fact only
+whoever runs the system can see). It stays in the gate.
+
 A true positive the judge *refuted* is ruled out only when the judge backed the
 refutation (a stated confidence of at least 0.7 and a quote that really appears in the
 code it was shown) and the first pass was not itself sure (below 0.9). A refutation
@@ -96,6 +107,14 @@ Use `--keep-dismissed` when the code's authors are not trusted: a hostile reposi
 can try to talk the model into dismissing a real finding (see
 [SECURITY.md](../SECURITY.md)). Every report states how many findings the AI
 review covered, so a partial review is visible.
+
+### What the scan did not cover
+
+Every report names the languages detected in the target that no scanner which ran
+declares support for. Secret and dependency scanners do not count, since they do not
+analyze the code itself. A language listed there had no code-level analysis at all, so
+"no findings" in it means nothing either way. Add a scanner for it or review it another
+way.
 
 ### One other thing fails the run
 

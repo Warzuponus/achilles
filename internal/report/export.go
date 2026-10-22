@@ -109,6 +109,26 @@ func sarifResult(f model.Finding, suppressed bool) model.SarifResult {
 		if v.Gates != nil {
 			props["achilles/gates"] = v.Gates
 		}
+		if !f.IsSecret() {
+			if v.AssessedSeverity != "" {
+				props["achilles/assessedSeverity"] = string(v.AssessedSeverity)
+			}
+			if v.Attacker != "" {
+				props["achilles/attacker"] = v.Attacker
+			}
+			if v.Impact != "" {
+				props["achilles/impact"] = v.Impact
+			}
+			if len(v.Blockers) > 0 {
+				props["achilles/blockers"] = v.Blockers
+			}
+			if v.ValidationPlan != nil {
+				props["achilles/validationPlan"] = v.ValidationPlan
+			}
+			if len(v.UnverifiedCitations) > 0 {
+				props["achilles/unverifiedCitations"] = v.UnverifiedCitations
+			}
+		}
 		if v.Stability != nil && v.Stability.Samples > 1 {
 			props["achilles/stability"] = map[string]any{
 				"samples": v.Stability.Samples, "agreeing": v.Stability.Agreeing, "unanimous": v.Stability.Unanimous(),
@@ -135,6 +155,9 @@ func sarifResult(f model.Finding, suppressed bool) model.SarifResult {
 			case v.Reasoning != "":
 				why = v.Reasoning
 			}
+		}
+		if v := f.Verdict; v != nil && v.Hardening() {
+			why = "Hardening note (a real weakness another control already stops): " + why
 		}
 		r.Suppressions = []model.SarifSuppression{{Kind: "external", Status: "accepted", Justification: why}}
 	}
@@ -231,6 +254,10 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 		fmt.Fprintf(w, "> **Incomplete scan:** %s failed to run, so missing results are not evidence of safety.\n\n",
 			strings.Join(s.FailedTools, ", "))
 	}
+	if len(s.UncoveredLanguages) > 0 {
+		fmt.Fprintf(w, "> **Not covered by any scanner that ran:** %s. Code in these languages was not analyzed, so no findings there is not evidence of safety.\n\n",
+			MarkdownText(strings.Join(s.UncoveredLanguages, ", ")))
+	}
 	if len(s.RepoConfigChanged) > 0 {
 		fmt.Fprintf(w, "> **This change modifies scanner configuration:** %s. It can hide findings in the same change; review it as part of this scan.\n\n",
 			MarkdownText(strings.Join(s.RepoConfigChanged, "; ")))
@@ -278,6 +305,15 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 			verdict := "—"
 			if f.Verdict != nil {
 				verdict = string(f.Verdict.Classification)
+				if f.Verdict.Classification == model.ClassUncertain {
+					verdict = "needs validation"
+					if bs := f.Verdict.Blockers; len(bs) > 0 && !f.IsSecret() {
+						verdict += ": " + MarkdownText(bs[0])
+					}
+				}
+				if a := f.Verdict.AssessedSeverity; a != "" {
+					verdict += " (assessed " + string(a) + ")"
+				}
 				switch {
 				case f.Verdict.Disputed():
 					verdict += " (**disputed by judge**)"
@@ -319,11 +355,25 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 		}
 		fmt.Fprint(w, "\n</details>\n")
 	}
-	if len(s.Dismissed) > 0 {
-		fmt.Fprintf(w, "\n<details><summary>%d finding(s) ruled out by the AI review</summary>\n\n", len(s.Dismissed))
+	ruledOut, hardening := splitDismissed(s.Dismissed)
+	if len(hardening) > 0 {
+		fmt.Fprintf(w, "\n<details><summary>%d hardening note(s): real weaknesses already stopped by another control</summary>\n\n", len(hardening))
+		fmt.Fprintln(w, "| Rule | Location | What already stops it |")
+		fmt.Fprintln(w, "|------|----------|-----------------------|")
+		for _, f := range hardening {
+			loc := f.Location.File
+			if f.Location.Region.StartLine > 0 {
+				loc = fmt.Sprintf("%s:%d", loc, f.Location.Region.StartLine)
+			}
+			fmt.Fprintf(w, "| `%s` | %s | %s |\n", markdownCode(f.RuleID), MarkdownText(loc), MarkdownText(f.Verdict.Reasoning))
+		}
+		fmt.Fprint(w, "\n</details>\n")
+	}
+	if len(ruledOut) > 0 {
+		fmt.Fprintf(w, "\n<details><summary>%d finding(s) ruled out by the AI review</summary>\n\n", len(ruledOut))
 		fmt.Fprintln(w, "| Rule | Location | Why |")
 		fmt.Fprintln(w, "|------|----------|-----|")
-		for _, f := range s.Dismissed {
+		for _, f := range ruledOut {
 			loc := f.Location.File
 			if f.Location.Region.StartLine > 0 {
 				loc = fmt.Sprintf("%s:%d", loc, f.Location.Region.StartLine)

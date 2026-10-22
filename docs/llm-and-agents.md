@@ -317,6 +317,35 @@ id, so a line in the code cannot pass itself off as the end of the code. The pro
 also defines `confidence`: below 0.7 means "I would need to see more code", and such
 a finding is kept for a person.
 
+### What a verdict tells a team
+
+Since `triage/v7` a verdict is one of four classifications, and each carries the
+detail a team needs to act on it:
+
+| Classification | Means | Carries | Effect |
+|---|---|---|---|
+| `true_positive` | a lower-trust attacker can cross a real boundary | `attacker`, `impact`, `assessedSeverity` | stays in the gate; high-confidence ones get a fix |
+| `false_positive` | a gate closes the path | the gate, in the reasoning | dismissed when confident |
+| `hardening` | the weakness is real, but another control already stops it | the control, in the reasoning | dismissed when confident, listed as a hardening note |
+| `uncertain` (shown as *needs validation*) | the code shown does not settle it | `blockers`, `validationPlan` {`local`, `owner`} | stays in the gate |
+
+`assessedSeverity` uses fixed anchors: critical for unauthenticated code execution,
+full data access or account takeover; high when an explicit control is fully
+defeated; medium for limited reach or uncommon preconditions; low for minor gain;
+info for minimal impact. It is advisory. It is shown beside the scanner's severity
+and exported to SARIF as `achilles/assessedSeverity`, and `--fail-on` still uses the
+scanner's severity.
+
+Line numbers the model cites in its reasoning, its fix idea or the judge's reason are
+checked against the lines it was actually shown. Any it was not shown, and any line
+of another file, are recorded as `unverifiedCitations` and flagged in every report and
+issue, so a reader does not go looking for a line the model invented.
+
+The judge normally sees the first pass's reasoning and gate answers so it can attack
+them. Whether that anchors it is measurable: `achilles-eval --mode verdict
+--blind-judge` runs the same corpus with a judge that sees only the claim and the
+code. Compare its balanced accuracy with a normal run before changing the default.
+
 ### Self-consistency sampling: `--llm-samples N`
 
 One answer from a model is one draw. With `N > 1`, a **borderline** verdict —

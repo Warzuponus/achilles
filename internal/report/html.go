@@ -39,6 +39,7 @@ type htmlView struct {
 	Counts     []severityCount // ordered, only non-zero
 	Findings   []findingView   // actionable findings: severity, then AI-confirmed first
 	Dismissed  []findingView   // ruled out by the AI review; listed so the call is auditable
+	Hardening  []findingView   // dismissed as hardening notes: real weaknesses another control already stops
 	Suppressed []findingView   // suppressed by a comment in the scanned code; listed with the reason
 	Confirmed  int             // actionable findings the AI review confirmed
 	HasReview  bool
@@ -50,6 +51,7 @@ type htmlView struct {
 	RepoConfig        string
 	RepoConfigChanged string
 	Coverage          string // one line on how much of the scan the AI review covered
+	Uncovered         string // detected languages no scanner that ran covers; empty when none
 	CoverageOK        bool   // false when the AI review was absent or partial
 	Summary           string // plain-language headline
 }
@@ -57,13 +59,26 @@ type htmlView struct {
 // findingView is a finding prepared for display: secrets masked, code bounded.
 type findingView struct {
 	model.Finding
-	Status  string // AI review status: confirmed | needs review | not reviewed | overturned | dismissed
+	Status  string // AI review status: confirmed | needs validation | needs review | not reviewed | overturned | dismissed | hardening
 	Snippet string // redacted, bounded code; empty for secret findings
 	Message string // redacted
 	Secret  bool
 	// VerdictFix is the triage pass's fix idea, shown only when no fuller
 	// remediation exists for the finding.
 	VerdictFix string
+}
+
+// DetailRows are the verdict's actionable detail (attacker, impact, assessed
+// severity, open questions, unchecked references), credentials masked.
+func (v findingView) DetailRows() []model.DetailLine {
+	if v.Verdict == nil || v.Secret {
+		return nil
+	}
+	rows := v.Verdict.Details()
+	for i := range rows {
+		rows[i].Text = redact.Secrets(rows[i].Text)
+	}
+	return rows
 }
 
 // gateRow is one answered question of the AI review, for display.
@@ -166,10 +181,14 @@ func toView(f model.Finding) findingView {
 		v.Status = "not reviewed"
 	case f.Verdict.Overturned:
 		v.Status = "overturned"
+	case f.Verdict.Hardening():
+		v.Status = "hardening"
 	case f.Verdict.Dismissed():
 		v.Status = "dismissed"
 	case f.Verdict.HighConfidence():
 		v.Status = "confirmed"
+	case f.Verdict.Classification == model.ClassUncertain:
+		v.Status = "needs validation"
 	default:
 		v.Status = "needs review"
 	}
@@ -193,10 +212,12 @@ func statusRank(s string) int {
 		return 0
 	case "overturned":
 		return 1
-	case "needs review":
+	case "needs validation":
 		return 2
-	default:
+	case "needs review":
 		return 3
+	default:
+		return 4
 	}
 }
 
@@ -216,7 +237,12 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 			confirmed++
 		}
 	}
+	var hardening []findingView
 	for _, f := range r.Scan.Dismissed {
+		if f.Verdict != nil && f.Verdict.Hardening() {
+			hardening = append(hardening, toView(f))
+			continue
+		}
 		dismissed = append(dismissed, toView(f))
 	}
 	var suppressed []findingView
@@ -248,6 +274,7 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 		Counts:     ordered,
 		Findings:   findings,
 		Dismissed:  dismissed,
+		Hardening:  hardening,
 		Suppressed: suppressed,
 		Confirmed:  confirmed,
 		HasReview:  r.Review != nil && (r.Review.Summary != "" || len(r.Review.Risks) > 0),
@@ -260,6 +287,7 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 	v.RepoConfig = strings.Join(r.Scan.RepoConfig, "; ")
 	v.RepoConfigChanged = strings.Join(r.Scan.RepoConfigChanged, "; ")
 	v.Coverage, v.CoverageOK = coverageLine(r.Scan.Triage)
+	v.Uncovered = strings.Join(r.Scan.UncoveredLanguages, ", ")
 	v.Summary = summaryLine(v)
 	return htmlTmpl.Execute(w, v)
 }
@@ -298,6 +326,9 @@ func summaryLine(v htmlView) string {
 	}
 	if n := len(v.Dismissed); n > 0 {
 		s += fmt.Sprintf("; %d more ruled out as false positives (listed at the end)", n)
+	}
+	if n := len(v.Hardening); n > 0 {
+		s += fmt.Sprintf("; %d hardening note(s), weaknesses another control already stops (listed at the end)", n)
 	}
 	if n := len(v.Suppressed); n > 0 {
 		s += fmt.Sprintf("; %d suppressed by comments in the code (listed at the end)", n)
@@ -383,7 +414,7 @@ const htmlDoc = `<!doctype html>
   table.gates{margin:8px 0;font-size:13px}
   table.gates td{padding:3px 10px 3px 0;border:0;color:var(--muted)}
   .s-confirmed{color:var(--critical);border-color:var(--critical)}
-  .s-overturned,.s-needs-review{color:var(--medium);border-color:var(--medium)}
+  .s-overturned,.s-needs-review,.s-needs-validation{color:var(--medium);border-color:var(--medium)}
 </style>
 </head>
 <body><div class="wrap">
@@ -396,12 +427,14 @@ const htmlDoc = `<!doctype html>
 {{if .RepoConfigChanged}}<div class="alert warn"><strong>This change modifies scanner configuration.</strong> {{.RepoConfigChanged}}. It can hide findings in the same change; review it as part of this scan.</div>{{end}}
 {{if .RepoConfig}}<div class="alert">Scanner configuration from the scanned repository was in effect: {{.RepoConfig}}. It can remove findings before Achilles sees them.</div>{{end}}
 <div class="alert {{if .CoverageOK}}ok{{else}}warn{{end}}">{{.Coverage}}</div>
+{{if .Uncovered}}<div class="alert warn"><strong>Not covered by any scanner that ran:</strong> {{.Uncovered}}. Code in these languages was not analyzed, so no findings there is not evidence of safety.</div>{{end}}
 
 <p class="lead" style="margin-top:20px">{{.Summary}}</p>
 <div class="cards">
   <div class="card"><div class="n">{{.Total}}</div><div class="l">Findings</div></div>
   {{range .Counts}}<div class="card"><div class="n">{{.Count}}</div><div class="l"><span class="badge b-{{sev .Severity}}">{{sev .Severity}}</span></div></div>{{end}}
   {{if .Dismissed}}<div class="card"><div class="n">{{len .Dismissed}}</div><div class="l">Dismissed by AI</div></div>{{end}}
+  {{if .Hardening}}<div class="card"><div class="n">{{len .Hardening}}</div><div class="l">Hardening notes</div></div>{{end}}
   {{if .Suppressed}}<div class="card"><div class="n">{{len .Suppressed}}</div><div class="l">Suppressed in code</div></div>{{end}}
 </div>
 
@@ -471,6 +504,7 @@ const htmlDoc = `<!doctype html>
       <div class="kv" style="margin-top:8px"><span class="verdict">{{.Classification}} · {{printf "%.0f%%" (pct .Confidence)}}{{if .Exploitability}} · {{.Exploitability}}{{end}}{{if .Disputed}} · disputed by judge{{else if .Refuted}} · refuted{{else if .Overturned}} · overturned by judge{{end}}</span></div>
       {{if .Reasoning}}<div class="kv">{{.Reasoning}}</div>{{end}}
       {{end}}
+      {{with .DetailRows}}<table class="gates">{{range .}}<tr><td>{{.Label}}</td><td colspan="2">{{.Text}}</td></tr>{{end}}</table>{{end}}
       {{with .GateRows}}<table class="gates">{{range .}}<tr><td>{{.Question}}</td><td><strong>{{.Answer}}</strong></td><td>{{.Evidence}}</td></tr>{{end}}</table>{{end}}
       {{with .StabilityLine}}<div class="kv">{{.}}</div>{{end}}
       {{with .DeepLine}}<div class="kv">{{.}}</div>{{end}}
@@ -501,6 +535,22 @@ const htmlDoc = `<!doctype html>
       <td>{{.Location.File}}{{if .Location.Region.StartLine}}:{{.Location.Region.StartLine}}{{end}}</td>
       <td>{{.Suppression.Reason}}</td>
       <td>{{if .Suppression.New}}<strong>added by this change</strong>{{end}}</td></tr>
+    {{end}}
+  </table></div>
+</section>
+{{end}}
+
+{{if .Hardening}}
+<section>
+  <h2>Hardening notes <span class="tag">{{len .Hardening}}</span></h2>
+  <p class="lead">The AI review judged each of these a real weakness that another control in the code already stops. They are not vulnerabilities and did not gate the build, but each is a layer of defense worth adding when the code is next touched. Re-run with <code>--keep-dismissed</code> to treat them as findings.</p>
+  <div class="tbl-scroll"><table>
+    <tr><th>Rule</th><th>Where</th><th>Confidence</th><th>What already stops it</th></tr>
+    {{range .Hardening}}
+    <tr><td><span class="badge b-{{sev .Severity}}">{{sev .Severity}}</span> <span class="rule">{{.RuleID}}</span></td>
+      <td>{{.Location.File}}{{if .Location.Region.StartLine}}:{{.Location.Region.StartLine}}{{end}}</td>
+      <td>{{with .Verdict}}{{printf "%.0f%%" (pct .Confidence)}}{{end}}</td>
+      <td>{{with .Verdict}}{{.Reasoning}}{{end}}</td></tr>
     {{end}}
   </table></div>
 </section>

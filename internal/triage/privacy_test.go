@@ -82,7 +82,7 @@ func TestPrompts_TellTheModelCodeIsUntrusted(t *testing.T) {
 	v := model.Verdict{Classification: model.ClassFalsePositive, Confidence: 0.9}
 	for name, msgs := range map[string][]llm.Message{
 		"triage":      triageMessages(*f, "code", nil),
-		"judge":       judgeMessages(*f, "code", v),
+		"judge":       judgeMessages(*f, "code", v, false),
 		"remediation": remediationMessages(*f, "code"),
 	} {
 		if !strings.Contains(msgs[0].Content, "UNTRUSTED DATA") {

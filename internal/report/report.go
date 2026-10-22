@@ -42,6 +42,10 @@ func WriteHuman(w io.Writer, s model.Scan) {
 			"`achilles doctor` shows what is missing and how to fix it (or see --diagnostics); this is NOT a clean scan.\n",
 			len(s.FailedTools), strings.Join(s.FailedTools, ", "))
 	}
+	if len(s.UncoveredLanguages) > 0 {
+		fmt.Fprintf(w, "\nNOTE: no scanner that ran covers %s. Code in those languages was not analyzed, so no findings there is not evidence of safety.\n",
+			strings.Join(s.UncoveredLanguages, ", "))
+	}
 	if len(s.RepoConfigChanged) > 0 {
 		fmt.Fprintf(w, "\nWARNING: the change under review modifies scanner configuration (%s). "+
 			"It can hide findings in the same change; review it as part of this scan.\n", strings.Join(s.RepoConfigChanged, "; "))
@@ -69,8 +73,13 @@ func WriteHuman(w io.Writer, s model.Scan) {
 			fmt.Fprintf(w, "%d of those verdict(s) were reused from earlier runs: the same code, reviewed with the same prompt and models\n", t.Reused)
 		}
 	}
-	if n := len(s.Dismissed); n > 0 {
-		fmt.Fprintf(w, "%d more finding(s) ruled out as false positives by the AI review (not counted above; see the HTML/Markdown report, or --keep-dismissed to include them)\n", n)
+	if ruledOut, hardening := splitDismissed(s.Dismissed); len(ruledOut)+len(hardening) > 0 {
+		if n := len(ruledOut); n > 0 {
+			fmt.Fprintf(w, "%d more finding(s) ruled out as false positives by the AI review (not counted above; see the HTML/Markdown report, or --keep-dismissed to include them)\n", n)
+		}
+		if n := len(hardening); n > 0 {
+			fmt.Fprintf(w, "%d hardening note(s): real weaknesses the AI review found already stopped by another control (not counted above; listed in the HTML/Markdown report)\n", n)
+		}
 	}
 	if n := len(s.Suppressed); n > 0 {
 		fmt.Fprintf(w, "\n%d more finding(s) suppressed by comments in the scanned code (achilles:ignore; not counted above; --no-repo-config to refuse them):\n", n)
@@ -147,7 +156,15 @@ func WriteHuman(w io.Writer, s model.Scan) {
 				// to the verdict that was overturned, not to the decision to show it.
 				status += " (OVERTURNED by judge — surfaced for review)"
 			}
+			if v.Classification == model.ClassUncertain {
+				status = "needs validation (uncertain)" + strings.TrimPrefix(status, string(model.ClassUncertain))
+			}
 			fmt.Fprintf(w, "    triage: %s  confidence=%.2f  exploitability=%s\n", status, v.Confidence, v.Exploitability)
+			if !f.IsSecret() {
+				for _, d := range v.Details() {
+					fmt.Fprintf(w, "    %s: %s\n", strings.ToLower(d.Label), redact.Secrets(d.Text))
+				}
+			}
 			if (v.Overturned || v.Disputed()) && v.RefuteReason != "" {
 				fmt.Fprintf(w, "    judge: %s\n", v.RefuteReason)
 			}
@@ -182,6 +199,19 @@ func WriteHuman(w io.Writer, s model.Scan) {
 			}
 		}
 	}
+}
+
+// splitDismissed separates hardening notes from findings ruled out as false
+// positives; both are out of the gate, but they mean different things to a team.
+func splitDismissed(fs []model.Finding) (ruledOut, hardening []model.Finding) {
+	for _, f := range fs {
+		if f.Verdict != nil && f.Verdict.Hardening() {
+			hardening = append(hardening, f)
+		} else {
+			ruledOut = append(ruledOut, f)
+		}
+	}
+	return ruledOut, hardening
 }
 
 // byRuleThreshold is the number of findings above which the human report

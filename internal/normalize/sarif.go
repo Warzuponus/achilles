@@ -198,6 +198,9 @@ func isWindowsAbs(p string) bool {
 // path. Steps without a file or a line are skipped, consecutive duplicates
 // collapsed, and the path bounded. A one-step "path" says nothing the location
 // does not, so it is dropped.
+// flowNoteLocation is the location suffix Opengrep appends to a trace step's note.
+var flowNoteLocation = regexp.MustCompile(`\s*@\s*'[^']*:\d+'\s*$`)
+
 func flowFor(res model.SarifResult, bases map[string]model.SarifArtifactLocation) []model.FlowStep {
 	if len(res.CodeFlows) == 0 || len(res.CodeFlows[0].ThreadFlows) == 0 {
 		return nil
@@ -212,6 +215,9 @@ func flowFor(res model.SarifResult, bases map[string]model.SarifArtifactLocation
 		note := ""
 		if m := tl.Location.Message; m != nil {
 			note = strings.Join(strings.Fields(m.Text), " ")
+			// Opengrep ends each step with "@ '<absolute path>:<line>'": the step's
+			// own location again, with the scanning machine's path in it.
+			note = flowNoteLocation.ReplaceAllString(note, "")
 			if len(note) > 200 {
 				cut := 200
 				for cut > 0 && !utf8.RuneStart(note[cut]) {

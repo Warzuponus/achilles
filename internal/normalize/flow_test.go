@@ -60,3 +60,24 @@ func TestFlowFor_DropsTrivialAndBoundsLength(t *testing.T) {
 		t.Errorf("note not bounded on a character boundary: %d bytes", len(got[0].Note))
 	}
 }
+
+// Real Opengrep --dataflow-traces output (1.25): each note ends with the step's
+// location again, as an absolute path. That is dropped.
+func TestFlowFor_OpengrepNotes(t *testing.T) {
+	got := flowFor(withFlow(
+		step("app.py", 17, `Source: 'client.chat.completions.create(model="m")' @ '/tmp/og/src/app.py:17'`),
+		step("app.py", 18, `Propagator : 'code' @ '/tmp/og/src/app.py:18'`),
+		step("app.py", 20, `Sink: 'exec(code)' @ '/tmp/og/src/app.py:20'`),
+	), nil)
+	if len(got) != 3 {
+		t.Fatalf("steps = %+v", got)
+	}
+	for _, s := range got {
+		if strings.Contains(s.Note, "/tmp/") || strings.Contains(s.Note, "@") {
+			t.Errorf("note keeps the scanner's location suffix: %q", s.Note)
+		}
+	}
+	if got[2].Note != "Sink: 'exec(code)'" {
+		t.Errorf("sink note = %q", got[2].Note)
+	}
+}

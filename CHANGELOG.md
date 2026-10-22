@@ -24,6 +24,27 @@ All notable changes to this project are recorded here. The format follows
   - **Unchecked line references.** Line numbers the review cites in its reasoning,
     fix idea or the judge's reason are checked against the lines it was shown; any it
     was not shown are flagged in every report and issue.
+- **Source-to-sink paths.** A finding carries the path its data takes, source
+  first: the scanner's own trace (Opengrep now runs with `--dataflow-traces`; any SARIF
+  `codeFlows` are read), or the `route` a deep verification reports (prompt `deep/v3`),
+  which wins because every step is a line a tool showed the model. Triage sees the
+  scanner's path as a claim to check. Every report and issue shows the path, and SARIF
+  exports it as `codeFlows`.
+- **A regression test with every fix** (prompt `remediation/v2`): a test that should
+  fail on the vulnerable code and pass once fixed, shown with the fix in reports and
+  issues, exported to SARIF, and listed in the `--fix-pr` description. Never run and
+  never committed.
+- **Rules for code that calls AI models** (`configs/rules/achilles-llm.yaml`): model
+  output reaching a shell, an interpreter, SQL or the page; agent tools that run code;
+  `trust_remote_code=True` without a pinned revision. OpenAI, Anthropic, Vercel AI SDK
+  and LangChain. Triage and the judge get matching guidance for any finding that
+  involves a model (prompt `triage/v8`): a steerable prompt is not by itself a finding;
+  the action its output reaches is.
+- **Hunt mode (`--hunt N`, experimental).** From up to N entry points, the model
+  follows the data with the read-only deep-verification tools and reports what it can
+  trace to a dangerous operation. Every candidate is reviewed by triage and the judge;
+  only confirmed ones gate. The rest are listed apart and never reach SARIF or issues.
+  See docs/hunt.md.
 - **Languages no scanner covered.** Reports name the languages detected in the target
   that no scanner which ran declares (Rust today, for example), so silence there is not
   read as a clean result.

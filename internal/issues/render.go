@@ -287,6 +287,25 @@ func (r *renderer) writeFix(b *strings.Builder, f model.Finding, withDiff bool) 
 	default:
 		fmt.Fprintf(b, "\n%s\n", fenced("diff", cutLines(redactDiff(r.strip(diff)), maxDiff)))
 	}
+	r.writeRegressionTest(b, rem, withDiff)
+}
+
+// writeRegressionTest adds the model's proposed test for the fix, marked as
+// unrun. It is left out with the diff when the issue is near GitHub's size limit.
+func (r *renderer) writeRegressionTest(b *strings.Builder, rem *model.Remediation, withDiff bool) {
+	if rem == nil || rem.RegressionTest == nil || !withDiff {
+		return
+	}
+	t := rem.RegressionTest
+	b.WriteString("\n#### Proposed regression test\n\n")
+	if t.File != "" {
+		fmt.Fprintf(b, "Suggested location: `%s`\n\n", strings.ReplaceAll(r.strip(t.File), "`", "'"))
+	}
+	if d := r.prose(t.Description, maxGuidance); d != "" {
+		b.WriteString(d + "\n\n")
+	}
+	b.WriteString(fenced("", cutLines(redactCode(r.strip(t.Code)), maxDiff)) + "\n")
+	b.WriteString("\n_A model wrote this test and Achilles did not run it. Check that it fails before the fix and passes after._\n")
 }
 
 // verificationLine says whether re-scanning the proposed diff supported it. It

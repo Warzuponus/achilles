@@ -203,6 +203,13 @@ func WriteHuman(w io.Writer, s model.Scan) {
 			if r.Diff != "" {
 				fmt.Fprintln(w, "    (patch available in the Evidence Vault)")
 			}
+			if t := r.RegressionTest; t != nil && !f.IsSecret() {
+				where := ""
+				if t.File != "" {
+					where = " for " + t.File
+				}
+				fmt.Fprintf(w, "    regression test proposed%s (not run): %s\n", where, redact.Secrets(t.Description))
+			}
 		}
 	}
 }

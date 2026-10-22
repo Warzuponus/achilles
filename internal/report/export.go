@@ -152,6 +152,11 @@ func sarifResult(f model.Finding, suppressed bool) model.SarifResult {
 	if r := f.Remediation; r != nil && r.Verification != nil {
 		props["achilles/fixVerification"] = string(r.Verification.Status)
 	}
+	if r := f.Remediation; r != nil && r.RegressionTest != nil && !f.IsSecret() {
+		t := *r.RegressionTest
+		t.Code, t.Description = redact.Secrets(t.Code), redact.Secrets(t.Description)
+		props["achilles/regressionTest"] = t
+	}
 	if d := f.Deep; d != nil && d.Aborted == "" {
 		props["achilles/deepVerdict"] = map[string]any{
 			"conclusion": string(d.Conclusion), "confidence": d.Confidence, "steps": d.Steps,
@@ -432,6 +437,24 @@ func MarkdownText(s string) string {
 		s = s[:cut] + " ... (truncated)"
 	}
 	return s
+}
+
+// MarkdownCodeBlock fences model-written code for Markdown with credentials
+// masked, using a fence longer than any run of backticks inside so the code
+// cannot close it early.
+func MarkdownCodeBlock(code string) string {
+	code = redact.Secrets(code)
+	longest, run := 0, 0
+	for _, c := range code {
+		if c == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
+		}
+	}
+	fence := strings.Repeat("`", max(3, longest+1))
+	return fence + "\n" + strings.TrimRight(code, "\n") + "\n" + fence
 }
 
 // FindingMessage is a finding's message made safe for Markdown. A credential

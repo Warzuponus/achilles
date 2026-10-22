@@ -144,6 +144,18 @@ func (v findingView) StabilityLine() string {
 	return line
 }
 
+// RegressionTestView is the proposed test with credentials masked; nil when there
+// is none or the finding is a credential.
+func (v findingView) RegressionTestView() *model.RegressionTest {
+	if v.Secret || v.Remediation == nil || v.Remediation.RegressionTest == nil {
+		return nil
+	}
+	t := *v.Remediation.RegressionTest
+	t.Code = redact.Secrets(t.Code)
+	t.Description = redact.Secrets(t.Description)
+	return &t
+}
+
 // FixLine describes the re-scan result of the suggested patch; empty when the
 // patch was not re-scanned.
 func (v findingView) FixLine() string {
@@ -535,6 +547,14 @@ const htmlDoc = `<!doctype html>
         <div>{{.Summary}}</div>
         {{if .Guidance}}<div class="kv" style="margin-top:6px">{{.Guidance}}</div>{{end}}
         {{if .Diff}}<pre>{{.Diff}}</pre>{{end}}
+      </div>
+      {{end}}
+      {{with .RegressionTestView}}
+      <div class="fix">
+        <h4>Proposed regression test{{if .File}} <span class="kv">for {{.File}}</span>{{end}}</h4>
+        {{if .Description}}<div>{{.Description}}</div>{{end}}
+        <pre>{{.Code}}</pre>
+        <div class="kv">A model wrote this test and Achilles did not run it. Check it fails before the fix and passes after, then add it.</div>
       </div>
       {{end}}
     </div>

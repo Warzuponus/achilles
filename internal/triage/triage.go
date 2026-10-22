@@ -452,6 +452,7 @@ func (e *Engine) Remediate(ctx context.Context, runID string, f *model.Finding) 
 	r.Verification = nil
 	r.ReusedFrom = "" // likewise the pipeline's to say, not the model's
 	r.Confidence = model.NormalizeConfidence(r.Confidence)
+	r.NormalizeRegressionTest()
 	f.Remediation = &r
 	e.record(runID, vault.KindRemediation, "remediation", f.Fingerprint, r)
 	if cacheKey != "" {

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Warzuponus/achilles/internal/model"
 )
@@ -55,6 +56,7 @@ func FromSARIF(fallbackTool string, data []byte) ([]model.Finding, error) {
 				Location:    loc,
 				CodeContext: snippet,
 				CWE:         cweFor(res, rules[res.RuleID]),
+				Flow:        flowFor(res, run.OriginalURIBaseIDs),
 				Category:    categoryFor(tool, res, rules[res.RuleID]),
 			}
 			f.Severity = severityFor(res, rules[res.RuleID], f.IsSecret())
@@ -190,6 +192,53 @@ func decodeURIPath(uri string) string {
 func isWindowsAbs(p string) bool {
 	return len(p) >= 3 && p[1] == ':' && (p[2] == '/' || p[2] == '\\') &&
 		((p[0] >= 'a' && p[0] <= 'z') || (p[0] >= 'A' && p[0] <= 'Z'))
+}
+
+// flowFor reads the first thread flow of a result's first code flow as an ordered
+// path. Steps without a file or a line are skipped, consecutive duplicates
+// collapsed, and the path bounded. A one-step "path" says nothing the location
+// does not, so it is dropped.
+// flowNoteLocation is the location suffix Opengrep appends to a trace step's note.
+var flowNoteLocation = regexp.MustCompile(`\s*@\s*'[^']*:\d+'\s*$`)
+
+func flowFor(res model.SarifResult, bases map[string]model.SarifArtifactLocation) []model.FlowStep {
+	if len(res.CodeFlows) == 0 || len(res.CodeFlows[0].ThreadFlows) == 0 {
+		return nil
+	}
+	var out []model.FlowStep
+	for _, tl := range res.CodeFlows[0].ThreadFlows[0].Locations {
+		p := tl.Location.PhysicalLocation
+		file := artifactPath(p.ArtifactLocation, bases)
+		if file == "" || p.Region.StartLine <= 0 {
+			continue
+		}
+		note := ""
+		if m := tl.Location.Message; m != nil {
+			note = strings.Join(strings.Fields(m.Text), " ")
+			// Opengrep ends each step with "@ '<absolute path>:<line>'": the step's
+			// own location again, with the scanning machine's path in it.
+			note = flowNoteLocation.ReplaceAllString(note, "")
+			if len(note) > 200 {
+				cut := 200
+				for cut > 0 && !utf8.RuneStart(note[cut]) {
+					cut--
+				}
+				note = note[:cut] + "..."
+			}
+		}
+		step := model.FlowStep{File: file, Line: p.Region.StartLine, Note: note}
+		if n := len(out); n > 0 && out[n-1].File == step.File && out[n-1].Line == step.Line {
+			continue
+		}
+		out = append(out, step)
+		if len(out) == model.MaxFlowSteps {
+			break
+		}
+	}
+	if len(out) < 2 {
+		return nil
+	}
+	return out
 }
 
 func firstLocation(locs []model.SarifLocation, bases map[string]model.SarifArtifactLocation) model.Location {

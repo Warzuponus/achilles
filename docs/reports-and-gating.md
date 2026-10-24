@@ -103,6 +103,12 @@ achilles --ai --fail-on high .                  # gate on what survived the AI r
 achilles --ai --keep-dismissed --fail-on high . # gate on raw scanner severity instead
 ```
 
+**Hunt candidates** ([`--hunt`](hunt.md)) gate only once the review confirms them
+with high confidence. A candidate it does not confirm is listed in its own section,
+"Hunt candidates the AI review did not confirm", never gates, never opens an issue,
+and is left out of SARIF. `--keep-dismissed` does not change that: an unconfirmed
+candidate was never a scanner's finding.
+
 Use `--keep-dismissed` when the code's authors are not trusted: a hostile repository
 can try to talk the model into dismissing a real finding (see
 [SECURITY.md](../SECURITY.md)). Every report states how many findings the AI

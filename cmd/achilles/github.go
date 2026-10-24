@@ -168,6 +168,7 @@ type proposedFix struct {
 	fp, rule, diff string
 	file           string // the finding's file, relative to the scan target; the only path the diff may change
 	verified       bool
+	test           *model.RegressionTest // proposed with the fix; listed in the PR body, never committed
 }
 
 // selectFixes picks the remediation diffs runFixPR may apply and returns one
@@ -203,7 +204,8 @@ func selectFixes(findings []model.Finding) (fixes []proposedFix, notes []string)
 		if v == nil {
 			unverified++
 		}
-		fixes = append(fixes, proposedFix{fp: f.Fingerprint, rule: f.RuleID, diff: f.Remediation.Diff, file: file, verified: v != nil})
+		fixes = append(fixes, proposedFix{fp: f.Fingerprint, rule: f.RuleID, diff: f.Remediation.Diff, file: file, verified: v != nil,
+			test: f.Remediation.RegressionTest})
 	}
 	if unverified > 0 {
 		notes = append(notes, fmt.Sprintf("achilles: fix-pr — note: %d diff(s) were not re-scanned (verification did not run; see --verify-fixes); applying them unverified", unverified))
@@ -282,6 +284,7 @@ func runFixPR(ctx context.Context, dir, repo, remote, base string, scan model.Sc
 	}
 	fmt.Fprintf(&body, "\nEach fix changes only the file its finding is in. A model wrote these patches; "+
 		"the re-scan shows the scanner no longer reports the finding, not that the change is correct.\n")
+	writeRegressionTests(&body, applied)
 	pr, err := gc.CreatePull(ctx, fmt.Sprintf("Achilles auto-fix: %d finding(s)", len(applied)), branch, base, body.String())
 	if err != nil {
 		return err
@@ -378,4 +381,43 @@ func commitFixes(ctx context.Context, dir, branch, base string, fixes []proposed
 		}
 	}
 	return applied, base, nil
+}
+
+// maxFixPRBody keeps the fix PR's description under GitHub's 65536-character limit.
+const maxFixPRBody = 60000
+
+// writeRegressionTests lists the test proposed with each applied fix. They are
+// not committed: a model wrote them, nothing ran them, and a test that passes for
+// the wrong reason is worse than none. The developer adds the ones that hold up.
+func writeRegressionTests(body *strings.Builder, applied []proposedFix) {
+	header := false
+	for _, fx := range applied {
+		t := fx.test
+		if t == nil || strings.TrimSpace(t.Code) == "" {
+			continue
+		}
+		var sec strings.Builder
+		where := ""
+		if t.File != "" {
+			where = " (suggested location `" + strings.ReplaceAll(t.File, "`", "'") + "`)"
+		}
+		fmt.Fprintf(&sec, "\n<details><summary>Test for `%s` in `%s`%s</summary>\n\n", fx.rule, fx.file, where)
+		if d := report.MarkdownText(t.Description); d != "" {
+			sec.WriteString(d + "\n\n")
+		}
+		sec.WriteString(report.MarkdownCodeBlock(t.Code) + "\n\n</details>\n")
+		if !header {
+			const h = "\n### Proposed regression tests\n\nNot committed and not run. Check each fails without its fix and passes with it before adding it.\n"
+			if body.Len()+len(h)+sec.Len() > maxFixPRBody {
+				return
+			}
+			body.WriteString(h)
+			header = true
+		}
+		if body.Len()+sec.Len() > maxFixPRBody {
+			body.WriteString("\n_More proposed tests were left out to keep this description within GitHub's size limit; they are in the Achilles report._\n")
+			return
+		}
+		body.WriteString(sec.String())
+	}
 }

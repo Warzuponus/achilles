@@ -133,6 +133,31 @@ type SarifResult struct {
 	BaselineState string `json:"baselineState,omitempty"`
 	// Fixes are proposed changes that resolve the result.
 	Fixes []SarifFix `json:"fixes,omitempty"`
+	// CodeFlows is the source-to-sink path a taint engine followed (Opengrep with
+	// --dataflow-traces, CodeQL). Achilles reads the first thread flow of the first
+	// code flow, and writes one back from Finding.Flow.
+	CodeFlows []SarifCodeFlow `json:"codeFlows,omitempty"`
+}
+
+// SarifCodeFlow is one path through the code (SARIF 3.36).
+type SarifCodeFlow struct {
+	ThreadFlows []SarifThreadFlow `json:"threadFlows"`
+}
+
+// SarifThreadFlow is the ordered steps of a code flow in one thread (SARIF 3.37).
+type SarifThreadFlow struct {
+	Locations []SarifThreadFlowLocation `json:"locations"`
+}
+
+// SarifThreadFlowLocation is one step (SARIF 3.38).
+type SarifThreadFlowLocation struct {
+	Location SarifFlowLocation `json:"location"`
+}
+
+// SarifFlowLocation is a location that may carry a message saying what happens there.
+type SarifFlowLocation struct {
+	PhysicalLocation SarifPhysicalLocation `json:"physicalLocation"`
+	Message          *SarifMessage         `json:"message,omitempty"`
 }
 
 // SarifFix is a proposed change: a description and the edits, per file.

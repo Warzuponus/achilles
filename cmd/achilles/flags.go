@@ -115,6 +115,8 @@ type options struct {
 	verifyFixes  bool // --verify-fixes: re-scan each proposed patch in a temp copy and record whether the finding is gone
 	deepVerify   int  // --deep-verify N: let the model read/grep the repo to settle the N most important findings
 	deepMaxSteps int  // --deep-max-steps: tool-call budget per deep-verified finding
+	hunt         int  // --hunt N: follow the data from N entry points and review what the model finds
+	huntMaxSteps int  // --hunt-max-steps: tool-call budget per hunt
 	llmSamples   int  // --llm-samples K: ask K times on borderline verdicts and keep the majority
 	// --verdict-cache-days: reuse a verdict from an earlier run for this many days
 	// when the code, prompt and models are unchanged; 0 turns the cache off.
@@ -222,6 +224,8 @@ func defineFlags() (*flag.FlagSet, *options) {
 	fs.DurationVar(&o.verifyTimeout, "verify-timeout", 15*time.Minute, "time allowed for all --verify-fixes re-scans combined; separate from --timeout, and started when verification starts")
 	fs.IntVar(&o.deepVerify, "deep-verify", 0, "let the model read and search the repository (bounded, read-only) to settle the N highest-priority findings the single-file review could not (0 = off)")
 	fs.IntVar(&o.deepMaxSteps, "deep-max-steps", 6, "with --deep-verify: most tool calls per finding")
+	fs.IntVar(&o.hunt, "hunt", 0, "opt-in: let the model follow the data from N entry points (HTTP routes first) with the read-only deep-verification tools and report what it traces to a dangerous operation; every candidate is reviewed by triage, and unconfirmed ones never gate the build (0 = off)")
+	fs.IntVar(&o.huntMaxSteps, "hunt-max-steps", 10, "with --hunt: most tool calls per entry point (ceiling 20)")
 	fs.IntVar(&o.llmSamples, "llm-samples", 1, "ask the model this many times on borderline verdicts and keep the majority (1 = single answer)")
 	fs.IntVar(&o.verdictCacheDays, "verdict-cache-days", 30, "reuse a verdict from an earlier run in this vault for up to this many days when the finding's code, the prompt and the models are all unchanged, instead of asking the model again (0 = always review afresh)")
 	fs.StringVar(&o.issuesMinSeverity, "issues-min-severity", "medium", "with --file-issues: lowest severity to file (critical|high|medium|low)")
@@ -341,6 +345,14 @@ func (o *options) llmWanted() bool {
 // validateLLM fails before any scanning when the LLM setup cannot work, instead of
 // letting every finding fail one at a time after minutes of scanning.
 func (o *options) validateLLM() error {
+	// Checked first: without --triage no AI feature may be on at all, and a hunt
+	// whose candidates nobody reviews must not pass silently.
+	if o.hunt > 0 && !o.triageOn {
+		return fmt.Errorf("--hunt reports candidates for the AI review to confirm, so it needs --triage (or --ai)")
+	}
+	if o.hunt > 0 && o.llmNoCode {
+		return fmt.Errorf("--hunt reads source code, so it cannot be combined with --llm-no-code")
+	}
 	if !o.llmWanted() || o.dryRun {
 		return nil
 	}

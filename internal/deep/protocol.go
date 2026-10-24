@@ -21,6 +21,8 @@ const (
 	ActionListDir        = "list_dir"
 	ActionFindReferences = "find_references"
 	ActionConclude       = "conclude"
+	// ActionReport ends a hunt (hunt.go) with the candidates found, if any.
+	ActionReport = "report"
 )
 
 // Action is one decoded model turn. Fields not used by an action are zero.
@@ -40,6 +42,22 @@ type Action struct {
 	Confidence     flexFloat   `json:"confidence,omitempty"`
 	Reasoning      string      `json:"reasoning,omitempty"`
 	Evidence       flexStrings `json:"evidence,omitempty"`
+	// Route is the source-to-sink path, entry first: "file:line what happens here".
+	// ("path" is taken: it is read_file's argument.)
+	Route flexStrings `json:"route,omitempty"`
+
+	// Candidates are a hunt's findings (report only).
+	Candidates []RawCandidate `json:"candidates,omitempty"`
+}
+
+// RawCandidate is one issue a hunt reports, as the model wrote it.
+type RawCandidate struct {
+	Location  string      `json:"location"` // "file:line" of the sink
+	Class     string      `json:"class"`
+	Severity  string      `json:"severity"`
+	Title     string      `json:"title"`
+	Reasoning string      `json:"reasoning"`
+	Route     flexStrings `json:"route,omitempty"`
 }
 
 // IsTool reports whether the action asks for a tool call.
@@ -104,7 +122,12 @@ func (a Action) compact() string {
 
 // ParseAction decodes and validates one model reply. The error text is fed back to
 // the model for its single repair attempt, so it says what to fix.
-func ParseAction(content string) (Action, error) {
+func ParseAction(content string) (Action, error) { return parseAction(content, ActionConclude) }
+
+// parseAction decodes one reply whose final action must be terminal (conclude for
+// verification, report for a hunt). The other final action is refused, so a model
+// cannot end a hunt with a verdict or a verification with candidates.
+func parseAction(content, terminal string) (Action, error) {
 	var a Action
 	body := llm.ExtractJSON(content)
 	if err := json.Unmarshal([]byte(body), &a); err != nil {
@@ -124,7 +147,17 @@ func ParseAction(content string) (Action, error) {
 		if strings.TrimSpace(a.Symbol) == "" {
 			return Action{}, errors.New(`find_references needs "symbol"`)
 		}
+	case ActionReport:
+		if terminal != ActionReport {
+			return Action{}, fmt.Errorf("unknown action %q; use read_file, grep, list_dir, find_references or conclude", a.Action)
+		}
+		if len(a.Candidates) > maxRawCandidates {
+			a.Candidates = a.Candidates[:maxRawCandidates]
+		}
 	case ActionConclude:
+		if terminal != ActionConclude {
+			return Action{}, errors.New(`end the hunt with "report" (an empty candidates list when you found nothing), not "conclude"`)
+		}
 		switch model.Classification(strings.ToLower(strings.TrimSpace(a.Classification))) {
 		case model.ClassTruePositive, model.ClassFalsePositive, model.ClassUncertain:
 			a.Classification = strings.ToLower(strings.TrimSpace(a.Classification))
@@ -145,10 +178,14 @@ func ParseAction(content string) (Action, error) {
 	case "":
 		return Action{}, errors.New(`the JSON object needs an "action" field`)
 	default:
-		return Action{}, fmt.Errorf("unknown action %q; use read_file, grep, list_dir, find_references or conclude", a.Action)
+		return Action{}, fmt.Errorf("unknown action %q; use read_file, grep, list_dir, find_references or %s", a.Action, terminal)
 	}
 	return a, nil
 }
+
+// maxRawCandidates bounds how many candidates one reply may carry before they are
+// checked; hunt.go keeps fewer.
+const maxRawCandidates = 10
 
 // stepSchema is the JSON Schema sent as response_format. It is flat (not a oneOf)
 // because many OpenAI-compatible servers reject unions; optional fields also keep
@@ -166,7 +203,8 @@ var stepSchema = &llm.Schema{Name: "deep_step", Definition: json.RawMessage(`{
     "classification":{"type":"string","enum":["true_positive","false_positive","uncertain"]},
     "confidence":{"type":"number"},
     "reasoning":{"type":"string"},
-    "evidence":{"type":"array","items":{"type":"string"}}
+    "evidence":{"type":"array","items":{"type":"string"}},
+    "route":{"type":"array","items":{"type":"string"}}
   },
   "required":["action"]
 }`)}

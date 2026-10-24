@@ -96,6 +96,13 @@ func WriteHuman(w io.Writer, s model.Scan) {
 				redact.Secrets(sup.Reason), added)
 		}
 	}
+	if n := len(s.Hunted); n > 0 {
+		fmt.Fprintf(w, "\n%d hunt candidate(s) the AI review did not confirm (--hunt; not counted above, never gate the build):\n", n)
+		for _, f := range s.Hunted {
+			fmt.Fprintf(w, "  [%s] %s at %s:%d — %s\n", f.Severity, f.RuleID, f.Location.File, f.Location.Region.StartLine,
+				redact.Secrets(firstSentence(f.Message)))
+		}
+	}
 	if len(s.Findings) == 0 {
 		switch {
 		case len(s.FailedTools) > 0:
@@ -175,6 +182,12 @@ func WriteHuman(w io.Writer, s model.Scan) {
 				fmt.Fprintf(w, "    fix: %s\n", v.SuggestedFix)
 			}
 		}
+		if steps, from := f.SourcePath(); len(steps) > 0 {
+			fmt.Fprintf(w, "    path (traced by %s):\n", from)
+			for i, s := range steps {
+				fmt.Fprintf(w, "      %d. %s\n", i+1, redact.Secrets(s.String()))
+			}
+		}
 		if d := f.Deep; d != nil {
 			if d.Aborted != "" {
 				fmt.Fprintf(w, "    deep check stopped after %d step(s): %s\n", d.Steps, d.Aborted)
@@ -196,6 +209,13 @@ func WriteHuman(w io.Writer, s model.Scan) {
 			}
 			if r.Diff != "" {
 				fmt.Fprintln(w, "    (patch available in the Evidence Vault)")
+			}
+			if t := r.RegressionTest; t != nil && !f.IsSecret() {
+				where := ""
+				if t.File != "" {
+					where = " for " + t.File
+				}
+				fmt.Fprintf(w, "    regression test proposed%s (not run): %s\n", where, redact.Secrets(t.Description))
 			}
 		}
 	}
@@ -309,4 +329,12 @@ func GatingSeverity(s model.Scan) model.Severity {
 		}
 	}
 	return best
+}
+
+// firstSentence is the text up to its first ". ", for a one-line listing.
+func firstSentence(s string) string {
+	if i := strings.Index(s, ". "); i > 0 {
+		return s[:i]
+	}
+	return s
 }

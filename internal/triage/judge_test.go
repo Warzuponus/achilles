@@ -164,7 +164,7 @@ func TestJudge_UncertainIsNeverOverturned(t *testing.T) {
 
 func TestJudge_PromptStatesTheBurdenForTheDirection(t *testing.T) {
 	// A vague "assume it is wrong" is what left the false-positive direction weak.
-	fpMsgs := judgeMessages(*newFinding(), "ctx", model.Verdict{Classification: model.ClassFalsePositive})
+	fpMsgs := judgeMessages(*newFinding(), "ctx", model.Verdict{Classification: model.ClassFalsePositive}, false)
 	fpSys := fpMsgs[0].Content
 	if !strings.Contains(fpSys, "NOT a real problem") || !strings.Contains(fpSys, "Refute it by showing that it IS") {
 		t.Errorf("false-positive burden missing:\n%s", fpSys)
@@ -173,7 +173,7 @@ func TestJudge_PromptStatesTheBurdenForTheDirection(t *testing.T) {
 		t.Errorf("the naming trap is the measured failure mode; the prompt should name it:\n%s", fpSys)
 	}
 
-	tpSys := judgeMessages(*newFinding(), "ctx", model.Verdict{Classification: model.ClassTruePositive})[0].Content
+	tpSys := judgeMessages(*newFinding(), "ctx", model.Verdict{Classification: model.ClassTruePositive}, false)[0].Content
 	if !strings.Contains(tpSys, "IS a real, exploitable problem") {
 		t.Errorf("true-positive burden missing:\n%s", tpSys)
 	}

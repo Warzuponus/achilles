@@ -228,6 +228,11 @@ func (r *renderer) writeDetail(b *strings.Builder, f model.Finding, withDiff boo
 		if v.Disputed() {
 			b.WriteString("- **Note:** the adversarial pass disagreed with this verdict, but not strongly enough to rule the finding out, so it is kept for a human to confirm.\n")
 		}
+		for _, d := range v.Details() {
+			if t := r.prose(d.Text, maxReason); t != "" {
+				fmt.Fprintf(b, "- **%s:** %s\n", d.Label, t)
+			}
+		}
 		if reason := r.prose(v.Reasoning, maxReason); reason != "" {
 			fmt.Fprintf(b, "\n%s\n", reason)
 		}
@@ -589,7 +594,11 @@ func (r *renderer) suppressedComment(f model.Finding) string {
 
 func (r *renderer) dismissedComment(f model.Finding) string {
 	var b strings.Builder
-	b.WriteString("<!-- achilles:resolved -->\nClosing: the AI review now judges this finding a false positive")
+	if f.Verdict != nil && f.Verdict.Hardening() {
+		b.WriteString("<!-- achilles:resolved -->\nClosing: the AI review now judges this finding a hardening note, a real weakness that another control in the code already stops")
+	} else {
+		b.WriteString("<!-- achilles:resolved -->\nClosing: the AI review now judges this finding a false positive")
+	}
 	if v := f.Verdict; v != nil {
 		fmt.Fprintf(&b, " (confidence %d%%)", pct(v.Confidence))
 		if !isSecretFinding(f) {

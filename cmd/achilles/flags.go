@@ -16,6 +16,10 @@ import (
 // options holds every command-line flag plus the target path. Names, defaults and
 // help text are defined in parseFlags.
 type options struct {
+	// toolLanguages maps each registered tool to the languages its config
+	// declares; buildRegistry fills it so the report can name detected languages
+	// that no scanner which ran covers.
+	toolLanguages     map[string][]string
 	configPath        string
 	profile           string
 	mode              string

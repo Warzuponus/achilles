@@ -133,8 +133,8 @@ func TestVerdictSchema_DeclaresGatesAndStaysValidJSON(t *testing.T) {
 
 func TestPrompts_StateTheGatesAndTheEvidencePrinciple(t *testing.T) {
 	// The gates arrived in v4; v5 changed only the judge. Anything older predates both.
-	if PromptVersion != "triage/v6" {
-		t.Errorf("PromptVersion = %q, want triage/v6", PromptVersion)
+	if PromptVersion != "triage/v7" {
+		t.Errorf("PromptVersion = %q, want triage/v7", PromptVersion)
 	}
 	f := newFinding()
 	sys := triageMessages(*f, "code", nil)[0].Content
@@ -146,7 +146,7 @@ func TestPrompts_StateTheGatesAndTheEvidencePrinciple(t *testing.T) {
 			t.Errorf("triage system prompt lacks %q", want)
 		}
 	}
-	jsys := judgeMessages(*f, "code", model.Verdict{Classification: model.ClassTruePositive})[0].Content
+	jsys := judgeMessages(*f, "code", model.Verdict{Classification: model.ClassTruePositive}, false)[0].Content
 	if !strings.Contains(jsys, "are claims, not evidence") {
 		t.Error("the judge must be told comments and names are claims too")
 	}

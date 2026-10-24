@@ -90,7 +90,7 @@ func TestPlan_JudgeInputIncludesTheVerdictUnderReview(t *testing.T) {
 			judge = cost0{c.InputTokens, c.OutputTokens}
 		}
 	}
-	bare := messageTokens(judgeMessages(*newFinding(), "", model.Verdict{}))
+	bare := messageTokens(judgeMessages(*newFinding(), "", model.Verdict{}, false))
 	if judge.in <= bare {
 		t.Errorf("judge input %d should exceed the bare prompt %d by the verdict size", judge.in, bare)
 	}

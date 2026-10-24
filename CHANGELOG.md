@@ -7,6 +7,30 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **A clearer result for every reviewed finding** (prompt `triage/v7`), modelled on
+  the result contract of Cloudflare's security-audit skill:
+  - **Hardening notes.** A fourth verdict, `hardening`: the flagged weakness is real,
+    but another control in the code already stops the attack. A confident one leaves
+    the gate like a false positive, but every report lists it in its own "Hardening
+    notes" section instead of under "ruled out", and the judge can overturn it.
+  - **Needs validation.** An `uncertain` verdict now names its `blockers` (the exact
+    facts the code shown does not settle) and a `validationPlan` (a check a developer
+    can run, and a fact only whoever runs the system can see). Reports call these
+    findings "needs validation" and show the questions. They still gate.
+  - **Attacker, impact and an assessed severity** for a true positive, on fixed
+    anchors (critical = unauthenticated code execution, full data access or account
+    takeover; high = an explicit control fully defeated; and so on). Shown beside the
+    scanner's severity and exported to SARIF; advisory only, the gate is unchanged.
+  - **Unchecked line references.** Line numbers the review cites in its reasoning,
+    fix idea or the judge's reason are checked against the lines it was shown; any it
+    was not shown are flagged in every report and issue.
+- **Languages no scanner covered.** Reports name the languages detected in the target
+  that no scanner which ran declares (Rust today, for example), so silence there is not
+  read as a clean result.
+- **`achilles-eval --mode verdict --blind-judge`**: the judge sees the claim and the
+  code but not the first pass's reasoning or gate answers. Run it beside a normal run to
+  measure whether that reasoning anchors the judge (the engine option is
+  `triage.Engine.SetBlindJudge`).
 - **`achilles-eval --mode juice-shop`: the first out-of-sample score on real code.** It
   checks out OWASP Juice Shop at a pinned commit and scores Achilles' own rules against
   Juice Shop's own labels: the line each coding challenge marks as vulnerable, and the
@@ -26,6 +50,12 @@ All notable changes to this project are recorded here. The format follows
   run time, and where Achilles loses. `evals/compare/run.sh` reproduces every number.
 - **`achilles-eval --mode owasp --owasp-sarif <report>`** scores a SARIF report from any
   tool instead of running Achilles, and the scorecard now prints pooled precision.
+
+### Changed
+- Triage prompts are now `triage/v7`, so cached verdicts from v6 are not reused, and
+  dismissal counts are not comparable across the boundary: some v6 false positives are
+  now hardening notes. The triage system prompt is about 200 tokens longer per finding
+  (`make eval-gate`: 13,948 to 17,638 prompt tokens over the corpus).
 
 ### Fixed
 - One taint sink that several sources reach was reported once per source by Opengrep:

@@ -108,6 +108,7 @@ func (e *Engine) cacheKey(pf model.Finding, codeContext string, examples []strin
 		Scope    string   `json:"scope"`
 		NoCode   bool     `json:"noCode"`
 		Samples  int      `json:"samples"`
+		Blind    bool     `json:"blindJudge,omitempty"`
 		Tool     string   `json:"tool"`
 		Rule     string   `json:"rule"`
 		Severity string   `json:"severity"`
@@ -117,7 +118,7 @@ func (e *Engine) cacheKey(pf model.Finding, codeContext string, examples []strin
 		Code     []string `json:"code"`
 		Examples []string `json:"examples"`
 	}{
-		Prompt: PromptVersion, Scope: e.cache.scope, NoCode: e.noCode, Samples: e.Samples(),
+		Prompt: PromptVersion, Scope: e.cache.scope, NoCode: e.noCode, Samples: e.Samples(), Blind: e.blindJudge,
 		Tool: pf.Tool, Rule: pf.RuleID, Severity: string(pf.Severity), CWE: pf.CWE, Message: pf.Message,
 		File: pf.Location.File, Code: code, Examples: examples,
 	}

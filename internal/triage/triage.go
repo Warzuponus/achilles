@@ -46,6 +46,8 @@ type Engine struct {
 
 	samples int // triage answers wanted for a borderline verdict; <=1 means one
 
+	blindJudge bool // the judge sees the claim and the code, not the first pass's reasoning
+
 	cache *verdictCache // nil: every finding is reviewed afresh (see cache.go)
 
 	mu    sync.Mutex // guards usage; findings are triaged concurrently
@@ -83,6 +85,12 @@ const sampleTemperature = 0.3
 
 // borderlineConfidence is the confidence below which a verdict is re-sampled.
 const borderlineConfidence = 0.85
+
+// SetBlindJudge hides the triage pass's reasoning and gate answers from the
+// adversarial judge, which then sees only the claim (classification, confidence,
+// exploitability) and the code. Off by default; the eval's --blind-judge arm
+// measures whether it should be on.
+func (e *Engine) SetBlindJudge(on bool) *Engine { e.blindJudge = on; return e }
 
 // SetSamples enables self-consistency sampling: a borderline verdict (uncertain,
 // confidence below 0.85, or one the judge refuted or overturned) is re-asked up to
@@ -221,7 +229,7 @@ func (e *Engine) Triage(ctx context.Context, runID string, f *model.Finding) err
 	}
 
 	// --- adversarial judge pass ---
-	jResp, err := e.completeValidated(ctx, "judge", judgeMessages(pf, codeContext, v), "judge", judgeSchema, &judgeCheck{})
+	jResp, err := e.completeValidated(ctx, "judge", judgeMessages(pf, codeContext, v, e.blindJudge), "judge", judgeSchema, &judgeCheck{})
 	if err != nil {
 		return fmt.Errorf("judge llm: %w", err)
 	}
@@ -237,7 +245,7 @@ func (e *Engine) Triage(ctx context.Context, runID string, f *model.Finding) err
 	j := parseJudge(jResp.Content)
 	v.RefuteReason = j.Reason
 	switch v.Classification {
-	case model.ClassFalsePositive:
+	case model.ClassFalsePositive, model.ClassHardening:
 		// Surfacing is the safe direction, so the judge's word is enough.
 		v.Overturned = j.Refuted
 	case model.ClassTruePositive:
@@ -265,6 +273,10 @@ func (e *Engine) Triage(ctx context.Context, runID string, f *model.Finding) err
 	if e.Samples() > 1 && borderline(v) {
 		v = e.resample(ctx, runID, f.Fingerprint, pf, codeContext, examples, v)
 	}
+
+	// Line references in the text a reader will see must point at code the model
+	// was actually shown; anything else is flagged, never silently trusted.
+	v.UnverifiedCitations = unverifiedCitations(pf.Location.File, codeContext, v.Reasoning, v.SuggestedFix, v.RefuteReason)
 
 	f.Verdict = &v
 	f.Provenance = &model.Provenance{TriageModel: tResp.Model, JudgeModel: jResp.Model, PromptVersion: PromptVersion}
@@ -331,7 +343,7 @@ func consolidate(samples []model.Verdict) model.Verdict {
 	}
 
 	winner, best, tied := model.ClassUncertain, 0, false
-	for _, c := range []model.Classification{model.ClassTruePositive, model.ClassFalsePositive, model.ClassUncertain} {
+	for _, c := range []model.Classification{model.ClassTruePositive, model.ClassFalsePositive, model.ClassHardening, model.ClassUncertain} {
 		switch n := counts[c]; {
 		case n > best:
 			winner, best, tied = c, n, false
@@ -390,6 +402,9 @@ func consolidate(samples []model.Verdict) model.Verdict {
 		}
 	}
 	out.Stability = &model.Stability{Samples: len(samples), Agreeing: agreeing, Classifications: counts}
+	// The representative may carry detail for another classification (a tie
+	// becomes "uncertain"); keep only what fits the result.
+	out.NormalizeDetail()
 	return out
 }
 
@@ -473,10 +488,10 @@ type verdictCheck struct {
 
 func (c *verdictCheck) validate() error {
 	switch c.Classification {
-	case model.ClassTruePositive, model.ClassFalsePositive, model.ClassUncertain:
+	case model.ClassTruePositive, model.ClassFalsePositive, model.ClassHardening, model.ClassUncertain:
 		return nil
 	}
-	return fmt.Errorf("classification must be true_positive, false_positive or uncertain, got %q", c.Classification)
+	return fmt.Errorf("classification must be true_positive, false_positive, hardening or uncertain, got %q", c.Classification)
 }
 
 type judgeCheck struct {
@@ -520,7 +535,7 @@ func parseVerdict(s string) (model.Verdict, error) {
 		return model.Verdict{}, err
 	}
 	switch v.Classification {
-	case model.ClassTruePositive, model.ClassFalsePositive, model.ClassUncertain:
+	case model.ClassTruePositive, model.ClassFalsePositive, model.ClassHardening, model.ClassUncertain:
 	default:
 		// Missing or out of vocabulary: say we do not know rather than carry a
 		// label nothing downstream understands.
@@ -536,6 +551,10 @@ func parseVerdict(s string) (model.Verdict, error) {
 	}
 	// A confidence outside 0..1 must not clear a floor by accident ("85" is 0.85).
 	v.Confidence = model.NormalizeConfidence(v.Confidence)
+	// Blockers and a validation plan belong to an uncertain verdict; attacker,
+	// impact and assessed severity to a true positive. Bound them and drop the rest.
+	v.NormalizeDetail()
+	v.UnverifiedCitations = nil
 	// Fields the pipeline owns are never taken from the model's reply.
 	v.Stability = nil
 	v.Refuted, v.Overturned, v.RefuteReason = false, false, ""

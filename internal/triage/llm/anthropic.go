@@ -139,7 +139,7 @@ func (c *AnthropicClient) Complete(ctx context.Context, req Request) (Response, 
 	}
 	if req.Schema != nil {
 		// Structured outputs: the reply is held to the schema.
-		body.OutputConfig = &anthropicOutputConfig{Format: anthropicFormat{Type: "json_schema", Schema: req.Schema.Definition}}
+		body.OutputConfig = &anthropicOutputConfig{Format: anthropicFormat{Type: "json_schema", Schema: anthropicSchema(req.Schema.Definition)}}
 	}
 	// req.JSON has no Messages API equivalent short of a schema; the prompts ask
 	// for JSON and callers extract it.
@@ -371,4 +371,67 @@ func readAnthropicStream(r io.Reader) (Response, error) {
 		},
 		Truncated: stop == "max_tokens",
 	}, nil
+}
+
+// anthropicUnsupported are JSON Schema keywords the Messages API's structured
+// outputs reject. Achilles' schemas are shared with OpenAI-compatible endpoints,
+// so they are adapted here rather than at each call site.
+var anthropicUnsupported = []string{
+	"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+	"minLength", "maxLength", "maxItems", "uniqueItems",
+}
+
+// anthropicSchema adapts a schema to what structured outputs accept: every object
+// gets additionalProperties false (required there, and an object schema without
+// it is a 400), and unsupported constraints are dropped. The callers validate
+// what they decode, so a dropped bound is still checked. A schema that does not
+// parse is passed through for the API to reject.
+func anthropicSchema(def json.RawMessage) json.RawMessage {
+	var v any
+	if err := json.Unmarshal(def, &v); err != nil {
+		return def
+	}
+	adaptSchema(v)
+	out, err := json.Marshal(v)
+	if err != nil {
+		return def
+	}
+	return out
+}
+
+func adaptSchema(v any) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return
+	}
+	for _, k := range anthropicUnsupported {
+		delete(m, k)
+	}
+	// minItems is accepted only as 0 or 1.
+	if n, ok := m["minItems"].(float64); ok && n > 1 {
+		delete(m, "minItems")
+	}
+	_, hasProps := m["properties"]
+	if t, _ := m["type"].(string); t == "object" || hasProps {
+		m["additionalProperties"] = false
+	}
+	// properties and $defs map names to schemas: recurse into the values only, so
+	// a property called "minimum" or "pattern" is left alone.
+	for _, k := range []string{"properties", "$defs", "definitions"} {
+		if sub, ok := m[k].(map[string]any); ok {
+			for _, s := range sub {
+				adaptSchema(s)
+			}
+		}
+	}
+	if items, ok := m["items"]; ok {
+		adaptSchema(items)
+	}
+	for _, k := range []string{"anyOf", "allOf", "oneOf"} {
+		if list, ok := m[k].([]any); ok {
+			for _, s := range list {
+				adaptSchema(s)
+			}
+		}
+	}
 }

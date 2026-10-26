@@ -47,9 +47,19 @@ of Achilles' own (no SDK, no new dependency), for any `--llm-base-url` on
   `ANTHROPIC_BASE_URL` and the like are not read, so they cannot redirect the key
   Achilles has checked.
 
-It is still marked experimental: its tests run against a fake of the Messages API,
-not the live service. OpenRouter (`--llm-provider openrouter --llm-model
-anthropic/<model>`) remains an exercised path for Claude models.
+- Each verdict schema is adapted to what structured outputs accept: every object gets
+  `additionalProperties: false`, and length and range constraints are dropped (the
+  decoded answer is still validated).
+
+It is still marked experimental. Its unit tests run against a fake of the Messages
+API. The live tests (`TestLive*` in `internal/triage/llm`, skipped unless
+`ACHILLES_TEST_ANTHROPIC_API_KEY` is set; `ACHILLES_TEST_ANTHROPIC_BASE_URL` points
+them at another Messages-compatible server) and the `Live Anthropic` workflow, started
+by hand, run it against a live service. They have passed through OpenRouter's
+Messages-compatible endpoint (`anthropic/claude-sonnet-5.5`, October 2026), which
+checks the requests, streaming, structured outputs and error handling against a real
+server, but not yet against `api.anthropic.com` itself. OpenRouter (`--llm-provider
+openrouter --llm-model anthropic/<model>`) remains an exercised path for Claude models.
 
 Anything else (vLLM, LiteLLM, Azure OpenAI, a gateway) is `--llm-base-url`. An
 explicit `--llm-base-url` always wins over a provider preset. There is deliberately

@@ -109,7 +109,7 @@ func checkPattern(p string) error {
 		return fmt.Errorf("empty path pattern")
 	}
 	if strings.HasPrefix(p, "/") || strings.Contains(p, "..") {
-		return fmt.Errorf("path pattern %q: must be relative to the repository root, without ..", p)
+		return fmt.Errorf("path pattern %q: use a path relative to the repository root, with no .. segment", p)
 	}
 	if _, err := path.Match(strings.TrimSuffix(strings.TrimSuffix(p, "/**"), "/"), ""); err != nil {
 		return fmt.Errorf("path pattern %q: %v", p, err)

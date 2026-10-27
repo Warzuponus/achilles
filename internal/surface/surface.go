@@ -62,10 +62,10 @@ type Hotspot struct {
 	Reasons []string `json:"reasons"`
 }
 
-// Infra is a deployment or CI file found by name.
+// Infra is a deployment or CI file, found by its name or the head of its content.
 type Infra struct {
 	File string `json:"file"`
-	Kind string `json:"kind"` // dockerfile | compose | terraform | kubernetes | helm | ci-workflow
+	Kind string `json:"kind"` // dockerfile | compose | terraform | kubernetes | helm | cloudformation | arm | bicep | serverless | ci-workflow
 }
 
 // Summary counts the facts by kind.
@@ -78,7 +78,7 @@ type Summary struct {
 }
 
 // Map is the attack-surface map of one target. It is also the scan plan written
-// by --plan-out: later milestones add components, hypotheses and a tool plan.
+// by --plan-out: later milestones add components and hypotheses.
 type Map struct {
 	Version   int    `json:"version"`
 	Target    string `json:"target"` // the target's base name, never an absolute path
@@ -94,8 +94,47 @@ type Map struct {
 	Facts     []Fact    `json:"facts"`
 	// FactsDropped counts facts left out of Facts by MaxFacts (scores still count them).
 	FactsDropped int `json:"factsDropped,omitempty"`
+	// NetworkEntries counts network entry points (routes, request input, gRPC,
+	// consumers) outside tests and out-of-scope paths.
+	NetworkEntries int `json:"networkEntries"`
+	// Languages counts files per language by extension: all of them, and those
+	// outside tests and out-of-scope paths. Build output is not counted.
+	Languages map[string]LangCount `json:"languages"`
+	// Markers are project files that some scanners need before they can run
+	// (go.mod, psalm.xml, a .NET project, compiled JVM bytecode, a Rails app).
+	Markers []string `json:"markers,omitempty"`
+	// Context is the threat-context file that shaped this map, if any.
+	Context *Context `json:"context,omitempty"`
+	// Depth is how deeply the target should be scanned, and why.
+	Depth Depth `json:"depth"`
+	// ToolPlan is the choice of scanners made from this map (filled in by the
+	// caller, which knows the tool registry).
+	ToolPlan *model.ToolPlan `json:"toolPlan,omitempty"`
 
-	score map[string]float64
+	score   map[string]float64
+	markers map[string]bool
+}
+
+// LangCount is a language's file count.
+type LangCount struct {
+	Files   int `json:"files"`
+	InScope int `json:"inScope"`
+}
+
+// Marker names.
+const (
+	MarkerGoMod     = "go.mod"
+	MarkerPsalm     = "psalm.xml"
+	MarkerDotNet    = "dotnet-project"
+	MarkerBytecode  = "jvm-bytecode"
+	MarkerRails     = "rails-app"
+	MarkerIaC       = "iac"
+	MarkerWorkflows = "github-workflows"
+)
+
+// HasMarker reports whether the walk found a marker.
+func (m *Map) HasMarker(name string) bool {
+	return m != nil && m.markers[name]
 }
 
 // Options bounds the walk. Zero values take the defaults.
@@ -105,6 +144,10 @@ type Options struct {
 	MaxFileBytes int64 // bytes read per file; default 1 MiB
 	MaxFacts     int   // facts kept in the document; default 5000
 	MaxHotspots  int   // hotspots kept in the document; default 500
+	MaxEntries   int   // directory entries visited; default 200000
+
+	// Context is the repository's threat-context file (LoadContext), or nil.
+	Context *Context
 }
 
 func (o Options) withDefaults() Options {
@@ -123,15 +166,23 @@ func (o Options) withDefaults() Options {
 	if o.MaxHotspots <= 0 {
 		o.MaxHotspots = 500
 	}
+	if o.MaxEntries <= 0 {
+		o.MaxEntries = 200000
+	}
 	return o
 }
 
-// skipDirs are trees that are not the project's own code: dependencies, build
-// output, caches. Protected directories (.git, .achilles, .ssh ...) are skipped
+// skipDirs are trees that are not the project's own code: vendored dependencies
+// and caches. Protected directories (.git, .achilles, .ssh ...) are skipped
 // through deep.ProtectedPath.
 var skipDirs = map[string]bool{
-	"dist": true, "build": true, "target": true, "out": true, "bower_components": true,
-	"third_party": true, "third-party": true,
+	"bower_components": true, "third_party": true, "third-party": true,
+}
+
+// buildDirs hold build output. Nothing in them is read or scored, but they are
+// walked for compiled bytecode, which some scanners need.
+var buildDirs = map[string]bool{
+	"dist": true, "build": true, "target": true, "out": true, "bin": true, "obj": true,
 }
 
 // Build walks root and returns its attack-surface map. Unreadable files are
@@ -155,8 +206,16 @@ func Build(root string, opt Options) (*Map, error) {
 	}
 	defer rootFS.Close()
 
-	m := &Map{Version: Version, Target: filepath.Base(abs), score: map[string]float64{}}
+	m := &Map{Version: Version, Target: filepath.Base(abs), Context: opt.Context,
+		Languages: map[string]LangCount{}, score: map[string]float64{}, markers: map[string]bool{}}
 	var facts []Fact
+	var read []string
+	var outOfScope []string
+	if opt.Context != nil {
+		outOfScope = opt.Context.OutOfScope
+	}
+	entries := 0
+	inBuild := ""
 	walkErr := filepath.WalkDir(abs, func(p string, d fs.DirEntry, werr error) error {
 		if werr != nil {
 			if d != nil && d.IsDir() && p != abs {
@@ -172,14 +231,42 @@ func Build(root string, opt Options) (*Map, error) {
 			return nil
 		}
 		rel = filepath.ToSlash(rel)
+		if entries++; entries > opt.MaxEntries {
+			m.Truncated = true
+			return filepath.SkipAll
+		}
+		if inBuild != "" && !strings.HasPrefix(rel, inBuild+"/") {
+			inBuild = ""
+		}
 		if d.IsDir() {
 			if deep.ProtectedPath(rel) || deep.NoiseDir(d.Name()) || skipDirs[strings.ToLower(d.Name())] {
 				return fs.SkipDir
+			}
+			if inBuild == "" && buildDirs[strings.ToLower(d.Name())] {
+				inBuild = rel
 			}
 			return nil
 		}
 		if !d.Type().IsRegular() {
 			return nil
+		}
+		if inBuild != "" {
+			if ext := strings.ToLower(path.Ext(rel)); ext == ".class" || ext == ".jar" || ext == ".war" {
+				m.markers[MarkerBytecode] = true
+			}
+			return nil
+		}
+		scoped := !testOnly(rel) && !matchAny(outOfScope, rel)
+		if l := countLang(rel); l != "" {
+			c := m.Languages[l]
+			c.Files++
+			if scoped {
+				c.InScope++
+			}
+			m.Languages[l] = c
+		}
+		if scoped {
+			m.noteMarker(rel)
 		}
 		if deep.ProtectedPath(rel) {
 			// A credential file is an asset by its name alone. It is never opened.
@@ -190,7 +277,8 @@ func Build(root string, opt Options) (*Map, error) {
 			m.Infra = append(m.Infra, Infra{File: rel, Kind: k})
 		}
 		lang := langOf(rel)
-		if lang == "" && !strings.HasSuffix(strings.ToLower(rel), ".yaml") && !strings.HasSuffix(strings.ToLower(rel), ".yml") {
+		sniff := lang == "" && sniffInfra(rel)
+		if lang == "" && !sniff {
 			return nil
 		}
 		if m.FilesRead >= opt.MaxFiles || m.BytesRead >= opt.MaxBytes {
@@ -201,26 +289,61 @@ func Build(root string, opt Options) (*Map, error) {
 		if ierr != nil {
 			return nil
 		}
-		src, rerr2 := readBounded(rootFS, rel, min(fi.Size(), opt.MaxFileBytes))
+		limit := min(fi.Size(), opt.MaxFileBytes)
+		if sniff {
+			limit = min(limit, 64<<10) // the kind of a config file shows in its head
+		}
+		src, rerr2 := readBounded(rootFS, rel, limit)
 		if rerr2 != nil || bytes.IndexByte(src[:min(len(src), 8000)], 0) >= 0 {
 			return nil
 		}
 		m.FilesRead++
 		m.BytesRead += int64(len(src))
 		if lang == "" {
-			if isKubernetes(src) && !hasInfra(m.Infra, rel) {
-				m.Infra = append(m.Infra, Infra{File: rel, Kind: "kubernetes"})
+			if k := infraByContent(rel, src); k != "" && !hasInfra(m.Infra, rel) {
+				m.Infra = append(m.Infra, Infra{File: rel, Kind: k})
 			}
 			return nil
 		}
-		facts = append(facts, scanFile(rel, lang, src)...)
+		fileFacts := scanFile(rel, lang, src)
+		if scoped {
+			for _, f := range fileFacts {
+				if f.Kind == KindEntry && f.Class != inventory.KindCLI {
+					m.NetworkEntries++
+				}
+			}
+		}
+		read = append(read, rel)
+		facts = append(facts, fileFacts...)
 		return nil
 	})
 	if walkErr != nil {
 		return nil, walkErr
 	}
-	m.finish(facts, opt)
+	for _, i := range m.Infra {
+		m.markers[MarkerIaC] = m.markers[MarkerIaC] || i.Kind != "ci-workflow"
+		if i.Kind == "ci-workflow" && strings.Contains("/"+i.File, "/.github/workflows/") {
+			m.markers[MarkerWorkflows] = true
+		}
+	}
+	m.finish(facts, read, opt)
+	m.Depth = DecideDepth(opt.Context, m)
 	return m, nil
+}
+
+// noteMarker records the project files some scanners need.
+func (m *Map) noteMarker(rel string) {
+	base := strings.ToLower(path.Base(rel))
+	switch {
+	case base == "go.mod":
+		m.markers[MarkerGoMod] = true
+	case rel == "psalm.xml":
+		m.markers[MarkerPsalm] = true // Achilles runs Psalm with the root's psalm.xml
+	case strings.HasSuffix(base, ".csproj") || strings.HasSuffix(base, ".vbproj") || strings.HasSuffix(base, ".sln"):
+		m.markers[MarkerDotNet] = true
+	case strings.HasSuffix(rel, "config/routes.rb") || strings.HasSuffix(rel, "config/application.rb"):
+		m.markers[MarkerRails] = true
+	}
 }
 
 func readBounded(r *os.Root, rel string, n int64) ([]byte, error) {
@@ -242,7 +365,7 @@ func hasInfra(in []Infra, file string) bool {
 }
 
 // finish scores the files and fills the document fields.
-func (m *Map) finish(facts []Fact, opt Options) {
+func (m *Map) finish(facts []Fact, read []string, opt Options) {
 	byFile := map[string][]Fact{}
 	for _, f := range facts {
 		byFile[f.File] = append(byFile[f.File], f)
@@ -259,8 +382,31 @@ func (m *Map) finish(facts []Fact, opt Options) {
 			m.Summary.AI++
 		}
 	}
-	for file, fs := range byFile {
+	var crown, outOfScope []string
+	if opt.Context != nil {
+		crown, outOfScope = opt.Context.CrownJewels, opt.Context.OutOfScope
+	}
+	files := map[string]bool{}
+	for f := range byFile {
+		files[f] = true
+	}
+	for _, f := range read {
+		if matchAny(crown, f) {
+			files[f] = true // a crown jewel ranks first even with no hint in it
+		}
+	}
+	for file := range files {
+		fs := byFile[file]
 		score, reasons := scoreFile(file, fs)
+		if matchAny(crown, file) {
+			score = min(score+0.3, 1)
+			reasons = append(reasons, "crown jewel (threat context)")
+		}
+		if matchAny(outOfScope, file) {
+			score *= 0.25
+			reasons = append(reasons, "out of scope (threat context, scored down)")
+		}
+		score = float64(int(score*100+0.5)) / 100
 		if score <= 0 {
 			continue
 		}
@@ -301,6 +447,10 @@ func (m *Map) finish(facts []Fact, opt Options) {
 	if m.Hotspots == nil {
 		m.Hotspots = []Hotspot{}
 	}
+	for k := range m.markers {
+		m.Markers = append(m.Markers, k)
+	}
+	sort.Strings(m.Markers)
 }
 
 // Score returns a file's hotspot score (0 when it has none or is unknown). The

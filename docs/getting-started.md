@@ -117,7 +117,9 @@ achilles init
 ```
 
 One command for what the rest of this guide explains piece by piece: it writes
-`.achilles.yaml` (the gate and the baseline), a CI workflow for GitHub
+`.achilles.yaml` (the gate and the baseline), `.achilles/threat-context.yaml` (what
+the code is and what matters most in it, every question left for you to answer; see
+[the threat-context file](surface-map.md#the-threat-context-file)), a CI workflow for GitHub
 (`.github/workflows/achilles.yml`) or GitLab (`.gitlab/achilles.yml`, to include
 from `.gitlab-ci.yml`), adds the Evidence Vault to `.gitignore`, and, when the
 default scanners are installed, scans once to seed `.achilles/baseline.json` so that

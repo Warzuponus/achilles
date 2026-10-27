@@ -166,6 +166,12 @@ func run(argv []string) error {
 	// run, and is reported as a failed tool instead.
 	historyDiags := planHistoryScan(o, cfg, absTarget, os.Stderr)
 
+	// Model phase: read the threat context, map the attack surface and choose the
+	// scanners, before the registry is built from that choice (no model call).
+	if err := prepareModel(o, cfg, absTarget, os.Stderr); err != nil {
+		return err
+	}
+
 	reg, shadow, err := buildRegistry(o, cfg, gate, runner, opengrepRules, shadowRules)
 	if err != nil {
 		return err
@@ -180,8 +186,7 @@ func run(argv []string) error {
 	recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta},
 		scanMetaPayload(absTarget, o.targetLabel, o.sourceCommit, string(m), o.profile, toolIDs(reg)))
 
-	// Model phase: map the attack surface before the scanners run (no model call).
-	if err := buildPlan(o, ev, runID, absTarget, os.Stderr); err != nil {
+	if err := recordPlan(o, ev, runID, os.Stderr); err != nil {
 		return err
 	}
 
@@ -193,6 +198,7 @@ func run(argv []string) error {
 		return errInterrupted
 	}
 	diags = append(diags, historyDiags...)
+	applyToolPlan(o, &scan)
 	collapseHistory(&scan, os.Stderr)
 	// The repository's own scanner configuration is named, never applied silently.
 	diags = append(diags, applyRepoConfigPolicy(o.noRepoConfig, repoConfigInEffect(cfg, reg, absTarget), &scan, os.Stderr)...)

@@ -59,13 +59,14 @@ func WriteSARIFReport(w io.Writer, s model.Scan) error {
 		r.Fixes = sarifFix(f)
 		run.Results = append(run.Results, r)
 	}
-	if len(s.FailedTools) > 0 {
-		inv := model.SarifInvocation{ExecutionSuccessful: false}
+	if plan := toolPlanNotifications(s.ToolPlan); len(s.FailedTools) > 0 || len(plan) > 0 {
+		inv := model.SarifInvocation{ExecutionSuccessful: len(s.FailedTools) == 0}
 		for _, t := range s.FailedTools {
 			inv.ToolExecutionNotifications = append(inv.ToolExecutionNotifications, model.SarifNotification{
 				Level: "error", Message: model.SarifMessage{Text: t + " failed to run or its output could not be read; results are incomplete"},
 			})
 		}
+		inv.ToolExecutionNotifications = append(inv.ToolExecutionNotifications, plan...)
 		run.Invocations = []model.SarifInvocation{inv}
 	}
 	log := model.SarifLog{
@@ -284,6 +285,16 @@ func WriteMarkdown(w io.Writer, s model.Scan) error {
 	if len(s.RepoConfig) > 0 {
 		fmt.Fprintf(w, "Scanner configuration from the scanned repository was in effect (%s). It can remove findings before Achilles sees them.\n\n",
 			MarkdownText(strings.Join(s.RepoConfig, "; ")))
+	}
+	if p := s.ToolPlan; p != nil {
+		fmt.Fprintf(w, "**%s.**\n\n", MarkdownText(toolPlanHeader(p)))
+		lines := toolPlanLines(p)
+		for _, l := range lines {
+			fmt.Fprintf(w, "- %s\n", MarkdownText(l))
+		}
+		if len(lines) > 0 {
+			fmt.Fprintln(w)
+		}
 	}
 	if t := s.Triage; t != nil && t.Aborted != "" {
 		fmt.Fprintf(w, "> **The AI review did not complete:** %s. The findings below are scanner output that was not reviewed.\n\n", MarkdownText(t.Aborted))

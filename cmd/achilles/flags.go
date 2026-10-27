@@ -97,8 +97,11 @@ type options struct {
 	reviewOn            bool
 	scaAdvice           bool
 	threatModelOut      string
-	prioritize          string       // --prioritize: severity | surface
-	planOut             string       // --plan-out: write the pre-scan attack-surface map here
+	prioritize          string // --prioritize: severity | surface
+	planOut             string // --plan-out: write the pre-scan attack-surface map here
+	allTools            bool   // --all-tools: the scan plan skips no scanner
+	threatContext       *surface.Context
+	toolPlan            *model.ToolPlan
 	surface             *surface.Map // built by buildPlan; nil unless planWanted
 	targetLabel         string
 	sourceCommit        string
@@ -214,6 +217,7 @@ func defineFlags() (*flag.FlagSet, *options) {
 	fs.BoolVar(&o.scaAdvice, "sca-advice", false, "run the SCA dependency-upgrade advisor (merge-safety-scored; needs --llm-model)")
 	fs.StringVar(&o.threatModelOut, "threat-model", "", "infer an OTM threat model and write it to this file (needs --llm-model)")
 	fs.StringVar(&o.prioritize, "prioritize", "severity", "order the AI review and --deep-verify take findings in, which decides what is reviewed when --llm-budget or --max-cost runs out: severity | surface (severity weighted by how exposed the file is: network entry points, dangerous operations, missing guards, credentials, LLM calls). Reordering only: every finding is still reviewed when the budget allows")
+	fs.BoolVar(&o.allTools, "all-tools", false, "run every scanner in the profile that applies to the target's languages, even those the scan plan would skip as having nothing to analyze (a Go scanner with no go.mod, an IaC scanner with no IaC files, a language found only in tests or out-of-scope paths), and add every opt-in scanner whose files are present (zizmor for GitHub workflows)")
 	fs.StringVar(&o.planOut, "plan-out", "", "map the target's attack surface before scanning (entry points, dangerous operations, guards, assets, AI surface, deployment files, per-file hotspot scores) and write it to this JSON file. No model is called")
 	fs.StringVar(&o.targetLabel, "target-label", "", "record this stable, non-secret identity (e.g. a repo URL) as the run's target instead of the scanned path (used by achilles-fleet for fetched checkouts)")
 	fs.StringVar(&o.sourceCommit, "source-commit", "", "record the scanned source's commit sha in the run metadata (used by achilles-fleet)")

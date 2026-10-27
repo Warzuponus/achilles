@@ -58,7 +58,7 @@
 <li><a href="#reports-and-gating">Reports & Gating</a></li>
 <li><a href="#llm-and-agents">LLM Triage & Agents</a></li>
 <li><a href="#deep-verify">Deep Verification</a></li>
-<li><a href="#surface-map">Surface Map & Review Order</a></li>
+<li><a href="#surface-map">Surface Map & Scan Plan</a></li>
 <li><a href="#verifying-fixes">Verifying Fixes</a></li>
 <li><a href="#benchmarking">Benchmarking Detection</a></li>
 <li><a href="#comparison">Comparison with Other Tools</a></li>
@@ -184,7 +184,9 @@ recorded to the <strong>Evidence Vault</strong> at <code>.achilles/vault.jsonl</
 <pre><code class="language-bash">achilles init
 </code></pre>
 <p>One command for what the rest of this guide explains piece by piece: it writes
-<code>.achilles.yaml</code> (the gate and the baseline), a CI workflow for GitHub
+<code>.achilles.yaml</code> (the gate and the baseline), <code>.achilles/threat-context.yaml</code> (what
+the code is and what matters most in it, every question left for you to answer; see
+<a href="#surface-map">the threat-context file</a>), a CI workflow for GitHub
 (<code>.github/workflows/achilles.yml</code>) or GitLab (<code>.gitlab/achilles.yml</code>, to include
 from <code>.gitlab-ci.yml</code>), adds the Evidence Vault to <code>.gitignore</code>, and, when the
 default scanners are installed, scans once to seed <code>.achilles/baseline.json</code> so that
@@ -250,7 +252,7 @@ a path that begins with a dash.</p>
 </tr>
 <tr>
 <td><code>achilles init [--ci auto\|github\|gitlab\|none] [--no-baseline] [--force] [--dry-run] [DIR]</code></td>
-<td>set a repository up in one step: <code>.achilles.yaml</code> (fail on high, use the baseline), a CI workflow (GitHub or GitLab, detected; needs no secret), the Evidence Vault in <code>.gitignore</code>, and a baseline seeded from a scan when the default scanners are installed (a scan that could not run every scanner seeds nothing). Existing files are kept unless <code>--force</code></td>
+<td>set a repository up in one step: <code>.achilles.yaml</code> (fail on high, use the baseline), <code>.achilles/threat-context.yaml</code> (the depth questions, crown jewels and out-of-scope paths, all commented out; see <a href="#surface-map">Surface map</a>), a CI workflow (GitHub or GitLab, detected; needs no secret), the Evidence Vault in <code>.gitignore</code>, and a baseline seeded from a scan when the default scanners are installed (a scan that could not run every scanner seeds nothing). Existing files are kept unless <code>--force</code></td>
 </tr>
 <tr>
 <td><code>achilles doctor</code></td>
@@ -590,7 +592,12 @@ you set there wins over the repository's file.</p>
 <tr>
 <td><code>--plan-out</code></td>
 <td>—</td>
-<td>map the attack surface before scanning (entry points, dangerous operations, guards, assets, AI surface, per-file hotspot scores) and write it to this JSON file; no model is called</td>
+<td>map the attack surface before scanning (entry points, dangerous operations, guards, assets, AI surface, per-file hotspot scores, scan depth, tool plan) and write it to this JSON file; no model is called</td>
+</tr>
+<tr>
+<td><code>--all-tools</code></td>
+<td>off</td>
+<td>the scan plan skips no scanner (a Go scanner with no <code>go.mod</code>, an IaC scanner with no IaC files, a language found only in tests or out-of-scope paths), and adds every opt-in scanner whose files are present (zizmor for GitHub workflows). Does not change the profile; combine with <code>--profile full</code> for the heavy analyzers. See <a href="#surface-map">Surface map</a></td>
 </tr>
 <tr>
 <td><code>--hunt</code></td>
@@ -2172,7 +2179,7 @@ recorded in the vault with source <code>deep-verify</code>.</p>
 <p><code>internal/deep</code>: <code>sandbox.go</code> (the tool sandbox), <code>protocol.go</code> (the JSON protocol),
 <code>deep.go</code> (the loop), <code>apply.go</code> (<code>Apply</code> and <code>Select</code>), <code>prompts.go</code>.
 <code>cmd/achilles/deep.go</code> wires it into a run.</p></section>
-<section id="surface-map"><h1>Surface Map & Review Order</h1>
+<section id="surface-map"><h1>Surface Map & Scan Plan</h1>
 <p>Before the scanners run, Achilles can map where the target is exposed: where
 attacker-influenced input enters, where it could do damage, what guards it, what is
 worth stealing, and where the code talks to an LLM. It scores every file from that
@@ -2186,13 +2193,21 @@ achilles --triage --deep-verify 10 --prioritize surface --plan-out plan.json ./s
 
 # Only the map, no AI at all
 achilles --plan-out plan.json ./src
+
+# Every scanner the plan would skip, too
+achilles --all-tools ./src
 </code></pre>
+<p>The same map, together with the repository's <a href="#the-threat-context-file">threat-context
+file</a>, sets the <a href="#scan-depth">scan depth</a> and the <a href="#the-tool-plan">tool
+plan</a>: which scanners are worth running on this target.</p>
 <h2>What it can and cannot change</h2>
-<p>The map <strong>only orders work</strong>. It never removes a finding, never lowers a severity,
-never skips a scanner and is never a reason to dismiss a finding. Every finding is
-still reviewed when the budget allows, and a finding the budget did not reach is
-reported as unreached, exactly as with severity order. A wrong map therefore costs
-ordering, never coverage.</p>
+<p>The map <strong>orders work and chooses scanners</strong>. It never removes a finding, never
+lowers a severity and is never a reason to dismiss a finding. Every finding is still
+reviewed when the budget allows, and a finding the budget did not reach is reported
+as unreached, exactly as with severity order.</p>
+<p>The only scanners the <a href="#the-tool-plan">tool plan</a> skips are ones with nothing to
+analyze on this target, each named with a reason you can check, and <code>--all-tools</code>
+turns every skip off.</p>
 <p><code>--prioritize severity</code> (the default) is the order Achilles has always used: most
 severe first.</p>
 <h2>What the map looks for</h2>
@@ -2232,15 +2247,20 @@ severe first.</p>
 </tr>
 <tr>
 <td>Deployment files</td>
-<td>Dockerfiles, Compose, Terraform, Helm, Kubernetes manifests, CI workflows</td>
-<td>by name (Kubernetes by content)</td>
+<td>Dockerfiles, Compose, Terraform, Helm, Kubernetes, CloudFormation, ARM and Bicep templates, Serverless, CI workflows</td>
+<td>by name, or by the head of a YAML or JSON file</td>
 </tr>
 </tbody>
 </table>
-<p>Dependency and build trees (<code>node_modules</code>, <code>vendor</code>, <code>dist</code>, <code>third_party</code>, ...),
-<code>.git</code>, the Evidence Vault and credential files are skipped, the same set the deep
-verifier refuses to read. The walk stops at 20,000 files or 256 MiB and says so on
-stderr when it does; files past that point score 0 and keep severity order.</p>
+<p>Dependency trees (<code>node_modules</code>, <code>vendor</code>, <code>third_party</code>, ...), <code>.git</code>, the Evidence
+Vault and credential files are skipped, the same set the deep verifier refuses to
+read. Build output (<code>dist</code>, <code>build</code>, <code>target</code>, <code>out</code>, <code>bin</code>, <code>obj</code>) is not scored;
+it is only looked through for compiled JVM bytecode, which FindSecBugs needs. The
+map also counts files per language and notes the project files some scanners need
+(<code>go.mod</code>, <code>psalm.xml</code>, a .NET project, a Rails app, IaC files, GitHub workflows).
+The walk stops at 20,000 files, 256 MiB or 200,000 directory entries and says so on
+stderr when it does; files past that point score 0 and keep severity order, and the
+tool plan then skips nothing.</p>
 <h2>How a file is scored</h2>
 <p>Each file gets a score from 0 to 1, with the reasons in the plan:</p>
 <table>
@@ -2283,6 +2303,14 @@ stderr when it does; files past that point score 0 and keep severity order.</p>
 <td>test file or <code>testdata/</code></td>
 <td>score × 0.25</td>
 </tr>
+<tr>
+<td>crown jewel (<a href="#the-threat-context-file">threat context</a>)</td>
+<td>0.30 (a crown jewel with no other hint still gets it)</td>
+</tr>
+<tr>
+<td>out of scope (<a href="#the-threat-context-file">threat context</a>)</td>
+<td>score × 0.25</td>
+</tr>
 </tbody>
 </table>
 <p>A finding's priority is its severity rank (critical 5 ... info 1) times
@@ -2296,6 +2324,127 @@ benchmark.</p>
 <p>Read the scores as hints. A handler is often registered in another file, so a file
 with no entry point can still be reachable, and a guard seen somewhere in a file
 does not mean the flagged line is behind it.</p>
+<h2>The threat-context file</h2>
+<p>Some things only the owners of the code know: whether a compromise would hurt the
+business, whether it holds confidential data, which paths matter most and which are
+never deployed. A repository says so in <code>.achilles/threat-context.yaml</code> (or <code>.yml</code>).
+<code>achilles init</code> writes one with every question commented out:</p>
+<pre><code class="language-yaml">businessCritical: true     # would an outage or a compromise hurt the business or someone's safety?
+confidentialData: true     # does it store or process confidential or regulated data?
+externallyFacing: true     # can people outside the organisation reach it?
+autonomous: false          # does it act without a person approving each step (agents, jobs)?
+multiAgent: false          # do several AI agents work together in it?
+
+crownJewels: [internal/auth/, api/admin/]   # reviewed first
+outOfScope: [examples/, scripts/]            # reviewed last
+</code></pre>
+<p>Leave a question out if you do not know; an unanswered question is never read as
+"no". Path patterns are relative to the repository root: <code>dir/</code> or <code>dir/**</code> is
+everything under <code>dir</code>, a pattern with no slash (<code>fixtures</code>, <code>*.pb.go</code>) matches a
+file or directory name anywhere, and anything else is matched against the whole
+path (<code>cmd/*/main.go</code>, <code>services/*/internal/</code>).</p>
+<p>Out-of-scope code is still scanned and its findings are still reported. It is
+reviewed last, and a scanner whose languages appear only there is skipped. To drop
+findings in a path altogether, use <code>exclude</code> in <code>.achilles.yaml</code>.</p>
+<p>The file is committed with the code, so the change under review can edit it. It
+can therefore only shape the scan of that code: reorder the review, skip a scanner
+with nothing to analyze, add an installed opt-in scanner. It never turns on a model,
+a network call or an output. Achilles says on stderr when it read one; when it
+caused a skip it is listed with the repository's configuration in every report, and
+under <code>--diff</code> a change to it is flagged. <code>--no-repo-config</code> ignores it. A file
+with an unknown key, a value that is not true or false, or a bad pattern fails the
+run, because a misspelled question that quietly counted as unknown would change the
+scan without anyone noticing.</p>
+<h2>Scan depth</h2>
+<p>The five questions pick a depth, after the OWASP MAESTRO playbook's decision tree:</p>
+<table>
+<thead>
+<tr>
+<th>Depth</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>full</td>
+<td>business critical, or confidential data</td>
+</tr>
+<tr>
+<td>standard</td>
+<td>externally facing, autonomous or multi-agent, or any question unanswered</td>
+</tr>
+<tr>
+<td>lightweight</td>
+<td>all five answered "no"</td>
+</tr>
+</tbody>
+</table>
+<p>Only "externally facing" is ever inferred, and only towards yes: network entry
+points outside tests and out-of-scope paths count as evidence that it is. An answer
+in the file always wins. Nothing in the code can prove a system is not business
+critical, so without a context file the depth is at least standard.</p>
+<p>Today the depth is advisory: at full depth the plan recommends <code>--profile full</code>, and
+the depth and its reasons are in the plan and every report.</p>
+<h2>The tool plan</h2>
+<p>The plan is made when it is asked for (<code>--plan-out</code>, <code>--prioritize surface</code>), when
+the repository has a threat-context file, under <code>--profile full</code>, or with
+<code>--all-tools</code>. Otherwise the run is exactly what it was before.</p>
+<p>It <strong>skips</strong> a scanner the profile turns on when it has nothing to analyze:</p>
+<table>
+<thead>
+<tr>
+<th>Scanner</th>
+<th>Skipped when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gosec, govulncheck</td>
+<td>Go code but no <code>go.mod</code> outside tests and out-of-scope paths</td>
+</tr>
+<tr>
+<td>Psalm</td>
+<td>no <code>psalm.xml</code> at the repository root (Achilles runs Psalm with it)</td>
+</tr>
+<tr>
+<td>FindSecBugs</td>
+<td>no compiled <code>.class</code>, <code>.jar</code> or <code>.war</code> in build output</td>
+</tr>
+<tr>
+<td>Security Code Scan</td>
+<td>no <code>.csproj</code>, <code>.vbproj</code> or <code>.sln</code></td>
+</tr>
+<tr>
+<td>Railroader</td>
+<td>not a Rails app (no <code>config/routes.rb</code> or <code>config/application.rb</code>)</td>
+</tr>
+<tr>
+<td>Checkov</td>
+<td>no infrastructure-as-code files</td>
+</tr>
+<tr>
+<td>any language-specific scanner</td>
+<td>its languages appear only in tests or out-of-scope paths</td>
+</tr>
+</tbody>
+</table>
+<p>A scanner asked for by name (<code>--with</code>, <code>--secrets-history</code>) is never skipped, and a
+map that stopped early skips nothing. Opengrep, Trivy, Gitleaks and OSV-Scanner
+are never skipped.</p>
+<p>It <strong>adds</strong> an opt-in scanner whose files are present, only when the repository has
+a threat-context file (or under <code>--all-tools</code>) and the scanner can be launched
+(installed, or an image under <code>--runner docker</code>): today that is zizmor, for GitHub
+Actions workflows. Otherwise it <strong>recommends</strong> it, with the flag that runs it.</p>
+<p>Every decision is printed on stderr and shown in the human, Markdown and HTML
+reports, in the JSON report's <code>toolPlan</code>, and as a note-level SARIF notification:</p>
+<pre><code>Scan plan: depth full (businessCritical = yes (context file)).
+  - skipped checkov: no infrastructure-as-code files (Terraform, ...) (--all-tools runs it)
+  - added zizmor: the repository has GitHub Actions workflows, which zizmor audits (the threat-context file is present)
+  - recommends --profile full: scan depth is full (...); the full profile adds the per-language analyzers
+</code></pre>
+<p><code>--all-tools</code> runs every scanner the plan would skip and adds every opt-in scanner
+whose files are present. It does not change the profile: combine it with
+<code>--profile full</code> for the heavy per-language analyzers.</p>
 <h2>The plan file</h2>
 <p><code>--plan-out</code> writes one JSON document (also recorded in the Evidence Vault as a
 <code>scan_plan</code> record whenever the map is built):</p>
@@ -2311,17 +2460,25 @@ does not mean the flagged line is behind it.</p>
   ],
   &quot;aiFiles&quot;: [&quot;agent/bot.py&quot;],
   &quot;infra&quot;: [{&quot;file&quot;: &quot;Dockerfile&quot;, &quot;kind&quot;: &quot;dockerfile&quot;}],
-  &quot;facts&quot;: [{&quot;kind&quot;: &quot;sink&quot;, &quot;class&quot;: &quot;sql&quot;, &quot;file&quot;: &quot;api/admin.py&quot;, &quot;line&quot;: 7, &quot;summary&quot;: &quot;SQL execution&quot;}]
+  &quot;facts&quot;: [{&quot;kind&quot;: &quot;sink&quot;, &quot;class&quot;: &quot;sql&quot;, &quot;file&quot;: &quot;api/admin.py&quot;, &quot;line&quot;: 7, &quot;summary&quot;: &quot;SQL execution&quot;}],
+  &quot;networkEntries&quot;: 31,
+  &quot;languages&quot;: {&quot;python&quot;: {&quot;files&quot;: 120, &quot;inScope&quot;: 84}},
+  &quot;markers&quot;: [&quot;github-workflows&quot;, &quot;iac&quot;],
+  &quot;context&quot;: {&quot;businessCritical&quot;: true, &quot;crownJewels&quot;: [&quot;api/admin/&quot;], &quot;file&quot;: &quot;.achilles/threat-context.yaml&quot;},
+  &quot;depth&quot;: {&quot;level&quot;: &quot;full&quot;, &quot;reasons&quot;: [&quot;businessCritical = yes (context file)&quot;],
+            &quot;answers&quot;: [{&quot;question&quot;: &quot;businessCritical&quot;, &quot;value&quot;: &quot;yes&quot;, &quot;source&quot;: &quot;context&quot;}]},
+  &quot;toolPlan&quot;: {&quot;depth&quot;: &quot;full&quot;, &quot;contextFile&quot;: &quot;.achilles/threat-context.yaml&quot;,
+               &quot;decisions&quot;: [{&quot;tool&quot;: &quot;checkov&quot;, &quot;action&quot;: &quot;skipped&quot;, &quot;reason&quot;: &quot;no infrastructure-as-code files&quot;, &quot;fix&quot;: &quot;--all-tools&quot;}]}
 }
 </code></pre>
 <p>It carries kinds, files, line numbers and fixed summaries (route paths are bounded
 and scrubbed), never source text and never the absolute path of the target. At most
 500 hotspots and 5,000 facts are kept; <code>factsDropped</code> counts the rest.</p>
 <h2>Where this is going</h2>
-<p>This is the first step of a pre-scan modelling phase. Later steps will add a
-committed threat-context file, scanner choice from the map, an optional grounded
-LLM pass that names components and trust zones, and hypothesis checks for missing
-controls by the deep verifier.</p></section>
+<p>The surface map and the threat context are the first two steps of a pre-scan
+modelling phase. Later steps will add an optional grounded LLM pass that names
+components and trust zones, and hypothesis checks for missing controls by the deep
+verifier (advisory until verified).</p></section>
 <section id="verifying-fixes"><h1>Verifying Fixes</h1>
 <p><code>--remediate</code> asks the model for a unified diff per confirmed finding. A model can
 write a patch that looks right and does not work, so Achilles checks each diff

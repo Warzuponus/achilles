@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Warzuponus/achilles/internal/model"
@@ -82,6 +83,10 @@ func applyRepoStatePolicy(o *options, absTarget string, scan *model.Scan, warn i
 	}
 	if feedbackInUse {
 		states = append(states, state{"feedback", vaultRel})
+	}
+	// The threat context, when it changed which scanners ran.
+	if p := o.toolPlan; p != nil && p.ContextFile != "" && slices.Contains(scan.RepoConfig, "threat context: "+p.ContextFile) {
+		states = append(states, state{"threat context", p.ContextFile})
 	}
 	// No check that the directory exists: one the change deleted is the case that matters most.
 	if rel, ok := insideTarget(absTarget, o.ruleRepoDir); ok {

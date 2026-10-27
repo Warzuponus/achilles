@@ -32,7 +32,7 @@ GUIDES = [
     ("reports-and-gating", "Reports & Gating"),
     ("llm-and-agents", "LLM Triage & Agents"),
     ("deep-verify", "Deep Verification"),
-    ("surface-map", "Surface Map & Review Order"),
+    ("surface-map", "Surface Map & Scan Plan"),
     ("verifying-fixes", "Verifying Fixes"),
     ("benchmarking", "Benchmarking Detection"),
     ("comparison", "Comparison with Other Tools"),

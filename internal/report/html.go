@@ -51,6 +51,8 @@ type htmlView struct {
 	// part of it that the change under review modifies.
 	RepoConfig        string
 	RepoConfigChanged string
+	ToolPlanHeader    string
+	ToolPlan          []string
 	Coverage          string // one line on how much of the scan the AI review covered
 	Uncovered         string // detected languages no scanner that ran covers; empty when none
 	CoverageOK        bool   // false when the AI review was absent or partial
@@ -321,6 +323,9 @@ func WriteHTML(w io.Writer, r HTMLReport) error {
 	}
 	v.RepoConfig = strings.Join(r.Scan.RepoConfig, "; ")
 	v.RepoConfigChanged = strings.Join(r.Scan.RepoConfigChanged, "; ")
+	if p := r.Scan.ToolPlan; p != nil {
+		v.ToolPlanHeader, v.ToolPlan = toolPlanHeader(p), toolPlanLines(p)
+	}
 	v.Coverage, v.CoverageOK = coverageLine(r.Scan.Triage)
 	v.Uncovered = strings.Join(r.Scan.UncoveredLanguages, ", ")
 	v.Summary = summaryLine(v)
@@ -466,6 +471,7 @@ const htmlDoc = `<!doctype html>
 {{if .RepoConfigChanged}}<div class="alert warn"><strong>This change modifies scanner configuration.</strong> {{.RepoConfigChanged}}. It can hide findings in the same change; review it as part of this scan.</div>{{end}}
 {{if .RepoConfig}}<div class="alert">Scanner configuration from the scanned repository was in effect: {{.RepoConfig}}. It can remove findings before Achilles sees them.</div>{{end}}
 <div class="alert {{if .CoverageOK}}ok{{else}}warn{{end}}">{{.Coverage}}</div>
+{{if .ToolPlanHeader}}<div class="alert">{{.ToolPlanHeader}}.{{if .ToolPlan}}<ul>{{range .ToolPlan}}<li>{{.}}</li>{{end}}</ul>{{end}}</div>{{end}}
 {{if .Uncovered}}<div class="alert warn"><strong>Not covered by any scanner that ran:</strong> {{.Uncovered}}. Code in these languages was not analyzed, so no findings there is not evidence of safety.</div>{{end}}
 
 <p class="lead" style="margin-top:20px">{{.Summary}}</p>

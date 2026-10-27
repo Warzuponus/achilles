@@ -133,6 +133,8 @@ Needs `--llm-model` and an API key in `ACHILLES_LLM_API_KEY` (or `OPENAI_API_KEY
 | `--llm-samples` | `1` | ask the model this many times on borderline verdicts and keep the majority; a verdict the samples disagree on is never dismissed. The cost estimate becomes an upper bound |
 | `--deep-verify` | `0` | let the model read and search the repository (bounded, read-only, secrets-blocked) to settle the N highest-priority findings; see [Deep verification](deep-verify.md) |
 | `--deep-max-steps` | `6` | with `--deep-verify`: most tool calls per finding |
+| `--prioritize` | `severity` | order the AI review and `--deep-verify` take findings in: `severity`, or `surface` (severity weighted by how exposed the file is). Reordering only; see [Surface map](surface-map.md) |
+| `--plan-out` | — | map the attack surface before scanning (entry points, dangerous operations, guards, assets, AI surface, per-file hotspot scores) and write it to this JSON file; no model is called |
 | `--hunt` | `0` | follow the data from N entry points (HTTP routes first) with the deep-verification tools and review what the model reports; unconfirmed candidates never gate; see [Hunt mode](hunt.md) |
 | `--hunt-max-steps` | `10` | with `--hunt`: most tool calls per entry point |
 | `--verify-timeout` | `15m` | time allowed for all `--verify-fixes` re-scans combined; starts when verification starts, separate from `--timeout` |

@@ -61,7 +61,7 @@ func runDeepVerify(ctx context.Context, o *options, ev vault.Store, runID string
 	}
 
 	cfg := deepConfig(o, scan.Target).WithDefaults()
-	idx := deep.Select(scan.Findings, o.deepVerify)
+	idx := deep.SelectBy(scan.Findings, o.deepVerify, o.reviewPriority())
 	if len(idx) == 0 {
 		fmt.Fprintf(w, "achilles: deep verification — no finding qualifies (credential findings are never sent to a model)\n")
 		return nil

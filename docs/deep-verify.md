@@ -107,7 +107,9 @@ severe first; missing or contested verdicts ahead of settled ones), then any oth
 finding whose verdict is uncertain, low-confidence, refuted or overturned by the
 judge, then findings with no verdict. It never selects credential findings, shadow
 findings or findings already deep-verified, and a settled medium or low finding is
-left alone. Order is stable.
+left alone. Order is stable. With `--prioritize surface`, findings inside each tier
+are taken most exposed first (see [Surface map](surface-map.md)); which findings
+qualify, and in which tier, does not change.
 
 Cost is the one to watch. Every turn resends the whole transcript, so prompt tokens
 grow with what was read. Rule of thumb: a few thousand tokens to a few tens of

@@ -58,25 +58,30 @@
 <li><a href="#reports-and-gating">Reports & Gating</a></li>
 <li><a href="#llm-and-agents">LLM Triage & Agents</a></li>
 <li><a href="#deep-verify">Deep Verification</a></li>
+<li><a href="#surface-map">Surface Map & Review Order</a></li>
 <li><a href="#verifying-fixes">Verifying Fixes</a></li>
 <li><a href="#benchmarking">Benchmarking Detection</a></li>
+<li><a href="#comparison">Comparison with Other Tools</a></li>
 <li><a href="#ci-and-hub">CI & the Scan Hub</a></li>
 <li><a href="#fleet">Fleet</a></li>
-<li><a href="#containers">Running in Containers</a></li></ul>
+<li><a href="#containers">Running in Containers</a></li>
+<li><a href="#mcp">MCP Server</a></li></ul>
   </nav>
   <main>
     <section id="getting-started"><h1>Getting Started</h1>
 <p>This gets you from an empty shell to a scan you understand.</p>
 <h2>1. Install</h2>
-<p>Achilles is a single static Go binary (Go 1.26, no cgo). Its tool registry
+<p>Achilles is a single static Go binary (Go 1.27, no cgo). Its tool registry
 (<code>configs/tools.yaml</code>) and baseline Opengrep rules are <strong>embedded in the binary</strong>, so
 it runs from any directory with no repository checkout. Pick one:</p>
-<p><strong>Install script</strong> (Linux and macOS; verifies the release checksum, and the cosign
-signature if <code>cosign</code> is installed):</p>
+<p><strong>Install script</strong> (Linux and macOS). It verifies the archive against the release's
+checksum file, and the checksum file's cosign signature when <code>cosign</code> is installed.
+Without <code>cosign</code> it says the signature was not checked; set
+<code>ACHILLES_REQUIRE_SIGNATURE=1</code> to make that an error instead:</p>
 <pre><code class="language-bash">curl -fsSLO https://raw.githubusercontent.com/Warzuponus/achilles/main/scripts/install.sh
 less install.sh                                   # read it first
 sh install.sh                                     # latest -&gt; ~/.local/bin
-VERSION=v0.1.0 INSTALL_DIR=/usr/local/bin sh install.sh
+VERSION=v0.3.1 INSTALL_DIR=/usr/local/bin sh install.sh
 </code></pre>
 <p><strong>Release binary</strong> — download <code>achilles_&lt;version&gt;_&lt;os&gt;_&lt;arch&gt;.tar.gz</code> (<code>.zip</code> on
 Windows) and <code>checksums.txt</code> from the
@@ -86,7 +91,7 @@ Windows) and <code>checksums.txt</code> from the
 <code>docker run --rm -v "$PWD":/work:ro ghcr.io/warzuponus/achilles achilles --runner local /work</code>
 (see <a href="#containers">Running in containers</a>).</p>
 <p><strong><code>go install</code></strong> — <code>go install github.com/Warzuponus/achilles/cmd/achilles@latest</code>
-(or <code>@v0.1.0</code>; <code>achilles --version</code> reports the module version).</p>
+(or <code>@v0.3.1</code>; <code>achilles --version</code> reports the module version).</p>
 <p><strong>From source</strong> — <code>git clone https://github.com/Warzuponus/achilles.git &amp;&amp; cd achilles &amp;&amp; make build</code>
 (binary at <code>bin/achilles</code>). <em>Homebrew and Scoop packages are planned; they need a tap
 repository (see the commented blocks in <code>.goreleaser.yaml</code>).</em></p>
@@ -120,7 +125,7 @@ achilles tools list         # pinned versions and what is installed
 <tr>
 <td>gosec</td>
 <td>Go SAST</td>
-<td>needs <code>go</code> on PATH to type-check packages</td>
+<td>needs <code>go</code> on PATH to type-check packages. With <code>go</code> on PATH, <code>tools install</code> <strong>builds gosec from source with that Go</strong> (pinned version; every module checked against the Go checksum database; <code>--prebuilt</code> downloads upstream's binary instead). gosec can only read the standard library of the Go it was built with: upstream's v2.27.1 binary, built with Go 1.26, cannot type-check a Go 1.27 package that imports <code>math/rand/v2</code>. <code>achilles doctor</code> flags a gosec built with an older Go than yours. Separately, no gosec release can yet read what Go 1.27.2 and newer produce: with such a <code>go</code> first on PATH, gosec skips its type-based analysis and Achilles reports it as <strong>incomplete</strong> rather than clean. Until gosec catches up, scan Go code with Go 1.27.1 on PATH and <code>GOTOOLCHAIN=local</code></td>
 </tr>
 <tr>
 <td>osv-scanner</td>
@@ -130,7 +135,7 @@ achilles tools list         # pinned versions and what is installed
 <tr>
 <td>Trivy</td>
 <td>IaC / misconfig / secrets / SCA</td>
-<td></td>
+<td>needs network access on first use for its vulnerability database and misconfiguration checks</td>
 </tr>
 <tr>
 <td>Gitleaks</td>
@@ -144,9 +149,16 @@ verified copy), then <code>PATH</code>. <code>achilles doctor</code> shows which
 non-zero if a default-profile scanner is missing, printing the exact fix command.
 If upstream publishes no download for your platform, doctor says so and points at the
 manual install or the Docker image.</p>
-<p><strong>Rules.</strong> Opengrep's <code>-f</code> rules are, in order: the <code>rules:</code> directory from your tool
-config if it exists on disk (a repo checkout uses <code>configs/rules</code>), otherwise the
-baseline rules embedded in the binary (materialized into your user cache). The
+<p><strong>Rules.</strong> Opengrep's <code>-f</code> rules are the built-in rules embedded in the binary
+(materialized into your user cache), unless a tool config you pass with <code>--config</code>
+names a <code>rules:</code> directory that exists on disk (a <code>configs/rules</code> folder in the working
+directory is never picked up on its own). The built-in rules are about 90
+Achilles-authored rules for injection (SQL, command, code, LDAP, XPath), path
+traversal, SSRF, XSS, open redirects, unsafe deserialization, XXE, weak crypto and
+randomness, insecure cookies, disabled TLS checks and hard-coded credentials in
+Python, JavaScript and TypeScript, Java, Ruby (Rails and its ERB views, Sinatra) and PHP (plain PHP,
+Laravel, Symfony), and any language for credentials. They are Apache-2.0 like the rest
+of Achilles, so they load in every mode. The
 community rule pack from <code>achilles tools install rules</code>
 (<a href="https://github.com/opengrep/opengrep-rules">opengrep-rules</a>, pinned commit, security
 rules for the main languages only, in <code>~/.achilles/rules/</code>) is loaded <strong>in addition</strong>
@@ -158,7 +170,7 @@ downloaded on demand, never bundled, and <strong>not loaded under <code>--mode c
 and lists them (add <code>--strict-tools</code> to make that exit 2). To avoid installing
 anything, run the tools in containers instead: <code>--runner docker</code> (uses the pinned
 images in <code>configs/tools.yaml</code>). <em>Exception:</em> Opengrep has no public image and always
-runs as a local binary.</p>
+runs as a local binary; Achilles prints a line saying so.</p>
 <h2>3. Your first scan</h2>
 <pre><code class="language-bash">achilles /path/to/code
 </code></pre>
@@ -168,11 +180,27 @@ recorded to the <strong>Evidence Vault</strong> at <code>.achilles/vault.jsonl</
 <p>Write a shareable report instead of (or as well as) the terminal output:</p>
 <pre><code class="language-bash">achilles --html-report report.html /path/to/code   # open report.html in a browser
 </code></pre>
+<h3>Set the repository up for CI</h3>
+<pre><code class="language-bash">achilles init
+</code></pre>
+<p>One command for what the rest of this guide explains piece by piece: it writes
+<code>.achilles.yaml</code> (the gate and the baseline), a CI workflow for GitHub
+(<code>.github/workflows/achilles.yml</code>) or GitLab (<code>.gitlab/achilles.yml</code>, to include
+from <code>.gitlab-ci.yml</code>), adds the Evidence Vault to <code>.gitignore</code>, and, when the
+default scanners are installed, scans once to seed <code>.achilles/baseline.json</code> so that
+CI fails only on findings that are new. It never overwrites a file without
+<code>--force</code>, and <code>--dry-run</code> shows what it would do. <code>--ci github|gitlab|none</code> overrides
+the detection.</p>
 <h2>4. The core knobs</h2>
 <ul>
 <li><strong><code>--profile default|full</code></strong> — <code>default</code> is the five baseline tools above.
   <code>full</code> adds the heavy per-language analyzers (JVM/PHP/.NET/C++), which need
   their prebuilt images + language prerequisites (see <code>deployments/&lt;tool&gt;/</code>).</li>
+<li><strong><code>--with zizmor</code></strong> — run an opt-in scanner as well. <a href="https://docs.zizmor.sh">zizmor</a>
+  audits GitHub Actions workflows and composite actions (template injection,
+  credential persistence, cache poisoning, unpinned actions). It is not one of the
+  five, so install it by name first: <code>achilles tools install zizmor</code>. Achilles
+  always runs it offline.</li>
 <li><strong><code>--mode oss|commercial</code></strong> — the license gate. <code>commercial</code> (the strict one)
   refuses any tool not marked <code>commercialSafe</code>, so you can safely run on customer
   code. <code>oss</code> allows everything. Default is <code>oss</code>.</li>
@@ -201,13 +229,13 @@ baseline or a diff — see <a href="#reports-and-gating">Reports &amp; Gating</a
 <section id="cli-reference"><h1>CLI Reference</h1>
 <p>Every <code>achilles</code> flag, grouped by task. (For <code>achilles-fleet</code>, see <a href="#fleet">Fleet</a>.)</p>
 <blockquote>
-<p><strong>Flags before the target.</strong> <code>achilles [flags] &lt;target-path&gt;</code>. Go's stdlib
-<code>flag</code> stops at the first positional, so a flag after the path is ignored.
-The target defaults to <code>.</code> if omitted.</p>
+<p><code>achilles [flags] &lt;target-path&gt;</code>. Flags are accepted before or after the target.
+The target defaults to <code>.</code> if omitted; more than one path is an error. Use <code>--</code> before
+a path that begins with a dash.</p>
 </blockquote>
 <h2>Subcommands</h2>
-<p>These run instead of a scan. (A scan target literally named <code>version</code>, <code>doctor</code> or
-<code>tools</code> must be written <code>./version</code> etc.)</p>
+<p>These run instead of a scan. (A scan target literally named <code>version</code>, <code>doctor</code>,
+<code>tools</code>, <code>mcp</code> or <code>init</code> must be written <code>./version</code> etc.)</p>
 <table>
 <thead>
 <tr>
@@ -221,6 +249,10 @@ The target defaults to <code>.</code> if omitted.</p>
 <td>same as <code>--version</code></td>
 </tr>
 <tr>
+<td><code>achilles init [--ci auto\|github\|gitlab\|none] [--no-baseline] [--force] [--dry-run] [DIR]</code></td>
+<td>set a repository up in one step: <code>.achilles.yaml</code> (fail on high, use the baseline), a CI workflow (GitHub or GitLab, detected; needs no secret), the Evidence Vault in <code>.gitignore</code>, and a baseline seeded from a scan when the default scanners are installed (a scan that could not run every scanner seeds nothing). Existing files are kept unless <code>--force</code></td>
+</tr>
+<tr>
 <td><code>achilles doctor</code></td>
 <td>per default-profile scanner: where it was found (<code>~/.achilles/bin</code> first, then <code>PATH</code>), its version vs the pinned one, <code>ok</code>/<code>missing</code>/<code>outdated</code>/<code>no-asset</code>, and the exact fix command; also whether <code>go</code> (needed by gosec) and Docker are available, whether an LLM key is set (<code>set</code>/<code>not set</code> only — the key is never printed) and the resolved base URL, and whether the community rules are installed. Exits non-zero (2) if a required scanner is missing.</td>
 </tr>
@@ -229,15 +261,82 @@ The target defaults to <code>.</code> if omitted.</p>
 <td>pinned versions, whether upstream publishes a download for this platform, and what is installed</td>
 </tr>
 <tr>
-<td><code>achilles tools install [--force] [name...]</code></td>
-<td>download, sha256-verify (fail closed) and install pinned scanners into <code>$ACHILLES_HOME/bin</code> (default <code>~/.achilles/bin</code>). Names: <code>opengrep gosec osv-scanner trivy gitleaks rules</code>. No names = all five plus the community rules. Skips tools already at the pinned version unless <code>--force</code>.</td>
+<td><code>achilles tools install [--force] [--prebuilt] [name...]</code></td>
+<td>download, sha256-verify (fail closed) and install pinned scanners into <code>$ACHILLES_HOME/bin</code> (default <code>~/.achilles/bin</code>). Names: <code>opengrep gosec osv-scanner trivy gitleaks rules</code>, and the opt-in <code>zizmor</code>. No names = the five default scanners plus the community rules; an opt-in scanner is installed by name. Skips tools already at the pinned version unless <code>--force</code>. With <code>go</code> on PATH, gosec is built from source with that Go (<code>go install</code> of the pinned version, every module checked against the Go checksum database; refused under <code>GOSUMDB=off</code>), because gosec can only type-check code its own Go can read; a managed gosec built with an older Go is rebuilt even without <code>--force</code>. If the build fails it downloads the prebuilt binary and says why. <code>--prebuilt</code> always downloads.</td>
 </tr>
 <tr>
 <td><code>achilles tools doctor</code></td>
 <td>same as <code>achilles doctor</code></td>
 </tr>
+<tr>
+<td><code>achilles mcp [--vault PATH]</code></td>
+<td>serve the Evidence Vault, read-only, to an MCP client over stdin/stdout (started by the client, not by hand). Tools: <code>list_scans</code>, <code>list_findings</code>, <code>get_finding</code>, <code>rule_health</code>. See <a href="#mcp">MCP Server</a></td>
+</tr>
 </tbody>
 </table>
+<h2>Settings files</h2>
+<p>Flags can be written down instead of typed. A settings file is a flat YAML mapping
+from a flag's name, without the dashes, to its value; a list is the same as a
+comma-separated value.</p>
+<pre><code class="language-yaml"># .achilles.yaml, in the root of the repository
+profile: full
+fail-on: high
+exclude: [tests, &quot;*.gen.go&quot;]
+baseline: .achilles/baseline.json
+timeout: 10m
+</code></pre>
+<p>Two files are read, and they are trusted differently.</p>
+<p><strong><code>.achilles.yaml</code> in the scanned repository</strong> (or <code>.achilles.yml</code>) travels with the
+code, so anyone who can open a pull request can change it. It may only shape how that
+code is scanned:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>profile</code>, <code>with</code>, <code>timeout</code>, <code>secrets-history</code></td>
+<td>which scanners run (including opt-in ones the operator has installed), how long they get, and whether the git history is scanned for credentials too</td>
+</tr>
+<tr>
+<td><code>exclude</code>, <code>no-default-excludes</code></td>
+<td>what counts as noise in this repository</td>
+</tr>
+<tr>
+<td><code>fail-on</code></td>
+<td>the gate, when the command line sets none</td>
+</tr>
+<tr>
+<td><code>baseline</code></td>
+<td>a path inside the repository, relative to its root</td>
+</tr>
+<tr>
+<td><code>keep-dismissed</code>, <code>llm-no-code</code></td>
+<td>stricter handling of the AI review; neither turns it on</td>
+</tr>
+<tr>
+<td><code>issues-min-severity</code>, <code>issues-max</code>, <code>issues-group</code></td>
+<td>how issues are filed, when <code>--file-issues</code> is given</td>
+</tr>
+</tbody>
+</table>
+<p>Any other flag in that file is an error, not a warning. The repository cannot choose
+the model or the endpoint its code is sent to, turn on the AI review, change the tool
+registry or the runner, move the vault, write a report somewhere, or post to GitHub:
+those are decisions for whoever runs the scan. The file must be a regular file (a
+symbolic link is refused). What it sets is printed when the scan starts, the file is
+named in every report next to the scanners' own repository configuration, and with
+<code>--diff</code> a change to it is called out. <code>--no-repo-config</code> ignores it completely.</p>
+<p><strong><code>--settings FILE</code></strong> (or <code>$ACHILLES_SETTINGS</code>) is a file you choose. It is trusted
+like the command line and may set any flag, which makes it the place for a team's
+standing choices: provider, model, report paths, strictness. Keep credentials out of
+it; they come from the environment.</p>
+<p>Precedence: the command line, then <code>--settings</code>, then <code>.achilles.yaml</code>, then the
+defaults. The <a href="#ci-and-hub">GitHub Action</a> passes its inputs as flags, so an input
+you set there wins over the repository's file.</p>
 <h2>Scan setup</h2>
 <table>
 <thead>
@@ -248,6 +347,11 @@ The target defaults to <code>.</code> if omitted.</p>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>--settings</code></td>
+<td><code>$ACHILLES_SETTINGS</code></td>
+<td>YAML file of flag values for flags not given on the command line; see <a href="#settings-files">Settings files</a>. The scanned repository's own <code>.achilles.yaml</code> is read as well, restricted to scan-shaping settings</td>
+</tr>
 <tr>
 <td><code>--config</code></td>
 <td><em>(embedded <code>configs/tools.yaml</code>)</em></td>
@@ -271,12 +375,12 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--runner</code></td>
 <td><code>local</code></td>
-<td>run tools <code>local</code> (PATH) or <code>docker</code> (pinned images)</td>
+<td>run tools <code>local</code> (PATH) or <code>docker</code> (pinned images). Tool containers get no network unless the tool needs it, a read-only source mount, no new privileges, and all capabilities dropped except the one needed to read the source and write the report. They still run as the image's user. <code>ACHILLES_DOCKER_UNCONFINED=true</code> turns the capability and process limits off</td>
 </tr>
 <tr>
 <td><code>--timeout</code></td>
 <td><code>5m</code></td>
-<td>overall scan timeout</td>
+<td>time allowed for the scanners. When it runs out (or on Ctrl-C) each scanner and everything it started is stopped, and that tool is reported as failed. The AI review (<code>--llm-budget</code>) and fix verification (<code>--verify-timeout</code>) have their own clocks</td>
 </tr>
 <tr>
 <td><code>--version</code></td>
@@ -291,7 +395,7 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--sarif-out</code></td>
 <td>—</td>
-<td>also write each tool's raw SARIF into this directory</td>
+<td>also write each tool's SARIF into this directory. It is the tool's own output except that the matched text of credential findings is replaced with <code>[REDACTED]</code></td>
 </tr>
 </tbody>
 </table>
@@ -340,12 +444,22 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--no-default-excludes</code></td>
 <td><code>false</code></td>
-<td>disable the built-in vendored/generated/minified filter</td>
+<td>disable the built-in vendored/generated/minified filter, including files whose header marks them as generated (<code>// Code generated ... DO NOT EDIT.</code>, <code>@generated</code>)</td>
 </tr>
 <tr>
 <td><code>--no-correlate</code></td>
 <td><code>false</code></td>
 <td>disable cross-tool correlation (triage every duplicate report separately)</td>
+</tr>
+<tr>
+<td><code>--with</code></td>
+<td>—</td>
+<td>comma-separated opt-in scanners to run as well as the profile's. <code>zizmor</code>: GitHub Actions workflows and composite actions, always offline (no token is used and no request is made, so its online audits do not run); install it with <code>achilles tools install zizmor</code>. A name the registry does not offer is an error. In the GitHub Action, use the <code>with</code> input, which also installs the scanner</td>
+</tr>
+<tr>
+<td><code>--secrets-history</code></td>
+<td><code>false</code></td>
+<td>also scan the git history for credentials: one that was committed and later deleted is in no file, but is still leaked. With <code>--diff</code>, only the commits since that ref. Needs a full clone and the repository root as the target; a shallow clone or a checkout git cannot read is reported as incomplete or failed, never as clean. See <a href="#reports-and-gating">Reports &amp; Gating</a></td>
 </tr>
 <tr>
 <td><code>--dry-run</code></td>
@@ -355,7 +469,7 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--max-cost</code></td>
 <td><code>0</code></td>
-<td>refuse to start LLM work above this estimated USD spend (needs <code>--price-config</code>)</td>
+<td>cap on LLM spend in USD (needs <code>--price-config</code>): refuse to start if the per-finding estimate exceeds it, and stop making model calls once the spend counted during the run reaches it</td>
 </tr>
 <tr>
 <td><code>--price-config</code></td>
@@ -398,7 +512,7 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--fail-on</code></td>
 <td>—</td>
-<td>exit non-zero if a finding at/above this severity survives filtering: <code>critical\|high\|medium\|low</code></td>
+<td>exit non-zero if a finding at/above this severity survives filtering: <code>critical\|high\|medium\|low\|info</code>; any other value is an error. See <a href="#reports-and-gating">where severity comes from</a></td>
 </tr>
 </tbody>
 </table>
@@ -426,7 +540,7 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--llm-provider</code></td>
 <td><code>$ACHILLES_LLM_PROVIDER</code></td>
-<td>endpoint preset: <code>openai</code>, <code>openrouter</code>, <code>ollama</code>, <code>anthropic</code> (experimental). Sets <code>--llm-base-url</code>; <code>ollama</code> also sets <code>--llm-auth none</code></td>
+<td>endpoint preset: <code>openai</code>, <code>openrouter</code>, <code>ollama</code>, <code>anthropic</code> (experimental; Anthropic's Messages API, natively). Sets <code>--llm-base-url</code>; <code>ollama</code> also sets <code>--llm-auth none</code></td>
 </tr>
 <tr>
 <td><code>--llm-budget</code></td>
@@ -449,6 +563,11 @@ The target defaults to <code>.</code> if omitted.</p>
 <td>keep findings the AI confidently dismissed in the gate, issues and counts (default: list them separately)</td>
 </tr>
 <tr>
+<td><code>--verdict-cache-days</code></td>
+<td><code>30</code></td>
+<td>reuse a verdict from an earlier run in this vault for up to this many days when the finding's code, the prompt and the models are unchanged, instead of asking the model again; <code>0</code> reviews everything afresh. Also covers fix suggestions from <code>--remediate</code>, which are reused only when the code is in the same place as well</td>
+</tr>
+<tr>
 <td><code>--llm-samples</code></td>
 <td><code>1</code></td>
 <td>ask the model this many times on borderline verdicts and keep the majority; a verdict the samples disagree on is never dismissed. The cost estimate becomes an upper bound</td>
@@ -462,6 +581,31 @@ The target defaults to <code>.</code> if omitted.</p>
 <td><code>--deep-max-steps</code></td>
 <td><code>6</code></td>
 <td>with <code>--deep-verify</code>: most tool calls per finding</td>
+</tr>
+<tr>
+<td><code>--prioritize</code></td>
+<td><code>severity</code></td>
+<td>order the AI review and <code>--deep-verify</code> take findings in: <code>severity</code>, or <code>surface</code> (severity weighted by how exposed the file is). Reordering only; see <a href="#surface-map">Surface map</a></td>
+</tr>
+<tr>
+<td><code>--plan-out</code></td>
+<td>—</td>
+<td>map the attack surface before scanning (entry points, dangerous operations, guards, assets, AI surface, per-file hotspot scores) and write it to this JSON file; no model is called</td>
+</tr>
+<tr>
+<td><code>--hunt</code></td>
+<td><code>0</code></td>
+<td>follow the data from N entry points (HTTP routes first) with the deep-verification tools and review what the model reports; unconfirmed candidates never gate; see <a href="#hunt">Hunt mode</a></td>
+</tr>
+<tr>
+<td><code>--hunt-max-steps</code></td>
+<td><code>10</code></td>
+<td>with <code>--hunt</code>: most tool calls per entry point</td>
+</tr>
+<tr>
+<td><code>--verify-timeout</code></td>
+<td><code>15m</code></td>
+<td>time allowed for all <code>--verify-fixes</code> re-scans combined; starts when verification starts, separate from <code>--timeout</code></td>
 </tr>
 <tr>
 <td><code>--verify-fixes</code></td>
@@ -557,9 +701,14 @@ The target defaults to <code>.</code> if omitted.</p>
 <td>optional note (with <code>--feedback</code>)</td>
 </tr>
 <tr>
+<td><code>--calibrate</code></td>
+<td><code>false</code></td>
+<td>let <code>--feedback</code> history rule out findings from chronically false-positive rules <strong>without a model review</strong> (needs ≥10 distinct labeled findings, ≥90% false positive, labels ≤180 days old; never above medium severity). See <a href="#llm-and-agents">LLM Triage &amp; Agents</a></td>
+</tr>
+<tr>
 <td><code>--rule-health</code></td>
 <td><code>false</code></td>
-<td>print per-rule TP/FP health from feedback, then exit</td>
+<td>print per-rule TP/FP health from feedback (and what <code>--calibrate</code> would rule out), then exit</td>
 </tr>
 <tr>
 <td><code>--metrics</code></td>
@@ -569,12 +718,12 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--research</code></td>
 <td><code>false</code></td>
-<td>research agents synthesize + validate new Opengrep rules</td>
+<td>research agents synthesize + validate new Opengrep rules (experimental). Each advisory id the model cites is looked up at <code>api.osv.dev</code> and <code>cveawg.mitre.org</code> (only the id is sent); an issue whose advisory cannot be found is discarded</td>
 </tr>
 <tr>
 <td><code>--mine-rules</code></td>
 <td><code>false</code></td>
-<td>mine rules from analyst-confirmed findings (needs <code>--llm-model</code>)</td>
+<td>mine rules from analyst-confirmed findings (needs <code>--llm-model</code>; experimental). A rule mined from a finding of a rule pack Achilles did not write is not loaded under <code>--mode commercial</code></td>
 </tr>
 <tr>
 <td><code>--rule-repo</code></td>
@@ -611,7 +760,42 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--sarif-report</code></td>
 <td>—</td>
-<td>unified SARIF 2.1.0 report (for GitHub code scanning etc.)</td>
+<td>unified SARIF 2.1.0 report (for GitHub code scanning etc.): a rule table with severities, stable fingerprints, and verified fixes as SARIF <code>fixes</code></td>
+</tr>
+<tr>
+<td><code>--json-report</code></td>
+<td>—</td>
+<td>the scan as one JSON document (findings, verdicts, dismissed findings, coverage), for scripts and dashboards</td>
+</tr>
+<tr>
+<td><code>--gitlab-sast</code></td>
+<td>—</td>
+<td>GitLab SAST security report (publish with <code>artifacts:reports:sast</code>): findings in code, with the AI verdict in each finding's details and verified fixes as remediations. See <a href="#ci-and-hub">GitLab CI</a></td>
+</tr>
+<tr>
+<td><code>--gitlab-secret-detection</code></td>
+<td>—</td>
+<td>GitLab secret detection security report (<code>artifacts:reports:secret_detection</code>): credential findings, never the matched text</td>
+</tr>
+<tr>
+<td><code>--gitlab-dependency-scanning</code></td>
+<td>—</td>
+<td>GitLab dependency scanning security report (<code>artifacts:reports:dependency_scanning</code>): dependency advisories, each with its package, version and manifest</td>
+</tr>
+<tr>
+<td><code>--gitlab-code-quality</code></td>
+<td>—</td>
+<td>GitLab Code Quality report (<code>artifacts:reports:codequality</code>): every finding, shown in the merge request widget on every GitLab tier</td>
+</tr>
+<tr>
+<td><code>--gitlab-mr-comment</code></td>
+<td><code>0</code></td>
+<td>post/update a sticky summary note on this GitLab merge request IID (<code>$CI_MERGE_REQUEST_IID</code>); needs <code>ACHILLES_GITLAB_TOKEN</code> with the <code>api</code> scope</td>
+</tr>
+<tr>
+<td><code>--gitlab-project</code></td>
+<td><code>$CI_PROJECT_ID</code></td>
+<td>the project for <code>--gitlab-mr-comment</code> (numeric id or <code>group/project</code>)</td>
 </tr>
 <tr>
 <td><code>--junit</code></td>
@@ -641,7 +825,12 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--strict-tools</code></td>
 <td><code>$ACHILLES_STRICT_TOOLS</code></td>
-<td>fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan. On in the container image — see <a href="#containers">Running in containers</a></td>
+<td>fail (exit 2) if any scanner could not run or be normalized, instead of reporting a partial scan. On in the container image — see <a href="#containers">Running in containers</a>. Without it, a run in which no scanner could run at all still fails (exit 2): nothing was scanned</td>
+</tr>
+<tr>
+<td><code>--no-repo-config</code></td>
+<td><code>$ACHILLES_NO_REPO_CONFIG</code></td>
+<td>do not let the scanned repository configure the scanners. Its ignore and config files (<code>.trivyignore</code>, <code>.gitleaks.toml</code>, <code>.semgrepignore</code>, ...) are not passed to them, and a scanner that reads one on its own is reported as incomplete. Without the flag such files are applied, and named in the output and reports. For code you do not trust; see <a href="../SECURITY.md">SECURITY.md</a> for what it does not cover. Also ignores the repository's <code>.achilles.yaml</code>, its <code>achilles:ignore</code> comments and its generated-file headers, and turns <code>--calibrate</code> and <code>--rag</code> off when the Evidence Vault they would read is committed in that repository</td>
 </tr>
 </tbody>
 </table>
@@ -684,7 +873,7 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--fix-pr</code></td>
 <td><code>false</code></td>
-<td>open a review PR with auto-fixes (needs <code>--remediate</code>; <strong>never merges</strong>)</td>
+<td>open a review PR with auto-fixes (needs <code>--remediate</code>; <strong>never merges</strong>). The branch is built in a temporary git worktree from the committed base: your checkout is not switched, and only the files the fixes change are committed (never untracked or uncommitted files). Each fix may change only its finding's own file. In GitHub Actions it pushes with git, so that one workflow needs the checkout's credentials (<code>persist-credentials: true</code>, the checkout default) and <code>contents: write</code>; the example workflows turn them off because they do not push</td>
 </tr>
 <tr>
 <td><code>--fix-remote</code></td>
@@ -694,7 +883,7 @@ The target defaults to <code>.</code> if omitted.</p>
 <tr>
 <td><code>--fix-base</code></td>
 <td>current branch</td>
-<td>base branch for the auto-fix PR</td>
+<td>base branch for the auto-fix PR (required when the checkout is on a detached HEAD, as in many CI jobs)</td>
 </tr>
 </tbody>
 </table>
@@ -818,6 +1007,21 @@ write a file (they compose — ask for several at once):</p>
 <td>GitHub code scanning, other SARIF consumers</td>
 </tr>
 <tr>
+<td><code>--json-report f.json</code></td>
+<td>JSON</td>
+<td>scripts and dashboards: the whole scan in Achilles' own shape, with a <code>schemaVersion</code> and a <code>complete</code> flag</td>
+</tr>
+<tr>
+<td><code>--gitlab-sast f.json</code>, <code>--gitlab-secret-detection f.json</code>, <code>--gitlab-dependency-scanning f.json</code></td>
+<td>GitLab security reports</td>
+<td>GitLab's security widget and vulnerability report (see <a href="#ci-and-hub">GitLab CI</a>)</td>
+</tr>
+<tr>
+<td><code>--gitlab-code-quality f.json</code></td>
+<td>GitLab Code Quality</td>
+<td>findings in the merge request widget on every GitLab tier</td>
+</tr>
+<tr>
 <td><code>--junit f.xml</code></td>
 <td>JUnit XML</td>
 <td>CI test panels</td>
@@ -855,8 +1059,24 @@ finding's triage verdict and suggested fix. See <a href="#llm-and-agents">LLM Tr
 <p>By default Achilles exits 0 (report-only). Make it gate with <code>--fail-on</code>:</p>
 <pre><code class="language-bash">achilles --fail-on high .     # exit 1 if any surviving finding is &gt;= high
 </code></pre>
-<p>Severity order: <code>critical &gt; high &gt; medium &gt; low</code>. The gate runs <em>after</em> all
-filtering below, so it only ever considers findings you didn't suppress.</p>
+<p>Severity order: <code>critical &gt; high &gt; medium &gt; low &gt; info</code>. The gate runs <em>after</em> all
+filtering below, so it only ever considers findings you didn't suppress. A value that
+is not one of those five is an error (exit 2), not a threshold.</p>
+<p>Exit codes: <strong>0</strong> the scan ran and nothing met the threshold (or no <code>--fail-on</code> was
+given); <strong>1</strong> a finding met the <code>--fail-on</code> threshold; <strong>2</strong> anything else, including a
+bad flag, a failed vault write, <code>--strict-tools</code> with a failed scanner, and an
+interrupted run. Ctrl-C (or SIGTERM) stops the scanners and any model calls, removes
+temporary files, and exits 2 without writing a report; a second Ctrl-C ends the
+process immediately.</p>
+<p><strong>Where severity comes from.</strong> Each scanner reports a SARIF level (<code>error</code>, <code>warning</code>,
+<code>note</code>) and some also report a CVSS-style <code>security-severity</code> score. Achilles takes
+the more severe of the two: <code>error</code> is high, <code>warning</code> medium, <code>note</code> low, and a score
+of 9.0 or more is <strong>critical</strong>, 7.0 high, 4.0 medium, anything above 0 low. So
+<code>critical</code> comes from scanners that publish scores (Trivy and osv-scanner for
+dependency CVEs, some rule packs); a tool that only reports levels tops out at high.
+A result with no level and no score is medium (the SARIF default), except a credential
+finding, which is high: Gitleaks states no severity, and a leaked secret has to be
+able to fail a gate.</p>
 <h3>The gate and the AI review</h3>
 <p>With <code>--triage</code> (or <code>--ai</code>), a finding the AI review is <strong>confident is a false
 positive</strong> (confidence at least 0.7, and the adversarial second pass did not
@@ -865,15 +1085,49 @@ the headline counts. It is not hidden: every report lists these findings in thei
 section ("Ruled out by the AI review", with the model's reason), and SARIF carries
 them as <em>suppressed</em> results so code scanning shows them as dismissed. These are
 never dismissed: uncertain or low-confidence verdicts, verdicts the judge overturned,
-findings about credentials (the model never sees those), and anything the review did
-not reach.</p>
+findings about credentials (the model never sees those), dependency advisories (see
+below), and anything the review did not reach.</p>
+<p><strong>Dependency advisories are not reviewed by the model.</strong> A finding that is a known
+vulnerability in a dependency (anything from osv-scanner or govulncheck, and any
+finding whose rule is a CVE / GHSA / GO / PYSEC / RUSTSEC id, which is how Trivy
+reports a vulnerable package) points at a manifest or lockfile, not at code. The AI
+review has nothing to read there, so these findings are never sent to it, never get a
+verdict, and are never ruled out. They stay in the gate exactly as the scanner
+reported them and are fixed by upgrading; <code>--sca-advice</code> plans the upgrades. Reports
+say how many there were, separately from findings the review failed to reach.</p>
+<p>A finding the review is confident is a <strong>hardening note</strong> (the weakness is real, but
+another control in the code already stops the attack, such as a weak hash of a value
+that is not a secret) leaves the gate on the same terms as a false positive. Reports
+list hardening notes in their own section, separate from false positives, because they
+are worth acting on when the code is next touched. The judge can overturn one by
+showing the control does not hold, and then the finding stays.</p>
+<p>An <strong>uncertain</strong> verdict is shown as <strong>needs validation</strong>, with the exact questions
+the code did not settle and how to settle them (a check in the code, or a fact only
+whoever runs the system can see). It stays in the gate.</p>
+<p>A true positive the judge <em>refuted</em> is ruled out only when the judge backed the
+refutation (a stated confidence of at least 0.7 and a quote that really appears in the
+code it was shown) and the first pass was not itself sure (below 0.9). A refutation
+that falls short is shown as <strong>disputed by judge</strong>: the finding stays in the gate and
+in the issues, because two reviews disagreeing is a reason for a person to look, not a
+reason to drop it.</p>
 <pre><code class="language-bash">achilles --ai --fail-on high .                  # gate on what survived the AI review
 achilles --ai --keep-dismissed --fail-on high . # gate on raw scanner severity instead
 </code></pre>
+<p><strong>Hunt candidates</strong> (<a href="#hunt"><code>--hunt</code></a>) gate only once the review confirms them
+with high confidence. A candidate it does not confirm is listed in its own section,
+"Hunt candidates the AI review did not confirm", never gates, never opens an issue,
+and is left out of SARIF. <code>--keep-dismissed</code> does not change that: an unconfirmed
+candidate was never a scanner's finding.</p>
 <p>Use <code>--keep-dismissed</code> when the code's authors are not trusted: a hostile repository
 can try to talk the model into dismissing a real finding (see
 <a href="../SECURITY.md">SECURITY.md</a>). Every report states how many findings the AI
 review covered, so a partial review is visible.</p>
+<h3>What the scan did not cover</h3>
+<p>Every report names the languages detected in the target that no scanner which ran
+declares support for. Secret and dependency scanners do not count, since they do not
+analyze the code itself. A language listed there had no code-level analysis at all, so
+"no findings" in it means nothing either way. Add a scanner for it or review it another
+way.</p>
 <h3>One other thing fails the run</h3>
 <p>Independent of <code>--fail-on</code>: if <strong>Evidence Vault writes fail</strong>, the run exits
 non-zero even when no finding would have gated it. The vault is the audit trail,
@@ -885,8 +1139,13 @@ gate. The report and other outputs are still produced.</p>
 <p>A gate on <em>every</em> finding fails forever on legacy debt. Three tools narrow it to
 what matters — they stack.</p>
 <h3>1. Noise filter (on by default)</h3>
-<p>Vendored / generated / minified files are dropped before findings are counted.
-Add your own patterns or turn it off:</p>
+<p>Vendored / generated / minified files are dropped before findings are counted:
+vendored directories (<code>vendor</code>, <code>node_modules</code>, <code>third_party</code>, ...), minified assets,
+<code>*.pb.go</code> and <code>*_pb2.py</code>, and any file whose header says a tool wrote it (Go's
+<code>// Code generated ... DO NOT EDIT.</code> line, or an <code>@generated</code> marker in a comment near
+the top). That header is the scanned repository's say-so, so it never hides a
+credential, a dependency advisory or a finding in commit history, and
+<code>--no-repo-config</code> ignores it. Add your own patterns or turn it off:</p>
 <pre><code class="language-bash">achilles --exclude 'tests,*.gen.go' .     # extra patterns (path segment or glob)
 achilles --no-default-excludes .          # disable the built-in filter
 </code></pre>
@@ -904,6 +1163,10 @@ achilles --baseline .achilles/baseline.json --fail-on high .
 so you can see churn. When a finding is legitimately a false-positive-in-context,
 regenerate the baseline to accept it (this is exactly how Achilles scans itself —
 see <code>.achilles/baseline.json</code>).</p>
+<p>A committed baseline can be edited by a pull request, which could add a finding and
+its fingerprint together. With <code>--diff</code>, Achilles warns on stderr and at the top of
+every report when the commits under review change the baseline file, so treat that
+warning as part of the review.</p>
 <h3>3. Diff-aware: only changed files</h3>
 <p>On a PR, scan only files changed vs the base branch:</p>
 <pre><code class="language-bash">achilles --diff origin/main --fail-on high .
@@ -912,12 +1175,86 @@ see <code>.achilles/baseline.json</code>).</p>
 changed files, at/above your severity floor:</p>
 <pre><code class="language-bash">achilles --diff origin/main --baseline .achilles/baseline.json --fail-on high .
 </code></pre>
+<h3>Suppressing one finding in the code</h3>
+<p>When a finding has been looked at and is fine where it is, say so beside it:</p>
+<pre><code class="language-python">subprocess.run(cmd, shell=True)  # achilles:ignore B602 -- cmd comes from a fixed table in build.py
+</code></pre>
+<pre><code class="language-go">// achilles:ignore gosec:G204 -- bin is checked against an allowlist in resolveTool
+out, err := exec.Command(bin, args...).Output()
+</code></pre>
+<p>The comment names the rule (or several, separated by commas) and gives a reason after
+<code>--</code>. It applies to a finding on its own line, or on the line directly below when
+the comment stands alone. A rule can be written as its id (<code>G204</code>), with its tool
+(<code>gosec:G204</code>), or as the last part of a long dotted id (<code>dangerous-system-call</code>, or <code>template-injection</code> for <code>zizmor/template-injection</code>).</p>
+<p>What happens to a suppressed finding:</p>
+<ul>
+<li>It does not gate, is not sent to the model, and files no issue. An open issue for
+  it is closed with a comment that quotes the reason and says it was not fixed.</li>
+<li>It is <strong>not hidden</strong>. Every report lists suppressed findings with their reasons, the
+  scan prints how many there were, and SARIF marks them as suppressed in source.</li>
+<li>With <code>--diff</code>, a suppression on a line the change itself added or edited is flagged
+  on stderr and at the top of every report, the same way a change to a scanner's
+  ignore file is. The change is suppressing a finding in itself; read the reason.</li>
+<li>With <code>--no-repo-config</code> no suppression comment is honoured.</li>
+</ul>
+<p>What a comment cannot do:</p>
+<ul>
+<li>Suppress without saying why, or without naming the rule. Such a comment is not
+  honoured, and the scan says where it is. There is no "ignore everything here".</li>
+<li>Suppress a credential finding, a dependency advisory, or a finding from the git
+  history. Use the scanner's own allowlist for a test fixture that looks like a
+  secret; an advisory is resolved by upgrading.</li>
+<li>Suppress a different rule that fires on the same line. Each rule is named.</li>
+</ul>
+<p>Scanners have their own inline comments too (<code>#nosec</code>, <code>nosemgrep</code>, <code>gitleaks:allow</code>).
+Those remove the finding before Achilles sees it, so they are not reported; prefer
+<code>achilles:ignore</code> where you want the suppression to stay visible.</p>
+<h3>Credentials in the git history</h3>
+<p>A scan reads the files as they are now. A credential that was committed and deleted a
+commit later is in none of them, so it is not reported, but it is in every clone and
+fork of the repository and has to be treated as leaked. <code>--secrets-history</code> scans the
+commits as well:</p>
+<pre><code class="language-bash">achilles --secrets-history --fail-on high .             # every commit on every fetched branch
+achilles --secrets-history --diff origin/main --fail-on high .   # only the commits since main
+</code></pre>
+<ul>
+<li>A finding from the history names the commit that added the credential and says what
+  deleting the line does not fix: the credential must be revoked and replaced. Its
+  location is the file and line in that commit, which may no longer exist.</li>
+<li>A credential that is still in a file is reported once, as the finding in the file. One
+  that appears in several commits is reported once, for the earliest.</li>
+<li>With <code>--diff</code>, only the commits since that ref are read, and a finding in them is kept
+  even when the net diff no longer contains the file. That is the case this exists for
+  on a pull request: a secret added in one commit and removed in the next.</li>
+<li><strong>It needs the whole history.</strong> CI checkouts are shallow by default, and a shallow
+  clone holds only the newest commits. Achilles then reports the history scan as
+  incomplete instead of clean; fetch everything (<code>fetch-depth: 0</code> for
+  <code>actions/checkout</code>, <code>GIT_DEPTH: "0"</code> in GitLab CI). Scan the repository root: the
+  history covers the whole repository whatever directory is given.</li>
+<li>If git cannot read the checkout at all (not a repository, or one owned by another
+  user, which is common for a directory mounted into a container), the history scan is
+  reported as a failed tool. Inside a container, mark the mount as safe first:
+  <code>git config --global --add safe.directory /src</code>.</li>
+<li>The repository's own <code>.gitleaks.toml</code> and <code>.gitleaksignore</code> apply, and are named, as
+  for the scan of the files.</li>
+</ul>
+<p>It is off by default because it reads every commit. A repository can turn it on for
+itself with <code>secrets-history: true</code> in <code>.achilles.yaml</code>.</p>
 <h3><code>--pr-mini</code>: baseline autopilot</h3>
 <p>If you don't want to manage a baseline file by hand, <code>--pr-mini</code> does it: if the
 file is absent it seeds it (full scan, no gate); if present it delta-scans and
 gates on what's new. It's mutually exclusive with <code>--baseline</code>/<code>--write-baseline</code>.</p>
 <pre><code class="language-bash">achilles --pr-mini .achilles/pr-baseline.json --fail-on high .
 </code></pre>
+<h3>Keeping these choices in the repository</h3>
+<p>Exclusions, the baseline path and the gate can live in <code>.achilles.yaml</code> at the
+repository root instead of in every command line and workflow:</p>
+<pre><code class="language-yaml">exclude: [testdata, &quot;*.pb.go&quot;]
+baseline: .achilles/baseline.json
+fail-on: high
+</code></pre>
+<p>A flag on the command line still wins. The file can only shape the scan, and its use
+is always reported; see <a href="#cli-reference">Settings files</a>.</p>
 <h2>Recommended CI gate</h2>
 <pre><code class="language-bash">achilles \
   --diff origin/${BASE_BRANCH} \
@@ -979,6 +1316,44 @@ achilles --ai --llm-provider openrouter --llm-model &lt;model&gt; /path/to/code
 </tr>
 </tbody>
 </table>
+<p><strong>The <code>anthropic</code> preset uses Anthropic's Messages API natively</strong>, with a small client
+of Achilles' own (no SDK, no new dependency), for any <code>--llm-base-url</code> on
+<code>api.anthropic.com</code>. What that changes over an OpenAI-compatible endpoint:</p>
+<ul>
+<li>The JSON schema of each verdict is enforced (structured outputs), instead of asked
+  for in the prompt and repaired.</li>
+<li>The system prompt, which is the same for every finding in a run, is cached, so after
+  the first call it is billed at the cached-input rate. Achilles' cost meter still
+  counts those tokens at the full input price, so <code>--max-cost</code> errs on the safe side.</li>
+<li>Replies are streamed, so a long thinking phase does not trip a proxy's idle timeout.
+  The output budget defaults to 16,000 tokens (<code>ACHILLES_LLM_MAX_TOKENS</code>), since
+  current Claude models think before they answer and the thinking counts against it.</li>
+<li>No <code>temperature</code> is sent; current Claude models fix their sampling.</li>
+<li>A refusal (<code>stop_reason: refusal</code>) is an error for that finding, not an empty
+  verdict.</li>
+<li>Overload (529), rate limits (429, honouring <code>Retry-After</code>), server errors and a stream
+  that drops before it finishes are retried, <code>ACHILLES_LLM_MAX_RETRIES</code> times (2 by
+  default). A partial answer is never used.</li>
+<li>
+<p>The key is <code>ACHILLES_LLM_API_KEY</code>, sent as <code>x-api-key</code>. <code>ANTHROPIC_API_KEY</code>,
+  <code>ANTHROPIC_BASE_URL</code> and the like are not read, so they cannot redirect the key
+  Achilles has checked.</p>
+</li>
+<li>
+<p>Each verdict schema is adapted to what structured outputs accept: every object gets
+  <code>additionalProperties: false</code>, and length and range constraints are dropped (the
+  decoded answer is still validated).</p>
+</li>
+</ul>
+<p>It is still marked experimental. Its unit tests run against a fake of the Messages
+API. The live tests (<code>TestLive*</code> in <code>internal/triage/llm</code>, skipped unless
+<code>ACHILLES_TEST_ANTHROPIC_API_KEY</code> is set; <code>ACHILLES_TEST_ANTHROPIC_BASE_URL</code> points
+them at another Messages-compatible server) and the <code>Live Anthropic</code> workflow, started
+by hand, run it against a live service. They have passed through OpenRouter's
+Messages-compatible endpoint (<code>anthropic/claude-sonnet-5.5</code>, October 2026), which
+checks the requests, streaming, structured outputs and error handling against a real
+server, but not yet against <code>api.anthropic.com</code> itself. OpenRouter (<code>--llm-provider
+openrouter --llm-model anthropic/&lt;model&gt;</code>) remains an exercised path for Claude models.</p>
 <p>Anything else (vLLM, LiteLLM, Azure OpenAI, a gateway) is <code>--llm-base-url</code>. An
 explicit <code>--llm-base-url</code> always wins over a provider preset. There is deliberately
 no default model: model names change faster than this project, so pick one that
@@ -998,8 +1373,11 @@ and Achilles prints the destination host before it starts. Before sending:</p>
 <ul>
 <li>credentials in the code and messages are masked (cloud keys, tokens, private keys,
   <code>password = "..."</code> style assignments);</li>
-<li>findings <strong>about</strong> credentials (Gitleaks and other secret rules) are never sent to the
-  model at all, and are never dismissed by it;</li>
+<li>findings <strong>about</strong> credentials are never sent to the model at all, and are never
+  dismissed by it. That covers Gitleaks, anything a scanner itself classes as a secret
+  (Trivy's secret results), and rules or CWEs that name a credential. The matched text
+  of such a finding is not kept either: not on the finding, not in the stored scanner
+  output, and not as a <code>--rag</code> example;</li>
 <li><code>--llm-no-code</code> sends only rule names, messages and file locations. Verdicts made
   without seeing code are weak, so in this mode the AI never dismisses a finding;</li>
 <li>a local model (<code>--llm-provider ollama</code>) keeps everything on your machine.</li>
@@ -1008,7 +1386,9 @@ and Achilles prints the destination host before it starts. Before sending:</p>
 <p><code>--timeout</code> (default 5m) bounds the scanners. The AI phases have their own
 <code>--llm-budget</code> (default 45m) and review <code>--llm-concurrency</code> findings (default 4) at a
 time, most severe first, so if the budget runs out what was reviewed is what matters
-most. Whatever was not reached is reported as such, in the log and in every report,
+most. <code>--prioritize surface</code> weights that order by how exposed each file is (network
+input, dangerous operations, missing guards), so the most exposed findings go first;
+see <a href="#surface-map">Surface map</a>. Whatever was not reached is reported as such, in the log and in every report,
 and stays in the gate: an unreviewed finding is never treated as a dismissed one.</p>
 <h3>What the AI review can and cannot tell you</h3>
 <p>Be honest about it when you read the verdicts. The model sees one file's worth of
@@ -1024,7 +1404,7 @@ scanner's raw output. <code>achilles-eval</code> scores the triage layer against
 corpus (<a href="../evals/README.md"><code>evals/</code></a>) so a change to prompts, context, or model
 routing can be proven instead of asserted:</p>
 <pre><code class="language-bash">make eval-context                                    # hermetic: no model, no key
-make eval-verdict-ollama EVAL_ARGS=&quot;--repeat 3&quot;      # the Ollama open-model routing (needs a key)
+make eval-verdict EVAL_MODEL=&lt;model&gt; EVAL_ARGS=&quot;--model-config &lt;routing.yaml&gt; --repeat 3&quot;   # needs a key; spends money
 </code></pre>
 <p><strong>Eval the routing, not a model.</strong> The verdict target drives a committed
 <code>--model-config</code>, because triage and judge deliberately use <em>different</em> models,
@@ -1036,7 +1416,9 @@ give the model what it needed?</em> with no API call, so it runs in CI and gates
 against regressions (<code>make eval-gate</code>).</p>
 <p><strong>Verdict mode</strong> runs the real triage→judge path against a live model and scores
 verdicts against the labels. Its headline is <strong>balanced accuracy</strong>, which weights
-both classes equally: a triager that confirms everything scores 100% on a
+both classes equally (scored on whether the review <em>confirmed</em> a finding; the report
+also prints what was actually <em>dismissed</em> from the gate, which is the number users
+feel): a triager that confirms everything scores 100% on a
 true-positive-only corpus and 50% here. It also reports TP recall, FP suppression,
 a calibration gap (<code>|mean confidence − accuracy|</code>, so an overconfident model is
 visible), and — with <code>--repeat</code> — which cases the model answers inconsistently on
@@ -1066,6 +1448,17 @@ Achilles prints the breakdown and exits non-zero <strong>without calling any mod
 <pre><code>achilles: estimated LLM spend $0.0340 exceeds --max-cost $0.0100; no model was
 called (raise the cap, narrow the scan with --diff/--baseline, or route cheaper models)
 </code></pre>
+<p>The cap also holds <strong>during</strong> the run, against what is actually spent. Every chat
+call (the review, the judge, fix suggestions, deep verification, the repo review, the
+dependency advisor, the threat model, research) is priced from the token usage the
+endpoint reports, and once the total reaches the cap no further call is started:</p>
+<pre><code>achilles: --max-cost stopped the AI review: 12 finding(s) were not reviewed (most severe were reviewed first). ...
+achilles: LLM spend counted against --max-cost: $1.0042 of $1.0000 over 187 call(s); 31 further call(s) were NOT made
+</code></pre>
+<p>Findings the review did not reach stay in the report, marked as unreviewed, exactly
+as when the time budget runs out. Calls already in flight finish, so the total can
+pass the cap by at most what <code>--llm-concurrency</code> calls cost. A model with no price
+is not called at all while a cap is set. Embedding calls for <code>--rag</code> are not counted.</p>
 <p><strong>You supply the prices.</strong> Achilles ships no built-in price table: prices change
 without notice, differ per provider for the same model name, and are often
 negotiated, so a cap computed from prices we guessed would be worse than no cap.
@@ -1077,8 +1470,8 @@ cap it cannot compute.</p>
 <p>What the estimate does and does not cover:</p>
 <ul>
 <li><strong>Reflected:</strong> the surfaced finding set only (post-noise, post-diff,
-  post-baseline), correlated duplicates costing nothing, and findings the
-  calibrator auto-resolves without an LLM call.</li>
+  post-baseline), correlated duplicates costing nothing, and (with <code>--calibrate</code>)
+  findings the calibrator rules out without an LLM call.</li>
 <li><strong>Upper bound:</strong> with <code>--remediate</code>, every triaged finding is counted, since
   which ones turn out high-confidence is unknowable in advance.</li>
 <li><strong>Excluded, and named in the output:</strong> the one-per-scan whole-repo agents
@@ -1091,11 +1484,16 @@ cap it cannot compute.</p>
 spend outpaces the estimate.</p>
 <h2>Cross-tool correlation (before triage)</h2>
 <p>Achilles runs overlapping engines on purpose, so the same defect often arrives from
-two or three tools — Opengrep and gosec on one Go line, Trivy and Checkov on one
-infrastructure-as-code resource. Before triage, findings that share a <strong>file, line, and CWE set</strong>
-but come from <strong>different tools</strong> are grouped into a cluster, and only the
-highest-severity member is sent to the LLM. The rest inherit its verdict, so a
-defect costs one triage+judge pair no matter how many tools reported it.</p>
+two or three tools — Opengrep and gosec on one Go line, two secret scanners on one
+credential, two dependency scanners on one advisory. Before triage, findings from
+<strong>different tools</strong> at the same <strong>file and line</strong> that are about the same weakness
+are grouped into a cluster: they share a CWE, or CWEs that are parent and child (one
+tool says CWE-78, another CWE-77). Only the highest-severity member is sent to the
+LLM. The rest inherit its verdict, so a defect costs one triage+judge pair no matter
+how many tools reported it. Two credential findings on one line, and two advisories
+with the same id against the same manifest, are clustered too so the report can say
+the tools agree; neither is ever sent to a model. Findings with no CWE and no such
+identity (most infrastructure-as-code findings) are not clustered.</p>
 <p>Correlation <strong>collapses nothing</strong>: every finding keeps its own fingerprint,
 severity, and behaviour under <code>--baseline</code>, <code>--file-issues</code>, and <code>--fail-on</code>. The
 report shows the overlap instead of hiding it:</p>
@@ -1112,7 +1510,8 @@ report shows the overlap instead of hiding it:</p>
 <p>The key is deliberately strict — a finding with no CWE or no line number never
 clusters, and one tool reporting twice on a line is left alone — because a wrong
 merge costs a wrong verdict while a missed merge costs one extra LLM call. Two
-things still take precedence over an inherited verdict: <strong>calibration</strong> (feedback
+things still take precedence over an inherited verdict: <strong>calibration</strong> (with
+<code>--calibrate</code>, feedback
 about a finding's <em>own</em> rule outranks a sibling's verdict) and <strong>remediation</strong>,
 which is never inherited, since a patch belongs to one specific finding. Disable
 the whole thing with <code>--no-correlate</code>.</p>
@@ -1132,7 +1531,17 @@ pay it.</p>
   for a structured verdict: <code>true_positive</code> / <code>false_positive</code> / <code>uncertain</code>, a
   confidence, exploitability, and reasoning. A second <strong>adversarial judge</strong> pass
   then tries to <em>refute</em> that verdict — only unrefuted true-positives with
-  confidence ≥ 0.7 are treated as high-confidence.</li>
+  confidence ≥ 0.7 are treated as high-confidence. The judge has to back a
+  refutation: it states its own confidence and quotes the line(s) of the context that
+  prove it, and Achilles checks that the quote really is in the context it sent. A
+  refuted true positive is ruled out only when that check passes, the judge was at
+  least 0.7 confident, and the triage pass was itself below 0.9. Otherwise the two
+  passes simply disagree: the finding stays in the gate, marked <strong>disputed by judge</strong>,
+  and gets no automatic fix. Refuting an <code>uncertain</code> verdict never rules a finding out.
+  Two kinds of finding are never sent to the model at all: credential findings (their
+  matched text is the secret) and <strong>dependency advisories</strong> (known CVEs in
+  dependencies: there is no code to judge, and a verdict must not be able to hide a
+  vulnerable package). Both cost nothing and are counted separately in every report.</li>
 <li><strong><code>--remediate</code></strong> — for those high-confidence findings, propose a fix: a summary
   plus a unified diff when a clean patch is possible, or prose guidance otherwise.
   Implies <code>--triage</code>. Achilles proposes; it never auto-applies (see <code>--fix-pr</code> in
@@ -1142,6 +1551,43 @@ pay it.</p>
 </code></pre>
 <p>Verdicts and fixes show up per-finding in the HTML report and are recorded to the
 vault.</p>
+<p><strong>A regression test with every fix</strong> (prompt <code>remediation/v2</code>). The fix proposal also
+asks for a test that fails on the vulnerable code and passes once it is fixed: it
+sends the attacker's input and checks it is refused or neutralised, in the project's
+language and, where the code shows it, its test style. The model may leave it out
+when writing one would mean guessing at code it was not shown. A proposed test has a
+suggested location (dropped if it is absolute or climbs out of the repository) and is
+bounded to 6 KB. It is shown under the fix in the HTML and text reports and in issues,
+exported to SARIF as <code>achilles/regressionTest</code>, and listed in the <code>--fix-pr</code>
+description. <strong>Achilles never runs it and never commits it</strong>: a model wrote it,
+nothing has checked it fails without the fix, and a test that passes for the wrong
+reason is worse than none. Add the ones that hold up.</p>
+<h3>Source-to-sink paths</h3>
+<p>When the scanner traces how data reaches a finding (Opengrep runs with
+<code>--dataflow-traces</code>; any SARIF <code>codeFlows</code> are read), the finding carries the path,
+source first. Triage sees it, fenced as untrusted text and framed as the scanner's
+claim to check against the code. A deep verification that confirms a finding can
+report its own <code>route</code>, which takes precedence because every step is a line a tool
+showed the model. Either way the path is shown in every report and issue as numbered
+<code>file:line</code> steps, with who traced it, and exported to SARIF as <code>codeFlows</code>, so code
+scanning draws it. The verdict cache keys on the path's files and notes but not its
+line numbers, so code added above it does not cost a fresh review. Under
+<code>--llm-no-code</code> the path is not sent (its notes quote code).</p>
+<h3>Findings in code that calls AI models</h3>
+<p>The built-in rules include <code>achilles-llm.yaml</code>, for code that calls a model through
+the OpenAI or Anthropic SDKs, the Vercel AI SDK's <code>generateText</code>, or LangChain. They
+fire where model output reaches a shell or an interpreter, an SQL statement, or the
+page as HTML; where an agent is given a tool that runs code (<code>PythonREPLTool</code>,
+<code>ShellTool</code>, <code>allow_dangerous_code=True</code>); and where <code>trust_remote_code=True</code> loads a
+model without a pinned <code>revision</code>.</p>
+<p>For any finding that involves a model (by its rule, its CWE, or a model call in the
+code shown), triage and the judge get one more instruction (prompt <code>triage/v8</code>).
+Model output is as trusted as the least trusted text the model read: a user's prompt,
+or a page, file, email or tool result. A prompt that can be steered is not by itself a
+vulnerability; what counts is the action the output reaches, or a secret the prompt
+exposes. Only a control on the output counts as sanitized (an allowlist of actions,
+parameters, escaping, a sandbox). Instructions in the system prompt telling the model
+to behave do not. Other findings do not pay the tokens for this.</p>
 <h3>Gates: the attacker-first questions behind a verdict</h3>
 <p>Since prompt <code>triage/v4</code> the model answers five questions as separate structured
 fields (<code>verdict.gates</code>) before it classifies, so a report can show <em>why</em> a finding
@@ -1187,7 +1633,65 @@ and an answer outside a gate's vocabulary is stored as <code>unknown</code>. The
 dismissal <em>harder</em> — a verdict whose own gates say reachable + attacker-controlled +
 not (effectively) sanitized + new capability is never dismissed, whatever its
 classification. The prompt also tells the model that comments, docstrings and names
-are claims, not evidence, and that the repository text is untrusted data.</p>
+are claims, not evidence, and that the repository text is untrusted data. Since
+<code>triage/v6</code> that text (the scanner's message, the code, past findings, and for the
+judge the first pass's reasoning) sits between markers carrying a random per-request
+id, so a line in the code cannot pass itself off as the end of the code. The prompt
+also defines <code>confidence</code>: below 0.7 means "I would need to see more code", and such
+a finding is kept for a person.</p>
+<h3>What a verdict tells a team</h3>
+<p>Since <code>triage/v7</code> a verdict is one of four classifications, and each carries the
+detail a team needs to act on it:</p>
+<table>
+<thead>
+<tr>
+<th>Classification</th>
+<th>Means</th>
+<th>Carries</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>true_positive</code></td>
+<td>a lower-trust attacker can cross a real boundary</td>
+<td><code>attacker</code>, <code>impact</code>, <code>assessedSeverity</code></td>
+<td>stays in the gate; high-confidence ones get a fix</td>
+</tr>
+<tr>
+<td><code>false_positive</code></td>
+<td>a gate closes the path</td>
+<td>the gate, in the reasoning</td>
+<td>dismissed when confident</td>
+</tr>
+<tr>
+<td><code>hardening</code></td>
+<td>the weakness is real, but another control already stops it</td>
+<td>the control, in the reasoning</td>
+<td>dismissed when confident, listed as a hardening note</td>
+</tr>
+<tr>
+<td><code>uncertain</code> (shown as <em>needs validation</em>)</td>
+<td>the code shown does not settle it</td>
+<td><code>blockers</code>, <code>validationPlan</code> {<code>local</code>, <code>owner</code>}</td>
+<td>stays in the gate</td>
+</tr>
+</tbody>
+</table>
+<p><code>assessedSeverity</code> uses fixed anchors: critical for unauthenticated code execution,
+full data access or account takeover; high when an explicit control is fully
+defeated; medium for limited reach or uncommon preconditions; low for minor gain;
+info for minimal impact. It is advisory. It is shown beside the scanner's severity
+and exported to SARIF as <code>achilles/assessedSeverity</code>, and <code>--fail-on</code> still uses the
+scanner's severity.</p>
+<p>Line numbers the model cites in its reasoning, its fix idea or the judge's reason are
+checked against the lines it was actually shown. Any it was not shown, and any line
+of another file, are recorded as <code>unverifiedCitations</code> and flagged in every report and
+issue, so a reader does not go looking for a line the model invented.</p>
+<p>The judge normally sees the first pass's reasoning and gate answers so it can attack
+them. Whether that anchors it is measurable: <code>achilles-eval --mode verdict
+--blind-judge</code> runs the same corpus with a judge that sees only the claim and the
+code. Compare its balanced accuracy with a normal run before changing the default.</p>
 <h3>Self-consistency sampling: <code>--llm-samples N</code></h3>
 <p>One answer from a model is one draw. With <code>N &gt; 1</code>, a <strong>borderline</strong> verdict —
 <code>uncertain</code>, confidence below 0.85, or one the judge refuted or overturned — is
@@ -1203,6 +1707,35 @@ recorded to the vault as <code>triage-sample</code>, and a sample that errors is
 dropped. <code>--dry-run</code> counts <code>N-1</code> extra triage calls per finding — an upper bound,
 since only borderline verdicts are re-asked and that cannot be known beforehand.
 Confident, judge-approved verdicts cost nothing extra.</p>
+<h3>Not asking twice: the verdict cache</h3>
+<p>Most of a repeat scan is findings that have not changed. When a finding's rule,
+message and surrounding code, the prompt version, the privacy mode and the models
+are all the same as in an earlier run recorded in the same vault, that run's verdict
+is reused and the model is not called. Line numbers are ignored, so code that only
+moved within its file still matches. The report says how many verdicts were reused,
+and each one records which run it came from.</p>
+<pre><code>achilles: 41 verdict(s) reused from earlier runs: the same code was reviewed with the same prompt and models
+</code></pre>
+<ul>
+<li><code>--verdict-cache-days N</code> (default 30) is how long a verdict may be reused; <code>0</code>
+  turns the cache off and reviews everything afresh. The limit exists because a
+  provider can change the model behind a name.</li>
+<li>Reuse makes results steadier as well as cheaper: a model asked the same question
+  twice does not always answer the same way, which is how a finding can flip between
+  runs when nothing changed.</li>
+<li>Fix suggestions (<code>--remediate</code>) are cached the same way, with one difference: a
+  suggestion usually carries a patch, and a patch is written against lines, so it is
+  reused only when the code is also in the same place. If the code moved, the fix is
+  asked for again. Whether a patch works is never cached: the re-scan that verifies it
+  runs in every scan.</li>
+<li>Cache entries are signed with a key kept in the Achilles home directory
+  (<code>~/.achilles/verdict-cache.key</code>, or under <code>$ACHILLES_HOME</code>), not in the vault. The
+  vault's default location is inside the scanned directory, so a vault file can arrive
+  with a repository; without the signature a pull request could carry a ready-made
+  "false positive" for its own code. An entry that does not verify is ignored. A fresh
+  CI runner has a fresh key, so in CI the cache only helps if you persist both the
+  vault and the Achilles home between runs.</li>
+</ul>
 <h3>Entry-point hints</h3>
 <p>The code context can begin with a short block naming how the finding's <strong>own file</strong>
 takes input:</p>
@@ -1251,12 +1784,19 @@ unreachable. <code>--llm-no-code</code> withholds the block with the rest of the
 <pre><code class="language-bash">achilles --feedback &lt;fingerprint&gt; --label fp --note &quot;md5 used for a cache key&quot;
 </code></pre>
 <ul>
-<li><strong>Calibration</strong> — once a rule accrues enough <code>fp</code> feedback, Achilles
-  auto-resolves it <em>without</em> an LLM call (deterministic pre-triage for chronically
-  noisy rules).</li>
+<li><strong>Calibration</strong> (<code>--calibrate</code>, off by default) — when a rule has been labeled
+  false positive often enough, Achilles rules its findings out <em>without</em> an LLM call.
+  This takes findings out of the gate on past labels alone, so the bar is high and
+  the decision is bounded: at least 10 <strong>distinct</strong> labeled findings of the rule (one
+  finding labeled ten times counts once, by its latest label), at least 90% of them
+  false positive, labels no older than 180 days, and never a finding above medium
+  severity or about a credential. Every run that uses it prints which rules it ruled
+  out and how many findings, and reports say those verdicts came from feedback rather
+  than a model review. Without <code>--calibrate</code>, feedback never dismisses anything.</li>
 <li><strong>RAG</strong> (<code>--rag</code>, needs <code>--llm-embed-model</code>) — injects similar past findings and
   how analysts ruled them as few-shot context for triage.</li>
-<li><strong><code>--rule-health</code></strong> prints per-rule TP/FP rates so you can see what's noisy.</li>
+<li><strong><code>--rule-health</code></strong> prints per-rule TP/FP rates so you can see what's noisy, and
+  which rules <code>--calibrate</code> would rule out.</li>
 <li><strong><code>--mine-rules</code></strong> turns analyst-confirmed findings into new Opengrep rules
   (validated before they can run — see <a href="../DESIGN.md">DESIGN.md</a> §9).</li>
 </ul>
@@ -1368,7 +1908,7 @@ measured triage accuracy differs a lot between models (see the eval harness in
 gating decisions to it.</p>
 <h3>Open models via Ollama Cloud</h3>
 <p>Ollama Cloud is OpenAI-compatible, so you can mix open models per task. Achilles
-ships a bake-off-derived routing at <a href="../configs/models.ollama.yaml"><code>configs/models.ollama.yaml</code></a>:</p>
+ships an example routing at <a href="../configs/models.ollama.yaml"><code>configs/models.ollama.yaml</code></a>:</p>
 <pre><code class="language-bash">export ACHILLES_LLM_API_KEY=&lt;ollama-key&gt;
 achilles --triage --review --sca-advice --threat-model tm.otm.json \
   --llm-base-url https://ollama.com/v1 \
@@ -1376,9 +1916,11 @@ achilles --triage --review --sca-advice --threat-model tm.otm.json \
   --model-config configs/models.ollama.yaml \
   --html-report report.html .
 </code></pre>
-<p>That config routes <code>triage</code>/<code>review</code>/<code>sca</code> → <code>minimax-m2.7</code> (fast, well-calibrated),
-<code>judge</code>/<code>remediation</code>/<code>threat-model</code> → <code>kimi-k2.6</code> (deepest reasoner), with
-<code>glm-5.2</code> as the fallback. Tune it freely.</p>
+<p>That config routes <code>triage</code>/<code>review</code>/<code>sca</code> → <code>minimax-m2.7</code>, <code>judge</code> → <code>minimax-m3</code>
+and <code>remediation</code>/<code>threat-model</code> → <code>kimi-k2.6</code>, with <code>glm-5.2</code> as the fallback. Only
+the triage and judge pair was measured (<a href="../evals/README.md">evals</a>); the judge was
+chosen because the alternative refuted most correct true positives. Tune it freely,
+and re-run the eval when you change either of those two.</p>
 <blockquote>
 <p><strong>Note on open models.</strong> They're looser than frontier models about JSON shape.
 Achilles hardens for this (fence-stripping + a schema-validated repair retry), but
@@ -1456,11 +1998,19 @@ OpenAI-compatible endpoint; it does not rely on native function calling.</p>
 </tr>
 <tr>
 <td><code>conclude</code></td>
-<td><code>classification</code>, <code>confidence</code>, <code>reasoning</code>, <code>evidence</code></td>
+<td><code>classification</code>, <code>confidence</code>, <code>reasoning</code>, <code>evidence</code>, optional <code>route</code></td>
 <td>Ends the investigation.</td>
 </tr>
 </tbody>
 </table>
+<p>For a true positive, <code>route</code> is the path the data takes, entry point first and the
+flagged line last, one <code>"file:LINE what happens here"</code> per step. Like <code>evidence</code>,
+only steps at lines a tool showed the model are kept (prompt <code>deep/v3</code>); fewer than
+two surviving steps is no path. A kept route is the finding's
+<a href="#llm-and-agents">source-to-sink path</a> in every report, ahead
+of the scanner's own.</p>
+<p><a href="#hunt">Hunt mode</a> uses the same tools and limits, starting from an entry point
+instead of a finding.</p>
 <p>A reply that is not valid JSON, names an unknown action or lacks required fields
 gets exactly one repair attempt per turn; a second bad reply aborts the finding
 with the reason recorded (<code>aborted</code>). The first message carries the finding and the
@@ -1539,7 +2089,9 @@ severe first; missing or contested verdicts ahead of settled ones), then any oth
 finding whose verdict is uncertain, low-confidence, refuted or overturned by the
 judge, then findings with no verdict. It never selects credential findings, shadow
 findings or findings already deep-verified, and a settled medium or low finding is
-left alone. Order is stable.</p>
+left alone. Order is stable. With <code>--prioritize surface</code>, findings inside each tier
+are taken most exposed first (see <a href="#surface-map">Surface map</a>); which findings
+qualify, and in which tier, does not change.</p>
 <p>Cost is the one to watch. Every turn resends the whole transcript, so prompt tokens
 grow with what was read. Rule of thumb: a few thousand tokens to a few tens of
 thousands per finding with the defaults; the dry-run bound (every turn repaired, output
@@ -1569,7 +2121,7 @@ wrongly dismissing a real bug costs far more than a false alarm:</p>
 </tr>
 <tr>
 <td>false positive, strong</td>
-<td>May support dismissal only if confidence is at least <code>0.7</code>, at least one cited <code>file:line</code> points at a file a tool actually showed the model, and at least one tool call was made.</td>
+<td>May support dismissal only if confidence is at least <code>0.7</code>, at least one cited <code>file:line</code> points at a line a tool actually showed the model, and at least one tool call was made.</td>
 </tr>
 <tr>
 <td>...and the earlier verdict was a confident true positive</td>
@@ -1585,8 +2137,10 @@ wrongly dismissing a real bug costs far more than a false alarm:</p>
 </tr>
 </tbody>
 </table>
-<p>Evidence the model cites for files it never read is discarded and counted
-(<code>evidenceDropped</code>).</p>
+<p>Evidence the model cites for a line it was never shown is discarded and counted
+(<code>evidenceDropped</code>). Reading part of a file does not make the rest of it citable:
+every line of a cited range has to have appeared in a tool result or in the
+finding's own context.</p>
 <p><strong>Ordering.</strong> Run it after the first triage pass and before
 <code>Scan.PartitionDismissed</code>, so a deep confirmation can rescue a finding triage
 dismissed and a deep dismissal that passes the policy leaves the gate with the rest
@@ -1618,6 +2172,156 @@ recorded in the vault with source <code>deep-verify</code>.</p>
 <p><code>internal/deep</code>: <code>sandbox.go</code> (the tool sandbox), <code>protocol.go</code> (the JSON protocol),
 <code>deep.go</code> (the loop), <code>apply.go</code> (<code>Apply</code> and <code>Select</code>), <code>prompts.go</code>.
 <code>cmd/achilles/deep.go</code> wires it into a run.</p></section>
+<section id="surface-map"><h1>Surface Map & Review Order</h1>
+<p>Before the scanners run, Achilles can map where the target is exposed: where
+attacker-influenced input enters, where it could do damage, what guards it, what is
+worth stealing, and where the code talks to an LLM. It scores every file from that
+map and uses the score to decide <strong>which findings the AI review and deep
+verification look at first</strong>. When <code>--llm-budget</code> or <code>--max-cost</code> runs out, what was
+left unreviewed is then the least exposed code, not just the least severe.</p>
+<p>No model is called. The map is a line-level pattern match over the source, so it
+costs seconds and no tokens, and it runs the same way with <code>--llm-no-code</code>.</p>
+<pre><code class="language-bash"># Review the most exposed findings first, and keep the map
+achilles --triage --deep-verify 10 --prioritize surface --plan-out plan.json ./src
+
+# Only the map, no AI at all
+achilles --plan-out plan.json ./src
+</code></pre>
+<h2>What it can and cannot change</h2>
+<p>The map <strong>only orders work</strong>. It never removes a finding, never lowers a severity,
+never skips a scanner and is never a reason to dismiss a finding. Every finding is
+still reviewed when the budget allows, and a finding the budget did not reach is
+reported as unreached, exactly as with severity order. A wrong map therefore costs
+ordering, never coverage.</p>
+<p><code>--prioritize severity</code> (the default) is the order Achilles has always used: most
+severe first.</p>
+<h2>What the map looks for</h2>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Examples</th>
+<th>Where it comes from</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Entry points</td>
+<td>HTTP routes and handlers, request input, gRPC services, message consumers, CLI arguments</td>
+<td>the same detector that feeds the entry-point hints in triage</td>
+</tr>
+<tr>
+<td>Dangerous operations</td>
+<td>SQL execution, running programs, <code>eval</code>, deserialization, file access, outbound requests, unescaped HTML, redirects, XML parsing</td>
+<td>per-language patterns</td>
+</tr>
+<tr>
+<td>Guards</td>
+<td>authentication and authorization checks, CSRF protection, validation and escaping, rate limiting</td>
+<td>coarse patterns across languages</td>
+</tr>
+<tr>
+<td>Assets</td>
+<td>credentials, personal data, sessions and tokens; credential files by name (never opened)</td>
+<td></td>
+</tr>
+<tr>
+<td>AI surface</td>
+<td>LLM SDK calls, tool definitions given to a model, MCP servers and clients, vector stores, prompt construction</td>
+<td></td>
+</tr>
+<tr>
+<td>Deployment files</td>
+<td>Dockerfiles, Compose, Terraform, Helm, Kubernetes manifests, CI workflows</td>
+<td>by name (Kubernetes by content)</td>
+</tr>
+</tbody>
+</table>
+<p>Dependency and build trees (<code>node_modules</code>, <code>vendor</code>, <code>dist</code>, <code>third_party</code>, ...),
+<code>.git</code>, the Evidence Vault and credential files are skipped, the same set the deep
+verifier refuses to read. The walk stops at 20,000 files or 256 MiB and says so on
+stderr when it does; files past that point score 0 and keep severity order.</p>
+<h2>How a file is scored</h2>
+<p>Each file gets a score from 0 to 1, with the reasons in the plan:</p>
+<table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Adds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>takes network input (route, handler, request input, consumer)</td>
+<td>0.45</td>
+</tr>
+<tr>
+<td>takes only command-line or local input</td>
+<td>0.15</td>
+</tr>
+<tr>
+<td>has a dangerous operation (more for each extra kind, up to two)</td>
+<td>0.25 to 0.35</td>
+</tr>
+<tr>
+<td>network input and a dangerous operation in the same file</td>
+<td>0.10</td>
+</tr>
+<tr>
+<td>... and no guard seen anywhere in that file</td>
+<td>0.10</td>
+</tr>
+<tr>
+<td>handles credentials, personal data or sessions</td>
+<td>0.10</td>
+</tr>
+<tr>
+<td>calls an LLM or exposes tools to one</td>
+<td>0.10</td>
+</tr>
+<tr>
+<td>test file or <code>testdata/</code></td>
+<td>score × 0.25</td>
+</tr>
+</tbody>
+</table>
+<p>A finding's priority is its severity rank (critical 5 ... info 1) times
+<code>1 + 0.5 × score</code>. So a medium finding in the most exposed file (4.5) is reviewed
+before a high one in a file with no surface (4), while nothing below high can ever
+overtake a critical. <code>--deep-verify</code> uses the same priority, but only to order
+findings inside each of its tiers: which findings qualify, and in which tier, does
+not change.</p>
+<p>These weights are a starting point. They are not yet tuned against the detection
+benchmark.</p>
+<p>Read the scores as hints. A handler is often registered in another file, so a file
+with no entry point can still be reachable, and a guard seen somewhere in a file
+does not mean the flagged line is behind it.</p>
+<h2>The plan file</h2>
+<p><code>--plan-out</code> writes one JSON document (also recorded in the Evidence Vault as a
+<code>scan_plan</code> record whenever the map is built):</p>
+<pre><code class="language-json">{
+  &quot;version&quot;: 1,
+  &quot;target&quot;: &quot;src&quot;,
+  &quot;filesRead&quot;: 412,
+  &quot;summary&quot;: {&quot;entries&quot;: 38, &quot;sinks&quot;: 91, &quot;controls&quot;: 22, &quot;assets&quot;: 17, &quot;ai&quot;: 3},
+  &quot;hotspots&quot;: [
+    {&quot;file&quot;: &quot;api/admin.py&quot;, &quot;score&quot;: 1,
+     &quot;reasons&quot;: [&quot;takes network input&quot;, &quot;dangerous operation: exec, sql&quot;,
+                 &quot;input and dangerous operation in the same file&quot;, &quot;no guard seen in this file&quot;]}
+  ],
+  &quot;aiFiles&quot;: [&quot;agent/bot.py&quot;],
+  &quot;infra&quot;: [{&quot;file&quot;: &quot;Dockerfile&quot;, &quot;kind&quot;: &quot;dockerfile&quot;}],
+  &quot;facts&quot;: [{&quot;kind&quot;: &quot;sink&quot;, &quot;class&quot;: &quot;sql&quot;, &quot;file&quot;: &quot;api/admin.py&quot;, &quot;line&quot;: 7, &quot;summary&quot;: &quot;SQL execution&quot;}]
+}
+</code></pre>
+<p>It carries kinds, files, line numbers and fixed summaries (route paths are bounded
+and scrubbed), never source text and never the absolute path of the target. At most
+500 hotspots and 5,000 facts are kept; <code>factsDropped</code> counts the rest.</p>
+<h2>Where this is going</h2>
+<p>This is the first step of a pre-scan modelling phase. Later steps will add a
+committed threat-context file, scanner choice from the map, an optional grounded
+LLM pass that names components and trust zones, and hypothesis checks for missing
+controls by the deep verifier.</p></section>
 <section id="verifying-fixes"><h1>Verifying Fixes</h1>
 <p><code>--remediate</code> asks the model for a unified diff per confirmed finding. A model can
 write a patch that looks right and does not work, so Achilles checks each diff
@@ -1634,10 +2338,15 @@ instead of taking it on faith. This is <code>--verify-fixes</code>, on by defaul
 <li>Compares the re-scan with the original:
    - the original finding must be gone, and
    - the scanner must not report anything new.</li>
-<li>Deletes the temporary copy, whatever the outcome.</li>
+<li>Puts the patched file back and reuses the copy for the next fix, so a run makes
+   one copy per concurrent verification rather than one per fix. Every copy is
+   deleted at the end, whatever the outcome.</li>
 </ol>
 <p>Each tool's findings on the unpatched target are computed once and reused for
 every fix from that tool. Up to two fixes are verified at a time.</p>
+<p>Verification runs after the AI review and has its own clock, <code>--verify-timeout</code>
+(default 15 minutes), which starts when verification starts. A fix whose re-scan did
+not finish in time is reported as <code>error</code>, never as verified.</p>
 <h2>How "gone" and "new" are decided</h2>
 <p>A patch moves lines, so a finding is matched loosely. In the patched copy, the
 original finding still counts as present if the same scanner reports, <strong>in the same
@@ -1646,9 +2355,12 @@ original line. This leans towards <code>not_fixed</code>: a second instance of t
 nearby will keep a fix from verifying.</p>
 <p>A finding in the patched copy counts as <strong>new</strong> if neither its fingerprint nor its
 rule and file appear among the findings the scanner reported before (or among the
-findings the main scan kept or dismissed). So an extra instance of a rule that
-already fires in that file is not reported as new; a rule that did not fire there
-before is.</p>
+findings the main scan kept or dismissed).</p>
+<p>Instances are also counted. For each rule and file, the patched copy may hold at most
+as many findings as the original did, and one fewer where the fixed finding was. So
+a patch that removes the flagged line but adds another instance of the same weakness
+elsewhere in the file, or that only moves the flagged code out of the 10-line window,
+is reported as <code>introduces_new</code>, not <code>verified</code>.</p>
 <h2>What it proves, and what it does not</h2>
 <p>It proves that the diff applies cleanly and that the scanner which raised the
 finding no longer raises it, and raises nothing new, on the patched code.</p>
@@ -1689,7 +2401,7 @@ and test every fix. Achilles still never merges anything.</p>
 </tr>
 <tr>
 <td><code>skipped</code></td>
-<td>Verification was not attempted: the target is over the size cap, the finding is in an excluded directory, or the reporting tool cannot be re-run (a shadow rule, or a tool no longer registered). Says nothing about the patch.</td>
+<td>Verification was not attempted: the target is over the size cap, the finding is inside version-control state, or the reporting tool cannot be re-run (a shadow rule, or a tool no longer registered). Says nothing about the patch.</td>
 </tr>
 <tr>
 <td><code>error</code></td>
@@ -1704,12 +2416,27 @@ sees it. A diff is rejected (<code>patch_failed</code>) if it:</p>
 <li>names an absolute path, a <code>..</code> segment, or anything under <code>.git</code>;</li>
 <li>uses a quoted/escaped path or a backslash;</li>
 <li>is a binary patch, or creates or changes a symlink;</li>
-<li>names no files, touches more than 20 files, or is larger than 256 KiB.</li>
+<li>names no files, or is larger than 256 KiB;</li>
+<li><strong>changes anything other than the file the finding is in.</strong> The model is shown that
+  one file, so an edit anywhere else is code it wrote without seeing, and it is how a
+  "fix" for one flagged line would also add a workflow step, a build target or a
+  dependency. Creating, deleting, renaming or copying a file, and changing a file's
+  mode, are rejected too;</li>
+<li>targets a file that runs by itself in CI or on checkout (<code>.github/</code>, other CI
+  pipeline definitions, <code>.gitmodules</code>, <code>.gitattributes</code>, git hooks), even when that
+  is where the finding is. Fix those by hand;</li>
+<li>names a path without the usual <code>a/</code> <code>b/</code> prefix, which would leave it to git to
+  guess which file to patch.</li>
 </ul>
+<p>The same check runs again immediately before <code>--fix-pr</code> applies a diff, whether or
+not verification ran, so <code>--verify-fixes=false</code> does not switch it off.</p>
 <p>The copy skips <code>.git</code>, <code>node_modules</code>, <code>vendor</code>, <code>.achilles</code>, <code>.terraform</code>, virtualenvs
 and common build-output directories (<code>dist</code>, <code>build</code>, <code>target</code>, <code>out</code>, <code>.next</code>,
 <code>.gradle</code>, <code>__pycache__</code>), and never follows or recreates symlinks or special files.
-A finding inside a skipped directory is reported as <code>skipped</code>.</p>
+Those build-output names are also ordinary names for source directories, so when the
+finding itself is inside one, that directory is copied for that verification. Only a
+finding inside version-control or Achilles state (<code>.git</code>, <code>.hg</code>, <code>.svn</code>, <code>.achilles</code>)
+is reported as <code>skipped</code>.</p>
 <p>If the target is larger than <strong>200 MiB</strong> or more than <strong>50,000 files</strong>, the result is
 <code>skipped: target too large</code>, not an error, and the scan carries on.</p>
 <p>Two things to be aware of: the re-scan runs the same scanner commands as the main
@@ -1906,9 +2633,10 @@ scanners found, verdicts attached) and without (what the AI review let through).
 Recall is scored on the second; the first is reported beside it, and the gap is what
 the AI review cost. It is real model spend, twice per target.</p>
 <h2>The committed baseline</h2>
-<p><code>evals/detect/baseline.json</code> was generated on the maintainer's machine with
-<code>opengrep</code>, <code>gosec</code>, <code>gitleaks</code> and <code>osv-scanner</code> installed and <strong><code>trivy</code> not
-installed</strong> (3 runs; no entry flapped):</p>
+<p><code>evals/detect/baseline.json</code> was generated on the maintainer's machine with all five
+default scanners installed (<code>opengrep</code>, <code>gosec</code>, <code>gitleaks</code>, <code>osv-scanner</code>, <code>trivy</code>)
+and <strong><code>--mode commercial</code></strong>, so only the built-in Achilles rules were loaded, not the
+community pack (3 runs; no entry flapped):</p>
 <table>
 <thead>
 <tr>
@@ -1919,35 +2647,27 @@ installed</strong> (3 runs; no entry flapped):</p>
 <tbody>
 <tr>
 <td><strong>Overall</strong></td>
-<td><strong>45.8%</strong> (11 of 24)</td>
+<td><strong>91.7%</strong> (22 of 24)</td>
 </tr>
 <tr>
 <td>injection</td>
-<td>62.5% (5 of 8)</td>
-</tr>
-<tr>
-<td>path-traversal</td>
-<td>50.0% (1 of 2)</td>
-</tr>
-<tr>
-<td>weak-crypto</td>
-<td>50.0% (1 of 2)</td>
-</tr>
-<tr>
-<td>ssrf</td>
-<td>50.0% (1 of 2)</td>
+<td>87.5% (7 of 8)</td>
 </tr>
 <tr>
 <td>hardcoded-secret</td>
-<td>20.0% (1 of 5)</td>
+<td>100% (5 of 5)</td>
 </tr>
 <tr>
-<td>vulnerable-dependency</td>
-<td>100% (2 of 2)</td>
+<td>path-traversal, ssrf, weak-crypto, vulnerable-dependency</td>
+<td>100% (2 of 2 each)</td>
 </tr>
 <tr>
-<td>xss, authz, deserialization</td>
-<td>0% (0 of 3)</td>
+<td>xss, deserialization</td>
+<td>100% (1 of 1 each)</td>
+</tr>
+<tr>
+<td>authz</td>
+<td>0% (0 of 1)</td>
 </tr>
 </tbody>
 </table>
@@ -1961,7 +2681,7 @@ installed</strong> (3 runs; no entry flapped):</p>
 <tbody>
 <tr>
 <td>go-service</td>
-<td>83% (5 of 6)</td>
+<td>100% (6 of 6)</td>
 </tr>
 <tr>
 <td>deps-manifest</td>
@@ -1969,49 +2689,632 @@ installed</strong> (3 runs; no entry flapped):</p>
 </tr>
 <tr>
 <td>secrets-config</td>
-<td>33% (1 of 3)</td>
+<td>100% (3 of 3)</td>
 </tr>
 <tr>
 <td>py-webapp</td>
-<td>25% (2 of 8)</td>
+<td>88% (7 of 8)</td>
 </tr>
 <tr>
 <td>js-express</td>
-<td>20% (1 of 5)</td>
+<td>80% (4 of 5)</td>
 </tr>
 </tbody>
 </table>
-<p>Loss points of the 13 misses: <code>not-detected</code> 8, <code>tool-missing</code> 4, <code>noise-filter</code> 1.</p>
+<p>Loss points of the 2 misses: <code>not-detected</code> 1 (<code>JS-IDOR-1</code>), <code>noise-filter</code> 1
+(<code>PY-THIRDPARTY-EVAL-1</code>).</p>
+<p>The previous baseline, with only three built-in rules, was 45.8% (11 of 24); the
+community pack took it to 75%. The rules in <code>configs/rules/achilles-*.yaml</code> account
+for the difference, and every finding they added is on a labeled issue: the count of
+findings in labeled files that matched no label did not grow. The scan surfaces 61
+findings: 37 on a labeled issue and 24 elsewhere in the labeled files (unlabeled, not
+necessarily false; see the precision proxy above). Before Achilles dropped repeated
+scanner results (osv-scanner reports some advisories several times) and the two
+credential rules were tightened, the same scan counted 85.</p>
 <p>How to read it honestly:</p>
 <ul>
-<li><strong>Python and JavaScript recall is low because the baseline rule pack is thin.</strong>
-  <code>configs/rules</code> has three rules (Python <code>eval</code>, Python <code>subprocess(shell=True)</code>,
-  JavaScript <code>eval</code>), and those are the only detections in those languages. Every
-  other Python/JavaScript miss is a plain <code>not-detected</code>. Go is strong because gosec
-  is a real type-aware analyzer. The community rule pack (<code>achilles tools install</code>)
-  would change this and was not installed for the baseline; measure it separately.</li>
-<li><strong>Four <code>tool-missing</code> misses are all hard-coded secrets</strong> that <code>trivy</code> also
-  covers. <code>gitleaks</code> ran and reported nothing near them (it found only the one
-  token-shaped value). With <code>trivy</code> installed these would resolve to a detection or
-  to <code>not-detected</code>; the baseline cannot say which, which is exactly why they are
-  labeled <code>tool-missing</code>.</li>
+<li><strong>The new rules were written with these fixtures in view.</strong> They target the
+  vulnerability classes in the fixtures, and the rule tests
+  (<code>internal/config/testdata/rules/</code>) hold their own true and false cases, but a
+  benchmark the rules were tuned on overstates what they catch elsewhere. Treat 91.7%
+  as "the classes in the benchmark are covered", not as an estimate of real-world
+  recall; external targets (below) are the stronger evidence.</li>
 <li><strong>The <code>noise-filter</code> miss is deliberate</strong>: a <code>third_party/</code> file the default noise
   filter drops, kept to exercise that loss point.</li>
-<li><strong>One entry (<code>JS-IDOR-1</code>) is a business-logic flaw</strong> no pattern scanner is
-  expected to find.</li>
+<li><strong><code>JS-IDOR-1</code> is a business-logic flaw</strong> (no ownership check) that no pattern
+  scanner is expected to find. The AI review and the research agents are the parts
+  of Achilles that can.</li>
 <li><strong>24 entries is small.</strong> One entry is 4.2 points, which is why the gate tolerance
   is 2 points: any lost entry fails it. It catches regressions in rules and tool
   wiring; it cannot rank two scanners that differ by a few points.</li>
 <li>The fixtures were written and labeled <strong>before</strong> looking at scanner output, but
-  by the people who maintain the scanners. Treat the absolute numbers as a
-  regression baseline, not a claim about real-world recall; external targets
-  (below) are the stronger evidence.</li>
+  by the people who maintain the scanners.</li>
 <li><code>deps-manifest</code> depends on live OSV advisory data. The two labeled advisories are
   long-standing, but a future database change could still move that target.</li>
 </ul>
+<h2>Precision of the built-in rules on real code</h2>
+<p>The benchmark measures recall on code written to be vulnerable. To see what the
+built-in rules (<code>configs/rules/achilles-*.yaml</code>) report on code nobody wrote for
+them, they were run on their own, with no other scanner and no AI review, over a Go
+module cache: 98,048 files of third-party code (the Azure, AWS and Google Cloud SDKs,
+Kubernetes and kind, Envoy's control plane, goreleaser, the Go toolchain's own
+sources, golang.org/x/tools and others), mostly Go, with JavaScript, Python, YAML and
+JSON alongside. The files are what <code>go mod download</code> fetched for this repository's
+tools; the run was on 2026-10-14 with Opengrep 1.25.0.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>First run</th>
+<th>After the fixes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Findings outside test paths</td>
+<td>349</td>
+<td>86</td>
+</tr>
+<tr>
+<td>...of which not what the rule is for</td>
+<td>about 260</td>
+<td>2</td>
+</tr>
+<tr>
+<td>Findings in test paths (<code>_test.go</code>, <code>testdata/</code>, <code>fixtures/</code>, ...)</td>
+<td>101</td>
+<td>97</td>
+</tr>
+</tbody>
+</table>
+<p>"Test paths" is a path heuristic. The 86 that remain outside it are mostly sample
+secrets in test helpers it does not catch (gosec's own <code>testutils/g101_samples.go</code>
+accounts for 43, webhook libraries' test keys for 9). Then come credentials in CI and
+docker-compose files, <code>new Function()</code> and <code>localStorage</code>-to-<code>innerHTML</code> in
+golang.org/x/tools' slide viewer, <code>exec()</code> of generated validator code, and code
+compiled at runtime inside a vendored jQuery. The two wrong ones are an example
+access token in a doc comment and a URL in a comment. (A third, the string of
+value names Go's <code>stringer</code> writes into a <code>_&lt;type&gt;_name</code> constant, is now excluded
+too.) The hits in test paths are mostly cryptographic test
+vectors (private keys and shared secrets in the Go toolchain's <code>testdata/</code>), which
+the secret rule is right about and which are not secrets anyone needs to rotate.
+Achilles does not drop test code by default, since a real credential can sit there.</p>
+<p>What the first run found, all fixed and pinned by <code>ok:</code> cases in
+<code>internal/config/testdata/rules/</code>:</p>
+<ul>
+<li><code>dom-xss</code> flagged every <code>innerHTML</code> assigned from a variable. Pages build their own
+  HTML all the time, so it is now a taint rule: only data from the URL, referrer,
+  cookies, <code>window.name</code>, web storage or <code>postMessage</code> counts.</li>
+<li><code>hardcoded-secret</code> flagged identifiers that only look like secrets: enum values
+  (<code>"ClientSecretCredential"</code>), header names (<code>"X-Amz-Security-Token"</code>), paths and
+  gRPC method names, dotted names, <code>__Placeholder__</code> values, truncated examples,
+  public key tokens, and Swagger example values. The first version of the fix also
+  dropped the benchmark's <code>"hunter2-admin-pass"</code>, which the benchmark gate caught:
+  the identifier exclusion now needs an upper-case letter, a <code>/</code> or a <code>.</code> in the
+  value, as every identifier it was written for had.</li>
+<li><code>credentials-in-url</code> flagged documentation of the URL syntax
+  (<code>[username[:password]@]</code>) and <code>REDACTED:REDACTED</code>.</li>
+<li>One exclusion pattern backtracked past PCRE's limit on a long string such as
+  <code>"application/vnd.github.giant-sentry-fist-preview+json"</code>, and Opengrep then
+  dropped that exclusion for the whole file. It is rewritten with unambiguous,
+  possessive quantifiers, and the test file carries the string that set it off.</li>
+</ul>
+<p>This is precision only on code like this: no Ruby, PHP or Java application was in
+the set, and a module cache has little web-request handling, so the taint rules
+were barely exercised. It says nothing about recall.</p>
+<h2>The built-in rules on deliberately vulnerable applications</h2>
+<p>The module cache above says little about web code. For that, the built-in rules
+were run on their own, with Opengrep's intra-file taint on as Achilles runs it, over
+five public training applications, shallow clones of their default branches on
+2026-10-14:</p>
+<table>
+<thead>
+<tr>
+<th>Application</th>
+<th>Language</th>
+<th>Commit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/OWASP/railsgoat">OWASP RailsGoat</a></td>
+<td>Ruby on Rails</td>
+<td><code>f5951f1</code></td>
+</tr>
+<tr>
+<td><a href="https://github.com/digininja/DVWA">DVWA</a></td>
+<td>PHP</td>
+<td><code>068d974</code></td>
+</tr>
+<tr>
+<td><a href="https://github.com/OWASP/NodeGoat">OWASP NodeGoat</a></td>
+<td>Node.js</td>
+<td><code>c5cb68a</code></td>
+</tr>
+<tr>
+<td><a href="https://github.com/adeyosemanputra/pygoat">PyGoat</a></td>
+<td>Python (Django, Flask)</td>
+<td><code>19d17cc</code></td>
+</tr>
+<tr>
+<td><a href="https://github.com/WebGoat/WebGoat">OWASP WebGoat</a></td>
+<td>Java (Spring)</td>
+<td><code>e7b1313</code></td>
+</tr>
+</tbody>
+</table>
+<p>Every finding was read and judged by hand: a real flaw in the application, wrong
+(the rule's claim does not hold), or in a vendored minified library or a test.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>First run</th>
+<th>After the fixes below</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Findings</td>
+<td>134</td>
+<td>144</td>
+</tr>
+<tr>
+<td>Real flaws</td>
+<td>112</td>
+<td>136</td>
+</tr>
+<tr>
+<td>Wrong</td>
+<td>18</td>
+<td>4</td>
+</tr>
+<tr>
+<td>In vendored minified code or tests</td>
+<td>4</td>
+<td>4</td>
+</tr>
+</tbody>
+</table>
+<p>The four still wrong: DVWA's "impossible" command-injection level, which validates
+each octet of the address in branches the rule cannot follow (2); a DVWA page that
+looks a file up in its own table by the requested key; and an <code>api_key</code> in a comment
+in a vendored JavaScript gallery in RailsGoat.</p>
+<p>What the first run got wrong or missed, and what changed:</p>
+<ul>
+<li><code>java.ssrf</code> treated building a <code>URI</code> as making a request. WebGoat builds URIs from
+  input to parse them and to set <code>Location</code> headers; 11 of its 12 findings were
+  that. The sinks are now the calls that fetch (<code>new URL</code>, <code>HttpRequest</code>,
+  <code>RestTemplate</code>, <code>WebClient</code>, Jsoup, Apache HttpClient, JAX-RS).</li>
+<li>WebGoat's SQL lessons pass the request parameter to a helper that builds and runs
+  the query, and taint stopped at the call. Achilles now runs Opengrep with
+  <code>--taint-intrafile</code>, which follows taint between functions in the same file: ten
+  SQL-injection lessons, Zip Slip and the SSRF lesson were found that were not
+  before. It costs time: 18s to 28s on WebGoat, and 192s to 481s on the 98,048-file
+  module cache.</li>
+<li>Queries built in a variable and run later (WebGoat, PyGoat's <code>objects.raw()</code>), a
+  RailsGoat <code>select("#{col}")</code>, a shell command interpolated in a Rails model from a
+  value passed in by a controller, <code>params[:user].to_unsafe_h</code>, and NodeGoat's
+  MongoDB <code>$where</code> were all missed; each now has a rule or pattern.</li>
+<li>Views were not scanned at all. An ERB rule now reports <code>raw</code>, <code>html_safe</code> and
+  <code>&lt;%==</code> on a value (RailsGoat's annotated header XSS and cookie XSS).</li>
+<li><code>eval("...")</code> and <code>Function("...")</code> of a string literal, and a <code>prepareStatement</code>
+  of two literals joined, were reported.</li>
+</ul>
+<p>Still missed, and why: DVWA builds its XSS and file-inclusion output in one file and
+echoes or includes it in another, and the rules follow taint within a file only.
+DVWA's medium SQL-injection level escapes the input with <code>mysqli_real_escape_string</code>
+but uses it unquoted, and the rule takes the escape as a fix. Its high level reads
+the input from the session. RailsGoat's DOM XSS lives in inline scripts in ERB
+templates. Business-logic flaws (access control, IDOR, CSRF, password reset logic),
+ReDoS and vulnerable dependencies are for the AI review, the dependency scanners or
+nobody: no pattern rule finds them.</p>
+<p>That is precision: what the rules report on real application code, and that what
+they report is almost always right. Recall on the same applications is next.</p>
+<h2>Recall on the same applications</h2>
+<p><a href="../evals/detect/real-apps/README.md"><code>evals/detect/real-apps/</code></a> labels the documented
+vulnerabilities of the five applications above, at the same commits: 270 in all,
+written from each application's own lessons, help pages and wiki before any scan
+output was looked at. They include flaws no pattern rule can find (access control,
+CSRF, authentication logic, information disclosure), so the overall figure is the
+share of everything documented, not of what a scanner could reach.</p>
+<p>Measured on 2026-10-18 with the binary scanners (Opengrep, gitleaks, osv-scanner,
+Trivy; no Docker, so none of the Tier-2 tools) and AI review off. "Own rules" is
+<code>--mode commercial</code>; "with community rules" is the default <code>--mode oss</code>.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Own rules, before</th>
+<th>Own rules, after</th>
+<th>With community rules, before</th>
+<th>With community rules, after</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Overall</strong></td>
+<td><strong>23.3%</strong> (63)</td>
+<td><strong>30.7%</strong> (83)</td>
+<td><strong>30.7%</strong> (83)</td>
+<td><strong>35.9%</strong> (97)</td>
+</tr>
+<tr>
+<td>Injection (61)</td>
+<td>31</td>
+<td>33</td>
+<td>36</td>
+<td>36</td>
+</tr>
+<tr>
+<td>XSS (28)</td>
+<td>3</td>
+<td>11</td>
+<td>10</td>
+<td>15</td>
+</tr>
+<tr>
+<td>Path traversal (11)</td>
+<td>4</td>
+<td>4</td>
+<td>4</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Weak crypto (21)</td>
+<td>5</td>
+<td>6</td>
+<td>7</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Hard-coded secret (12)</td>
+<td>1</td>
+<td>3</td>
+<td>1</td>
+<td>3</td>
+</tr>
+<tr>
+<td>Open redirect (10)</td>
+<td>5</td>
+<td>7</td>
+<td>6</td>
+<td>7</td>
+</tr>
+<tr>
+<td>Deserialization (6)</td>
+<td>5</td>
+<td>6</td>
+<td>5</td>
+<td>6</td>
+</tr>
+<tr>
+<td>XXE (5)</td>
+<td>1</td>
+<td>2</td>
+<td>1</td>
+<td>2</td>
+</tr>
+<tr>
+<td>File upload (3)</td>
+<td>0</td>
+<td>3</td>
+<td>0</td>
+<td>3</td>
+</tr>
+<tr>
+<td>SSRF (4)</td>
+<td>3</td>
+<td>3</td>
+<td>3</td>
+<td>3</td>
+</tr>
+<tr>
+<td>Access control, authentication, CSRF, info disclosure, misconfiguration, other (102)</td>
+<td>3</td>
+<td>3</td>
+<td>6</td>
+<td>6</td>
+</tr>
+</tbody>
+</table>
+<p>"After" is with the rules added on 2026-10-18: Python SQL injection by taint and
+reflected XSS, Django and Jinja <code>|safe</code> and <code>autoescape off</code>, hard-coded Flask, Django
+and JWT signing keys, Python XXE, Java open redirect and XStream, PHP HTML built from
+request data, uploads saved under the client's file name and ECB/DES ciphers, and
+JavaScript template engines with escaping off.</p>
+<p>Read it with these limits in mind:</p>
+<ul>
+<li><strong>The "after" columns are in-sample.</strong> The rules were written while reading these
+  applications' misses. They are general patterns, not app-specific ones, but recall
+  on code they were not written against will be lower than the gain here suggests.</li>
+<li><strong>Precision held.</strong> With own rules only, the new rules added 52 findings to the five
+  apps, 20 of them on labels. The rest were read by hand: nearly all are real flaws
+  the labels do not list (request data in DVWA's HTML, <code>$_SERVER['PHP_SELF']</code> in form
+  actions, DVWA's view-source page reflecting <code>id</code>). Two were wrong: command output
+  and a username echoed on DVWA's "impossible" levels, which validate the input in
+  ways the rule cannot follow.</li>
+<li><strong>What is still missed, by cause:</strong> taint that crosses files (WebGoat's command
+  injection runs in a service class the controller calls; DVWA includes the page
+  chosen in another file); SQL escaped but used unquoted (DVWA medium); Opengrep
+  dropping a second identical sink after a <code>switch</code> <code>break</code> (DVWA's SQLite branches);
+  DOM XSS in inline <code>&lt;script&gt;</code> blocks; hard-coded passwords too short or plain to
+  tell from test data; and logic flaws, which are for the AI review (<code>--hunt</code>) or a
+  person.</li>
+</ul>
+<h2>The OWASP Benchmark for Java</h2>
+<p>The <a href="https://owasp.org/www-project-benchmark/">OWASP Benchmark</a> is 2,740 small Java
+servlets in 11 categories, each either a real vulnerability (1,415) or a decoy built
+to look like one (1,325), with an answer key. Its scorecard flags a test case when a
+tool reports a finding with the category's CWE anywhere in that case's file, and
+scores each category as true-positive rate minus false-positive rate: 0 is what
+flagging at random gets, 100 is perfect. Because it has decoys, it measures false
+positives as well as recall, which the vulnerable-app labels above cannot.</p>
+<pre><code class="language-bash">git clone https://github.com/OWASP-Benchmark/BenchmarkJava   # about 76 MB
+go run ./cmd/achilles-eval --mode owasp --owasp-dir BenchmarkJava
+</code></pre>
+<p>Measured on 2026-10-18 at commit <code>bc5ffeb</code> with the binary scanners (no Docker, so
+no SpotBugs/find-sec-bugs) and AI review off:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Recall</th>
+<th>Decoys flagged</th>
+<th>Score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Own rules, before (<code>--mode commercial</code>)</td>
+<td>11.6%</td>
+<td>6.9%</td>
+<td><strong>4.7</strong></td>
+</tr>
+<tr>
+<td>Own rules, after the 2026-10-18/19 Java rules</td>
+<td>90.6%</td>
+<td>20.9%</td>
+<td><strong>69.7</strong></td>
+</tr>
+<tr>
+<td>With community rules (<code>--mode oss</code>), before</td>
+<td>90.9%</td>
+<td>24.6%</td>
+<td>66.3</td>
+</tr>
+<tr>
+<td>With community rules, after</td>
+<td>94.0%</td>
+<td>26.9%</td>
+<td>67.1</td>
+</tr>
+<tr>
+<td>Own rules, after the 2026-10-20 weak-randomness fix</td>
+<td>91.3%</td>
+<td>20.1%</td>
+<td><strong>71.2</strong></td>
+</tr>
+<tr>
+<td>With community rules, after that fix</td>
+<td>94.0%</td>
+<td>26.1%</td>
+<td>67.9</td>
+</tr>
+</tbody>
+</table>
+<p>The last two rows come from <a href="#comparison">the comparison with other tools</a>, which
+also explains the fix. All three columns are averages over the 11 categories, as the scorecard reports
+them.</p>
+<p>How to read it:</p>
+<ul>
+<li><strong>The "before" row is the out-of-sample result</strong>, and it was poor: Achilles' own
+  Java rules found SQL and command injection only. They missed classes written out
+  in full (<code>new java.io.File(...)</code>, <code>java.security.MessageDigest</code>), and had no rule
+  at all for XSS, LDAP or XPath injection, weak randomness, insecure cookies or trust
+  boundaries.</li>
+<li><strong>The "after" rows are in-sample</strong>: the new rules were written after reading the
+  Benchmark's cases. They are general (each sink is a standard API, each source the
+  servlet or Spring request), and on the five vulnerable apps above they added seven
+  findings, all real (secrets and tokens drawn from <code>java.util.Random</code>), and one more
+  labeled flaw, not a flood. But do not read 69.7 as what they score on code
+  they were not written against.</li>
+<li><strong>Where the false positives come from:</strong> most decoys keep the input out of the sink
+  through a branch that is never taken (<code>if (7 * 42 - 106 &gt; 200) bar = param;</code>) or a
+  map key that is never read. A taint engine without constant folding follows both
+  paths, so SQL injection (62.9% of decoys flagged), path traversal (32.6%) and trust
+  boundaries (46.5%) score lowest. The AI review is meant for exactly this; it is not
+  measured here.</li>
+<li><strong>Hashing</strong> reads the algorithm name from a properties file in a third of its real
+  cases, which no static rule can see (69% recall, 0% false positives).</li>
+</ul>
+<h3>The Python edition</h3>
+<p><a href="https://github.com/OWASP-Benchmark/BenchmarkPython">BenchmarkPython</a> (version 0.1,
+2026) is the same idea for Flask: 1,230 cases in 14 categories, 452 of them real. The
+same command scores it (<code>--owasp-dir BenchmarkPython</code>). Measured on 2026-10-19 at
+commit <code>f129148</code>, binary scanners, AI review off:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Recall</th>
+<th>Decoys flagged</th>
+<th>Score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Own rules, before (<code>--mode commercial</code>)</td>
+<td>31.5%</td>
+<td>12.0%</td>
+<td><strong>19.5</strong></td>
+</tr>
+<tr>
+<td>Own rules, after the 2026-10-19 Python rules</td>
+<td>69.1%</td>
+<td>18.8%</td>
+<td><strong>50.3</strong></td>
+</tr>
+<tr>
+<td>With community rules (<code>--mode oss</code>), before</td>
+<td>45.3%</td>
+<td>27.0%</td>
+<td>18.3</td>
+</tr>
+<tr>
+<td>With community rules, after</td>
+<td>75.2%</td>
+<td>33.4%</td>
+<td>41.8</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>"Before" is out of sample again</strong>, and it showed the same kind of gap as Java:
+  nothing for LDAP or XPath injection, open redirects, weak randomness, insecure
+  cookies, trust boundaries or a Flask view that returns request data as HTML; and
+  <code>codecs.open</code> and <code>pathlib</code>'s <code>/</code> were not path sinks. Achilles' Python rules had
+  been written against PyGoat (Django), which has few of these.</li>
+<li><strong>"After" is in-sample.</strong> On the five vulnerable apps the Python changes added six
+  findings, all real (<code>eval</code> of request data in two PyGoat labs, three cookies set with
+  <code>secure=False</code>, a one-time code from <code>random.randint</code>), and lost none.</li>
+<li><strong>The community pack adds recall and more false positives</strong> here: with it, a third of
+  the decoys are flagged and the score is lower than the own rules alone.</li>
+<li><strong>Still weak:</strong> command injection (the few real cases pass the input through a
+  helper in another file), code injection and XPath (decoys that keep the input out
+  through a branch never taken), and path traversal through the Benchmark's helper
+  classes.</li>
+</ul>
+<p>Two things found on the way apply to every Python taint rule. Opengrep drops taint
+across a slice (<code>request.args["q"][:100]</code> is clean to it; an index, <code>[0]</code>, is not),
+so truncated input is missed. And <code>metavariable-regex</code> is anchored at the start of
+the value, so a check meant to find a word inside a name has to begin with <code>.*</code>; three
+rules got that wrong and are fixed, among them the JavaScript XSS rule's check for an
+escaping function (<code>DOMPurify.sanitize</code> and <code>_.escape</code> were not recognized).</p>
+<p>Opengrep's results vary slightly from run to run: one community-pack finding in
+NodeGoat appeared in one of two identical scans, which moves the five-app figure with
+the community pack between 35.6% and 35.9%. <code>achilles-eval --repeat</code> measures this.</p>
+<h2>OWASP Juice Shop</h2>
+<p>The OWASP Benchmark numbers above are in-sample once the rules were rebuilt from it.
+<a href="https://github.com/juice-shop/juice-shop">OWASP Juice Shop</a> (TypeScript: Express on
+the server, Angular in the browser) is the first application measured that no rule
+was written against beforehand, and it brings its own labels: each of its coding
+challenges marks the vulnerable line in the source
+(<code>// vuln-code-snippet vuln-line loginAdminChallenge</code>), and ships three or four
+candidate fixes per challenge in <code>data/static/codefixes/</code>, one of them correct.</p>
+<pre><code class="language-bash">make build &amp;&amp; ./bin/achilles tools install opengrep
+echo 'mode: commercial' &gt; /tmp/commercial.yaml     # own rules only
+ACHILLES_SETTINGS=/tmp/commercial.yaml go run ./cmd/achilles-eval --mode juice-shop
+</code></pre>
+<p>The runner checks out the commit pinned in <code>evals/juice-shop/truth.json</code> into
+<code>.achilles/detect-cache/</code> (about 55 MB; <code>--juice-shop-dir</code> takes a checkout you
+already have, at that commit) and scores three things:</p>
+<ul>
+<li><strong>Recall:</strong> a challenge is found when a finding sits within two lines of its marked
+  line. Only JavaScript and TypeScript marks count (the Solidity, YAML and Terraform
+  challenges are other scanners' work). Twelve of the 25 are marked out of reach in the
+  truth file, with the reason: a hidden route, a missing authorization check, a
+  password policy, an LLM tool. Those are for the AI review or a person.</li>
+<li><strong>Precision:</strong> of the findings in the application, outside its tests, the share that
+  are real. Juice Shop has many more flaws than coding challenges, so a finding off a
+  marked line is looked up in the truth file's hand judgements; one nobody has judged
+  yet is printed as such and left out, never guessed.</li>
+<li><strong>Fix variants:</strong> how many of the wrong fixes (still vulnerable) and of the correct
+  fixes have a finding in the file.</li>
+</ul>
+<p>Measured on 2026-10-20 at commit <code>399fba7</code>, Opengrep 1.25.0, AI review off, own rules:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Before (v0.3.1)</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Challenges found, of the 13 in reach</td>
+<td>5 (38.5%)</td>
+<td><strong>12 (92.3%)</strong></td>
+</tr>
+<tr>
+<td>Challenges found, of all 25</td>
+<td>5 (20.0%)</td>
+<td>13 (52.0%)</td>
+</tr>
+<tr>
+<td>Findings in the application</td>
+<td>27</td>
+<td>41</td>
+</tr>
+<tr>
+<td>Real</td>
+<td>17</td>
+<td>30</td>
+</tr>
+<tr>
+<td>Wrong</td>
+<td>10</td>
+<td>11</td>
+</tr>
+<tr>
+<td><strong>Precision</strong></td>
+<td><strong>63.0%</strong></td>
+<td><strong>73.2%</strong></td>
+</tr>
+<tr>
+<td>Wrong fixes with a finding (in reach)</td>
+<td>4 of 36</td>
+<td>21 of 36</td>
+</tr>
+<tr>
+<td>Correct fixes with a finding (in reach)</td>
+<td>0 of 13</td>
+<td>2 of 13</td>
+</tr>
+</tbody>
+</table>
+<p>How to read it:</p>
+<ul>
+<li><strong>"Before" is the out-of-sample result.</strong> The own rules found the two SQL injections
+  and nothing else Juice Shop marks: no rule for Angular's <code>bypassSecurityTrustHtml</code>
+  (three XSS challenges), a MongoDB filter field taken from the JSON body (<code>{ _id:
+  req.body.id }</code>), <code>serve-index</code> directory listings (two challenges) or a rate limiter
+  keyed on <code>X-Forwarded-For</code>. Four of its 27 findings were the same SQL injection
+  reported again, see below.</li>
+<li><strong>"After" is in-sample</strong>: the four new rules were written after reading Juice Shop.
+  Each is a general API pattern, and on the five vulnerable applications above they
+  changed nothing (209 findings before and after, line for line).</li>
+<li><strong>The one in-reach miss</strong> is the open redirect, an allow-list checked with
+  <code>url.includes(allowed)</code>. <code>forgedReviewChallenge</code> (out of reach) counts as found
+  because it marks the same line as the NoSQL injection.</li>
+<li><strong>The 11 wrong findings:</strong> four <code>res.write</code> calls that stream server-sent events of
+  JSON from the chatbot, which the XSS rule takes for HTML; an <code>eval</code> of arithmetic the
+  server generated (the CAPTCHA); two upload paths built from the user's id and a
+  checked extension; MD5 as a release-file checksum; Angular's bypass on a CAPTCHA
+  image the server draws and on the challenge descriptions; and the <code>/.well-known</code>
+  listing, which is public by design.</li>
+<li><strong>The two correct fixes with a finding</strong> still hold another challenge's flaw: the
+  fixed <code>/ftp</code> listing keeps the <code>/support/logs</code> one and the reverse, and the fixed
+  review author check still takes the review id from the body. Twelve of the 92 fix
+  files are fragments Opengrep cannot parse, so the fix-variant rows undercount.</li>
+</ul>
+<p>What changed besides the four rules:</p>
+<ul>
+<li>Opengrep reports one taint sink once per source that reaches it. Juice Shop's search
+  reads <code>req.query.q</code> three times, and the query came out as three SQL injections.
+  Copies at the same exact span are now one finding.</li>
+<li>The JavaScript SQL rule's message showed <code>db.query("... WHERE id = $1", [id])</code>.
+  Opengrep fills <code>$1</code> in a message with matched text, so each copy carried a different
+  piece of the scanned file there. It reads <code>?</code> now, and a test keeps metavariables out
+  of every rule's message.</li>
+<li>The <code>$where</code> rule no longer fires when the value is converted with <code>Number()</code> or
+  <code>parseInt()</code> first, and an Ethereum address (40 hex digits) is no longer a
+  hard-coded secret.</li>
+</ul>
 <h2>External targets</h2>
-<p>Point the benchmark at pinned commits of public intentionally-vulnerable apps (OWASP
-Juice Shop, NodeGoat, WebGoat) with <code>evals/detect/ground_truth/external.example.json</code>
+<p>Point the benchmark at pinned commits of public intentionally-vulnerable apps (NodeGoat,
+WebGoat; Juice Shop has its own mode, above) with <code>evals/detect/ground_truth/external.example.json</code>
 as the template. The example carries no real commit SHA and the runner refuses it,
 with instructions, until you pin one and verify every label against that commit. See
 <code>evals/detect/README.md</code> for the steps.</p>
@@ -2024,6 +3327,526 @@ with instructions, until you pin one and verify every label against that commit.
 <li>The loss-point analysis can only say what the scan's artifacts record. Flags it
   does not know about (<code>--scan-arg</code>) are reported as <code>dropped-unknown</code>, not guessed.</li>
 </ul></section>
+<section id="comparison"><h1>Comparison with Other Tools</h1>
+<p>How Achilles' rules compare with Semgrep, Bearer, Find Security Bugs and Bandit on
+the <a href="https://owasp.org/www-project-benchmark/">OWASP Benchmark</a>, scored the same way,
+on the same cases, on the same machine. Every number on this page comes from
+<a href="../evals/compare/run.sh"><code>evals/compare/run.sh</code></a> and
+<a href="../evals/compare/tables.sh"><code>evals/compare/tables.sh</code></a>; <a href="#reproduce">Reproduce</a> has
+the commands.</p>
+<p><strong>Read this first: Achilles' scores here are in-sample.</strong> Its Java and Python rules
+were rewritten on 2026-10-18/19 after reading these Benchmark cases. Before that,
+they scored <strong>4.7</strong> on Java and <strong>19.5</strong> on Python
+(<a href="#benchmarking">Benchmarking</a>), below every other
+tool on this page for Java. None of the other tools was tuned on these cases by us.
+The new rules are general (standard sinks, standard request sources) and added only
+real findings on five deliberately vulnerable apps, but a score on the cases the
+rules were written against says less than a score on code they have never seen.</p>
+<h2>Results</h2>
+<p>Measured on 2026-10-20 on a 4-vCPU Linux machine (Intel Xeon, 2.1 GHz, 15 GB). AI
+review was off for Achilles: it needs a model and a key, and it is the part meant to
+remove decoys, so it is not measured here.</p>
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>Tool</th>
+<th>Recall</th>
+<th>Decoys flagged</th>
+<th>Precision</th>
+<th>Score</th>
+<th>Score, related CWEs</th>
+<th>Seconds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java</td>
+<td>Achilles, own rules</td>
+<td>91.3</td>
+<td>20.1</td>
+<td>81.8</td>
+<td><strong>71.2</strong></td>
+<td>71.2</td>
+<td>66</td>
+</tr>
+<tr>
+<td>Java</td>
+<td>Achilles, with community rules</td>
+<td>94.0</td>
+<td>26.1</td>
+<td>79.0</td>
+<td><strong>67.9</strong></td>
+<td>67.9</td>
+<td>201</td>
+</tr>
+<tr>
+<td>Java</td>
+<td>Semgrep CE</td>
+<td>79.0</td>
+<td>44.1</td>
+<td>66.9</td>
+<td><strong>34.9</strong></td>
+<td>44.0</td>
+<td>72</td>
+</tr>
+<tr>
+<td>Java</td>
+<td>Bearer</td>
+<td>70.1</td>
+<td>32.0</td>
+<td>72.0</td>
+<td><strong>38.1</strong></td>
+<td>39.2</td>
+<td>78</td>
+</tr>
+<tr>
+<td>Java</td>
+<td>Find Security Bugs</td>
+<td>90.3</td>
+<td>54.0</td>
+<td>65.2</td>
+<td><strong>36.3</strong></td>
+<td>36.3</td>
+<td>77</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>Achilles, own rules</td>
+<td>69.1</td>
+<td>18.8</td>
+<td>77.9</td>
+<td><strong>50.3</strong></td>
+<td>49.7</td>
+<td>15</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>Achilles, with community rules</td>
+<td>75.2</td>
+<td>33.4</td>
+<td>71.0</td>
+<td><strong>41.8</strong></td>
+<td>40.8</td>
+<td>128</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>Semgrep CE</td>
+<td>36.5</td>
+<td>26.3</td>
+<td>49.3</td>
+<td><strong>10.2</strong></td>
+<td>15.7</td>
+<td>50</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>Bearer</td>
+<td>4.0</td>
+<td>1.2</td>
+<td>62.5</td>
+<td><strong>2.8</strong></td>
+<td>2.8</td>
+<td>44</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>Bandit</td>
+<td>25.0</td>
+<td>15.7</td>
+<td>81.2</td>
+<td><strong>9.3</strong></td>
+<td>16.5</td>
+<td>4</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Recall</strong> is the share of real vulnerabilities flagged, and <strong>decoys flagged</strong> the
+  share of safe look-alikes flagged, both averaged over the categories as the
+  Benchmark's scorecard does.</li>
+<li><strong>Score</strong> is recall minus decoys flagged: 0 is what flagging at random gets, 100 is
+  perfect. It counts a finding only when its CWE is the category's, which is the
+  Benchmark's own rule.</li>
+<li><strong>Score, related CWEs</strong> also accepts CWEs that tools commonly report for the same
+  flaw (CWE-326 for weak crypto, CWE-327 for a weak hash, and so on). Semgrep and
+  Bandit gain the most from it: Semgrep files weak ciphers under CWE-326 and Bandit
+  files weak hashes under CWE-327.</li>
+<li><strong>Precision</strong> is the share of flagged cases that are real, pooled over all cases.
+  The scorecard does not report it.</li>
+<li><strong>Seconds</strong> is wall-clock time for one scan of all cases (2,740 Java, 1,230 Python).
+  Achilles' time includes the other scanners it runs on every scan (gitleaks,
+  osv-scanner, trivy), which find nothing here. Find Security Bugs' time leaves out
+  compiling the Benchmark, which it needs. Times varied a lot between identical
+  runs (Achilles' own rules on Java took between 55 and 138 seconds in four runs), so
+  read them as rough.</li>
+</ul>
+<h3>Score per category</h3>
+<table>
+<thead>
+<tr>
+<th>Java</th>
+<th>Achilles own</th>
+<th>Achilles + community</th>
+<th>Semgrep CE</th>
+<th>Bearer</th>
+<th>Find Security Bugs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cmdi/78</td>
+<td>67.3</td>
+<td>45.6</td>
+<td>5.7</td>
+<td>14.8</td>
+<td>0</td>
+</tr>
+<tr>
+<td>crypto/327</td>
+<td>100</td>
+<td>100</td>
+<td>0</td>
+<td>76.7</td>
+<td>100</td>
+</tr>
+<tr>
+<td>hash/328</td>
+<td>69</td>
+<td>69</td>
+<td>69</td>
+<td>69</td>
+<td>69</td>
+</tr>
+<tr>
+<td>ldapi/90</td>
+<td>67</td>
+<td>56.3</td>
+<td>8.8</td>
+<td>18.1</td>
+<td>0</td>
+</tr>
+<tr>
+<td>pathtraver/22</td>
+<td>56.1</td>
+<td>52.6</td>
+<td>11.7</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>securecookie/614</td>
+<td>100</td>
+<td>100</td>
+<td>100</td>
+<td>100</td>
+<td>100</td>
+</tr>
+<tr>
+<td>sqli/89</td>
+<td>30.2</td>
+<td>30.2</td>
+<td>19.7</td>
+<td>5</td>
+<td>0</td>
+</tr>
+<tr>
+<td>trustbound/501</td>
+<td>40.2</td>
+<td>40.2</td>
+<td>9.9</td>
+<td>3.3</td>
+<td>0.8</td>
+</tr>
+<tr>
+<td>weakrand/330</td>
+<td>100</td>
+<td>100</td>
+<td>100</td>
+<td>100</td>
+<td>100</td>
+</tr>
+<tr>
+<td>xpathi/643</td>
+<td>78.3</td>
+<td>78.3</td>
+<td>28.3</td>
+<td>18.3</td>
+<td>0</td>
+</tr>
+<tr>
+<td>xss/79</td>
+<td>75.1</td>
+<td>75.1</td>
+<td>30.4</td>
+<td>13.7</td>
+<td>29.7</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Python</th>
+<th>Achilles own</th>
+<th>Achilles + community</th>
+<th>Semgrep CE</th>
+<th>Bearer</th>
+<th>Bandit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cmdi/78</td>
+<td><strong>-46.2</strong></td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>codeinj/94</td>
+<td>14.7</td>
+<td>14.7</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>deserialization/502</td>
+<td>44.4</td>
+<td>66.7</td>
+<td>66.7</td>
+<td>38.9</td>
+<td>52.8</td>
+</tr>
+<tr>
+<td>hash/328</td>
+<td>100</td>
+<td>100</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>ldapi/90</td>
+<td>43.8</td>
+<td>43.8</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>pathtraver/22</td>
+<td>31.5</td>
+<td>31.5</td>
+<td>1.1</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>redirect/601</td>
+<td>45.4</td>
+<td>45.4</td>
+<td>2.9</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>securecookie/614</td>
+<td>100</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>sqli/89</td>
+<td>100</td>
+<td>100</td>
+<td>100</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>trustbound/501</td>
+<td>39.2</td>
+<td>39.2</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>weakrand/330</td>
+<td>100</td>
+<td>100</td>
+<td>0</td>
+<td>0</td>
+<td>77.8</td>
+</tr>
+<tr>
+<td>xpathi/643</td>
+<td>22.1</td>
+<td>22.1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>xss/79</td>
+<td>44.7</td>
+<td>22.3</td>
+<td>-27.6</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>xxe/611</td>
+<td>65</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2>Where Achilles loses</h2>
+<ul>
+<li><strong>Out of sample, it lost badly.</strong> The 4.7 (Java) and 19.5 (Python) above are what
+  Achilles' rules scored before they were written against these cases. On Java that
+  was below Semgrep CE, Bearer and Find Security Bugs as measured here.</li>
+<li><strong>Python command injection is the worst score on this page: -46.2.</strong> Achilles flags
+  all 7 decoys (its <code>subprocess-shell-true</code> rule fires on any <code>shell=True</code>, whatever
+  reaches it) and misses 6 of 13 real cases (an argument list built as
+  <code>["sh", "-c", ...]</code> with no <code>shell=True</code>, and input passed through a helper in
+  another file). Every other tool scores 0 here, flagging all or nothing.</li>
+<li><strong>Python deserialization:</strong> Semgrep CE (66.7) and Bandit (52.8) beat Achilles' own
+  rules (44.4). The community pack closes the gap.</li>
+<li><strong>Its own community mode scores lower than its own rules alone</strong>, on both
+  benchmarks (Java 71.2 to 67.9, Python 50.3 to 41.8). The pack adds recall and more
+  false positives: it flags every Python <code>secure</code>-cookie and XXE decoy. That is the
+  default in <code>--mode oss</code>.</li>
+<li><strong>It is slower.</strong> With the community pack, a Java scan took 201 seconds against
+  Semgrep CE's 72, because Achilles runs several scanners and two rule sets on every
+  scan. Bandit scans the Python cases in 4 seconds, Achilles in 15.</li>
+<li><strong>The Benchmark rewards what static rules can see and nothing else.</strong> No tool here
+  reads the Java hashing cases that take the algorithm from a properties file (all
+  score 69), and most decoys are a branch never taken, which none of them folds away.
+  SQL injection in Java is weak for every tool (30.2 at best) for that reason.</li>
+</ul>
+<h2>What was compared, and how</h2>
+<p>Every tool scanned the Benchmark's test-case directory, and every report was scored by
+the same code: <code>achilles-eval --mode owasp</code>, which flags a test case when a finding
+with the category's CWE is reported anywhere in its file (the Benchmark's own rule).
+For a report written by another tool, <code>--owasp-sarif</code> scores that SARIF file instead
+of running Achilles. The CWE is read from a rule's tags (<code>external/cwe/cwe-89</code>, or
+Semgrep's <code>CWE-89: ...</code>), from a rule's relationship to the CWE taxonomy (SpotBugs),
+or from a result's <code>cwe</code> property. Bearer's SARIF carries no CWE and Bandit 1.9.4
+writes no SARIF, so their JSON reports are converted by the jq filters
+<a href="../evals/compare/bearer.jq"><code>bearer.jq</code></a> and <a href="../evals/compare/bandit.jq"><code>bandit.jq</code></a>,
+which copy each finding's file and CWE and nothing else.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Version</th>
+<th>Rules</th>
+<th>Command (simplified)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Achilles, own rules</td>
+<td>this commit</td>
+<td>its own rules (<code>configs/rules</code>), opengrep 1.25.0</td>
+<td><code>ACHILLES_SETTINGS=&lt;file with "mode: commercial"&gt; achilles-eval --mode owasp --owasp-dir &lt;checkout&gt;</code></td>
+</tr>
+<tr>
+<td>Achilles, with community rules</td>
+<td>this commit</td>
+<td>the above plus <a href="https://github.com/opengrep/opengrep-rules">opengrep-rules</a> <code>f1d2b56</code> (security rules only, as <code>achilles tools install</code> keeps them)</td>
+<td>the same with <code>mode: oss</code></td>
+</tr>
+<tr>
+<td><a href="https://github.com/semgrep/semgrep">Semgrep CE</a></td>
+<td>1.181.0</td>
+<td><a href="https://github.com/semgrep/semgrep-rules">semgrep-rules</a> <code>17e31e1</code>, the whole <code>java/</code> or <code>python/</code> directory</td>
+<td><code>semgrep scan --metrics=off --config semgrep-rules/java --sarif -o java.sarif &lt;testcode&gt;</code></td>
+</tr>
+<tr>
+<td><a href="https://github.com/Bearer/bearer">Bearer</a></td>
+<td>1.51.1</td>
+<td><a href="https://github.com/Bearer/bearer-rules">bearer-rules</a> v0.48.4</td>
+<td><code>bearer scan &lt;testcode&gt; --disable-default-rules --external-rule-dir bearer-rules/rules --format json --output java.json</code></td>
+</tr>
+<tr>
+<td><a href="https://github.com/find-sec-bugs/find-sec-bugs">Find Security Bugs</a></td>
+<td>1.14.0 (SpotBugs 4.9.3)</td>
+<td>its own detectors</td>
+<td><code>findsecbugs.sh -effort:max -auxclasspath &lt;deps&gt; -sarif=java.sarif target/classes/.../testcode</code></td>
+</tr>
+<tr>
+<td><a href="https://github.com/PyCQA/bandit">Bandit</a></td>
+<td>1.9.4</td>
+<td>its own plugins</td>
+<td><code>bandit -r &lt;testcode&gt; -f json -o python.json</code></td>
+</tr>
+</tbody>
+</table>
+<p>The Benchmarks are pinned: BenchmarkJava <code>bc5ffeb</code> (version 1.2) and BenchmarkPython
+<code>f129148</code> (version 0.1).</p>
+<p>Choices that affect the numbers:</p>
+<ul>
+<li><strong>Semgrep</strong> ran the public rule repository rather than a Registry ruleset such as
+  <code>p/java</code>, so the rules are pinned; the Registry draws its community rulesets from
+  this repository but picks a subset. Semgrep's paid engine (cross-file analysis) and
+  its paid rules are not included.</li>
+<li><strong>Bearer</strong> fetches its rules at run time by default; here they come from the pinned
+  rules repository instead. On Python it found little.</li>
+<li><strong>Find Security Bugs</strong> is wired into Achilles (<code>--profile full</code>), but it reads
+  compiled classes, so it was run on its own on the compiled Benchmark with the
+  project's classpath. It reports an injection wherever a value that is not a constant
+  reaches a sink, which flags every decoy in five categories.</li>
+<li><strong>Bandit</strong> is wired into Achilles as an opt-in Python scanner and is scored on its
+  own here.</li>
+<li>Not included: CodeQL (its license is not open source), and Achilles' AI review.</li>
+</ul>
+<h2>Fixed along the way</h2>
+<p>Running this exposed two problems, fixed in the same change:</p>
+<ul>
+<li><strong>Achilles' Java weak-randomness rule missed <code>new java.util.Random().nextBytes(buf)</code></strong>,
+  which fills an array instead of returning a value (18 real cases), and flagged a
+  <code>Random</code> parameter that held a <code>SecureRandom</code> (24 decoys). It now treats <code>nextBytes</code>
+  as tainting its argument, treats the generator itself as the source so one passed to a
+  helper still counts, and no longer trusts a parameter's declared <code>Random</code> type, since
+  <code>SecureRandom</code> is a subclass. Weak randomness went from 83.0 to 100 and the Java
+  average from 69.7 to 71.2. On WebGoat the rule's findings did not change (7 before
+  and after).</li>
+<li><strong>The scorer read no CWE from SpotBugs reports</strong>, which put it in a SARIF
+  relationship rather than a tag, so Find Security Bugs first scored 0. It reads both
+  now.</li>
+</ul>
+<h2>Reproduce</h2>
+<p>From the repository root, with these on <code>PATH</code>:</p>
+<ul>
+<li><code>go</code> and <code>jq</code>;</li>
+<li>the Achilles scanners and community rules: <code>go build -o bin/achilles ./cmd/achilles &amp;&amp; bin/achilles tools install</code>,
+  with <code>~/.achilles/bin</code> on <code>PATH</code>;</li>
+<li>Semgrep and Bandit: <code>pip install semgrep==1.181.0 bandit==1.9.4</code>;</li>
+<li><code>bearer</code> 1.51.1 from its <a href="https://github.com/Bearer/bearer/releases/tag/v1.51.1">release</a>;</li>
+<li><code>findsecbugs.sh</code> from
+  <a href="https://github.com/find-sec-bugs/find-sec-bugs/releases/tag/version-1.14.0"><code>findsecbugs-cli-1.14.0.zip</code></a>
+  (sha256 <code>ff546e16e596ade5b6534a6da87881e569429bf46dfd8faed63ca63cdd69b4f8</code>), plus a
+  JDK and Maven to compile BenchmarkJava.</li>
+</ul>
+<pre><code class="language-bash">bash evals/compare/run.sh       # clones both Benchmarks at their pinned commits, scans, scores
+bash evals/compare/tables.sh    # prints the tables above
+</code></pre>
+<p>A missing tool is reported as skipped, not scored; <code>TOOLS="semgrep bandit"</code> runs a
+subset. Each scorecard is in <code>.achilles/compare/out/&lt;benchmark&gt;-&lt;tool&gt;.txt</code>, and
+<code>achilles-eval --mode owasp --owasp-dir &lt;checkout&gt; --owasp-sarif &lt;report.sarif&gt;</code> scores
+any other tool's SARIF report the same way.</p></section>
 <section id="ci-and-hub"><h1>CI & the Scan Hub</h1>
 <p>Ways to run Achilles in GitHub Actions, from simplest to most powerful. For every
 way to run it (workstation, containers, CI, scheduled), see <a href="../DEPLOY.md">DEPLOY.md</a>.</p>
@@ -2036,7 +3859,7 @@ provider's key) and one <strong>variable</strong> (<code>LLM_MODEL</code>). That
   issues: write
 steps:
   - uses: actions/checkout@v4
-  - uses: Warzuponus/achilles@v0.1.0
+  - uses: Warzuponus/achilles@v0.3.1
     with:
       llm-api-key: ${{ secrets.LLM_API_KEY }}
       llm-provider: openrouter          # or openai | ollama | anthropic, or llm-base-url
@@ -2114,7 +3937,7 @@ or commit, as above. The action supports Linux and macOS runners.</p>
 <p><a href="../examples/workflows/scan-example.yml"><code>examples/workflows/scan-example.yml</code></a> runs
 on pull requests, annotates the diff, and fails only on newly introduced
 high-severity findings. It needs no secret, so it works on fork PRs:</p>
-<pre><code class="language-yaml">- uses: Warzuponus/achilles@v0.1.0
+<pre><code class="language-yaml">- uses: Warzuponus/achilles@v0.3.1
   with:
     fail-on: high
     args: --diff origin/${{ github.base_ref }} --baseline .achilles/baseline.json
@@ -2124,23 +3947,26 @@ high-severity findings. It needs no secret, so it works on fork PRs:</p>
 shows per-task model routing (a cheaper model to triage, a stronger one to judge) over
 Ollama Cloud, via <code>--model-config</code>. Same inputs as Option A.</p>
 <h2>Option C — the central scan hub</h2>
-<p>Scan <strong>other</strong> repos from the Achilles repo, so the key + routing live in one place
-and targets need <strong>no secret and no workflow</strong>. This is the GitHub-Actions
-expression of the fleet model.
-Workflow: <a href="../.github/workflows/scan-hub.yml"><code>.github/workflows/scan-hub.yml</code></a>.</p>
+<p>Scan <strong>other</strong> repos from one hub repository, so the LLM key lives in one place and
+targets need <strong>no secret and no workflow</strong>. This is the GitHub-Actions expression of
+the fleet model. Copy
+<a href="../examples/workflows/scan-hub.yml"><code>examples/workflows/scan-hub.yml</code></a> into
+<code>.github/workflows/</code> of the repository you want to be the hub (a private repository
+of your own; it does not run from <code>examples/</code>).</p>
 <h3>One-time setup (org/repo admin)</h3>
 <ol>
 <li><strong>Create a GitHub App</strong> in the org: repository permission <strong>Contents: Read</strong>
    only, no webhook, "Only on this account."</li>
 <li><strong>Install it</strong> on the repos you want scannable — only those get read access.</li>
-<li>Add two secrets to the repository that runs the hub (your fork or copy of Achilles):
-   - <code>SCANNER_APP_ID</code> — the App's ID
-   - <code>SCANNER_APP_PRIVATE_KEY</code> — the App's <strong>private key</strong> (the <code>.pem</code> contents,
+<li>In the hub repository (Settings → Secrets and variables → Actions) add:
+   - secret <code>SCANNER_APP_ID</code> — the App's ID
+   - secret <code>SCANNER_APP_PRIVATE_KEY</code> — the App's <strong>private key</strong> (the <code>.pem</code> contents,
      from the App's <em>Private keys</em> section — <strong>not</strong> the client secret)
-   - (<code>ACHILLES_LLM_API_KEY</code> is already the scan-hub's LLM key.)</li>
+   - secret <code>LLM_API_KEY</code> — your LLM provider's key
+   - variable <code>LLM_MODEL</code> — a model that provider serves</li>
 </ol>
 <p>Set the private key reliably with:</p>
-<pre><code class="language-bash">gh secret set SCANNER_APP_PRIVATE_KEY -R &lt;owner&gt;/achilles &lt; your-app.private-key.pem
+<pre><code class="language-bash">gh secret set SCANNER_APP_PRIVATE_KEY -R &lt;owner&gt;/&lt;hub-repo&gt; &lt; your-app.private-key.pem
 </code></pre>
 <h3>Running it</h3>
 <p>Actions → <strong>Achilles scan hub</strong> → <em>Run workflow</em> → enter the target repo name
@@ -2157,11 +3983,11 @@ Workflow: <a href="../.github/workflows/scan-hub.yml"><code>.github/workflows/sc
     repository: ${{ github.repository_owner }}/${{ inputs.target_repo }}
     token: ${{ steps.tok.outputs.token }}
     path: target
-# then a routed scan of ./target → achilles-report.html uploaded as an artifact
+# then an AI-verified scan of ./target; the report is uploaded as an artifact
 </code></pre>
 <p>Inputs: <code>target_repo</code> (required, repo name only — the owner is this repository's owner)
 and <code>ref</code> (optional branch/tag/SHA; blank = the default branch). Secrets:
-<code>SCANNER_APP_ID</code>, <code>SCANNER_APP_PRIVATE_KEY</code>, and the LLM key <code>ACHILLES_LLM_API_KEY</code>.</p>
+<code>SCANNER_APP_ID</code>, <code>SCANNER_APP_PRIVATE_KEY</code>, and the LLM key <code>LLM_API_KEY</code>.</p>
 <p><strong>Least privilege by design:</strong> a per-run token scoped to exactly the target repo
 (not a personal PAT). By default results are artifacts of the hub run and nothing is
 written back to the target. Tick <strong><code>file_issues</code></strong> when you run the hub to also open
@@ -2169,9 +3995,122 @@ issues in the target: the workflow then mints a second token that adds Issues: W
 on that one repo, so grant the App <strong>Issues: Write</strong> first (it is not needed
 otherwise). To also post SARIF to a target's Security tab, grant <strong>Code scanning:
 Write</strong> and add an upload-sarif step.</p>
-<p>Download the report from <strong>the run → Artifacts → <code>achilles-&lt;repo&gt;</code> → <code>achilles-report.html</code></strong>
-(the same artifact also holds <code>achilles.sarif</code>, <code>achilles-report.md</code> and the threat
-model). There is no cloud vault: the artifacts are the record.</p>
+<p>Download the report from <strong>the run → Artifacts → <code>achilles-report</code></strong>: it holds
+<code>report.html</code>, <code>report.md</code> and <code>achilles.sarif</code>. There is no cloud vault: the
+artifacts are the record.</p>
+<h2>GitLab CI</h2>
+<p>Achilles writes the report formats GitLab reads from job artifacts, so it runs as an
+ordinary job. A complete example is in
+<a href="../examples/gitlab/.gitlab-ci.yml"><code>examples/gitlab/.gitlab-ci.yml</code></a>:</p>
+<pre><code class="language-yaml">achilles:
+  stage: test
+  image: ghcr.io/warzuponus/achilles:latest   # pin a release tag
+  script:
+    - &gt;-
+      achilles
+      --gitlab-sast gl-sast-report.json
+      --gitlab-secret-detection gl-secret-detection-report.json
+      --gitlab-dependency-scanning gl-dependency-scanning-report.json
+      --gitlab-code-quality gl-code-quality-report.json
+      --fail-on high
+      .
+  artifacts:
+    when: always
+    reports:
+      sast: gl-sast-report.json
+      secret_detection: gl-secret-detection-report.json
+      dependency_scanning: gl-dependency-scanning-report.json
+      codequality: gl-code-quality-report.json
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>GitLab report</th>
+<th>Holds</th>
+<th>Where GitLab shows it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--gitlab-sast</code></td>
+<td><code>artifacts:reports:sast</code></td>
+<td>findings in code</td>
+<td>merge request security widget, pipeline Security tab, vulnerability report (Ultimate)</td>
+</tr>
+<tr>
+<td><code>--gitlab-secret-detection</code></td>
+<td><code>artifacts:reports:secret_detection</code></td>
+<td>credential findings, never the matched text</td>
+<td>the same places (Ultimate)</td>
+</tr>
+<tr>
+<td><code>--gitlab-dependency-scanning</code></td>
+<td><code>artifacts:reports:dependency_scanning</code></td>
+<td>dependency advisories (osv-scanner, Trivy, govulncheck), each with its package, version and manifest; Trivy's fixed version as the solution</td>
+<td>the same places (Ultimate)</td>
+</tr>
+<tr>
+<td><code>--gitlab-code-quality</code></td>
+<td><code>artifacts:reports:codequality</code></td>
+<td>every finding, credential messages masked</td>
+<td>merge request widget and diff, on every tier</td>
+</tr>
+</tbody>
+</table>
+<p>What to know:</p>
+<ul>
+<li><strong>Without Ultimate, use the Code Quality report.</strong> GitLab accepts the security
+  reports on any tier but only displays them on Ultimate. The Code Quality report is
+  the one every tier shows on a merge request, which is why it carries all findings,
+  dependency advisories included.</li>
+<li><strong><code>when: always</code></strong> uploads the reports when <code>--fail-on</code> fails the job, which is the
+  run you most want them from.</li>
+<li><strong>Only findings that count are written</strong>: the ones the gate sees. Findings the AI
+  review dismissed are left out; with <code>--keep-dismissed</code> they are written and marked
+  with GitLab's "likely false positive" flag, with the reason. Each finding carries
+  the AI verdict and reasoning in its details, and a fix that passed re-scan
+  verification is attached as a remediation.</li>
+<li><strong>An incomplete scan says so.</strong> If a scanner could not run, the report's scan
+  status is <code>failure</code> and a message names the tool; the findings from the scanners
+  that did run are still there.</li>
+<li><strong>Dependency advisories</strong> go in the dependency scanning report, each with the
+  package, version and manifest taken from the scanner's message (an advisory that
+  names no package is reported as <code>unknown</code>), and in the Code Quality report.</li>
+<li><strong>Vulnerabilities keep their history when code moves.</strong> Each finding in the
+  security reports carries a tracking signature built from Achilles' fingerprint,
+  which hashes the matched code rather than its line, so GitLab (Ultimate) keeps a
+  vulnerability's status, comments and linked issue when an edit above it shifts
+  its line, instead of resolving it and reporting a new one.</li>
+<li><strong>A summary note on the merge request</strong>, on every tier: add
+  <code>--gitlab-mr-comment $CI_MERGE_REQUEST_IID</code> in merge request pipelines and store a
+  token as a masked CI/CD variable named <code>ACHILLES_GITLAB_TOKEN</code>: a project access
+  token with the <code>api</code> scope and the Reporter role is enough (<code>CI_JOB_TOKEN</code> cannot
+  write notes). Achilles posts the Markdown summary once and updates that same note on
+  every later run. It only ever edits a note that starts with its marker and was
+  written by the token's own user, so a note someone else plants is left alone. The
+  project and API URL come from <code>CI_PROJECT_ID</code> and <code>CI_API_V4_URL</code>; outside GitLab CI
+  pass <code>--gitlab-project</code> (and the API defaults to gitlab.com). With <code>--ai</code>, nothing is
+  posted if the AI review did not finish. Checked on gitlab.com: a first run creates
+  the note, a second updates the same note.</li>
+<li><strong>Checked on gitlab.com</strong> (2026-10-19): a merge request pipeline running the v0.3.0
+  image uploaded all four reports, and GitLab read them: 24 SAST findings, 1 secret,
+  30 dependency advisories and the Code Quality entries, each with its file and line.</li>
+<li><strong>gitlab.com's shared runners need a verified account.</strong> A pipeline from an account
+  that has not completed GitLab's identity verification fails before any job starts,
+  with "The pipeline failed due to the user not being verified" and no job log.
+  Verify the account (or register a runner of your own) first.</li>
+<li><strong>Schema.</strong> The security reports declare version 15.0.0 of GitLab's
+  <a href="https://gitlab.com/gitlab-org/security-products/security-report-schemas">security report schemas</a>,
+  the oldest of the 15.x line, and use only fields present in every 15.x version.
+  Secret findings name the scanned commit (<code>$CI_COMMIT_SHA</code>, or <code>--source-commit</code>).</li>
+<li><strong>Only new findings on a merge request:</strong> add
+  <code>--diff origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME</code> in merge request pipelines
+  (fetch that branch first, or set <code>GIT_DEPTH: "0"</code>), and a committed baseline as
+  described in <a href="#reports-and-gating">Reports &amp; Gating</a>.</li>
+</ul>
+<p>The GitHub-specific outputs (<code>--github</code>, <code>--pr-comment</code>, <code>--pr-review</code>,
+<code>--file-issues</code>, <code>--fix-pr</code>) have no GitLab counterpart yet.</p>
 <h2>Keeping history across CI runs</h2>
 <p>By default a CI scan's Evidence Vault is ephemeral — it lives and dies with the
 job, and the scan hub publishes its results as workflow artifacts (HTML report,
@@ -2219,6 +4158,10 @@ the run exits non-zero rather than silently reporting success.</p>
 <tr>
 <td>Many repos on a schedule, from one machine</td>
 <td><a href="#fleet">Fleet</a></td>
+</tr>
+<tr>
+<td>A GitLab pipeline</td>
+<td><a href="#gitlab-ci">GitLab CI</a></td>
 </tr>
 </tbody>
 </table></section>
@@ -2626,6 +4569,10 @@ users:</p>
   <code>http.CrossOriginProtection</code>): a cross-origin <code>POST</code> is rejected, so another site
   open in your browser cannot submit feedback or purge data on your behalf.</li>
 <li>Secrets in findings are redacted before they reach the UI or API.</li>
+<li>The pages load <strong>nothing from the internet</strong>. The one script is built into
+  <code>achillesd</code>, and a Content-Security-Policy allows scripts from the War Room itself
+  only, so it works with no network and text from a scanned repository cannot run as
+  code in the page.</li>
 </ul>
 <p>What this does <strong>not</strong> give you: any separation between people. Do not bind the War
 Room to a LAN or public address, and do not forward its port, expecting a login to
@@ -2711,6 +4658,97 @@ CPU-only models are slow: raise <code>ACHILLES_LLM_TIMEOUT</code>.</p>
 </tr>
 </tbody>
 </table></section>
+<section id="mcp"><h1>MCP Server</h1>
+<p><code>achilles mcp</code> lets an assistant that speaks the
+<a href="https://modelcontextprotocol.io">Model Context Protocol</a> read the Evidence Vault:
+what the scans found, what the AI review concluded and why, and what fix was
+proposed. You can then ask, in the editor or terminal where you work, things like
+"what did the last scan find in the auth package?" or "why was the SQL injection in
+<code>db/query.go</code> kept?" without opening a report.</p>
+<p>It is experimental: the protocol handling is covered by tests, but it has not been
+exercised against every client.</p>
+<h2>Setting it up</h2>
+<p>The client starts the server; you do not run it yourself. Point it at the vault your
+scans write to (by default <code>.achilles/vault.jsonl</code> in the directory you scan from).</p>
+<p>Claude Code:</p>
+<pre><code class="language-bash">claude mcp add achilles -- achilles mcp --vault /path/to/project/.achilles/vault.jsonl
+</code></pre>
+<p>Any client configured with JSON (a project's <code>.mcp.json</code>, for example):</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;achilles&quot;: {
+      &quot;command&quot;: &quot;achilles&quot;,
+      &quot;args&quot;: [&quot;mcp&quot;, &quot;--vault&quot;, &quot;/path/to/project/.achilles/vault.jsonl&quot;]
+    }
+  }
+}
+</code></pre>
+<p>Use an absolute path: clients do not all start servers in the project directory. For
+a shared PostgreSQL vault, pass <code>--vault-backend postgres --vault-tenant &lt;project&gt;</code>
+and provide the connection string in <code>ACHILLES_VAULT_DSN</code> through the client's <code>env</code>
+setting.</p>
+<p>The transport is stdio. There is no network listener and nothing to authenticate:
+the server can read what the user who started the client can read.</p>
+<h2>Tools</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>list_scans</code></td>
+<td>the scans in the vault, newest first: when, what was scanned, how many findings, and which tools failed or could not analyze everything</td>
+</tr>
+<tr>
+<td><code>list_findings</code></td>
+<td>the findings of one scan (default: the newest), most severe first, each with its verdict if it was reviewed and, if an <code>achilles:ignore</code> comment suppresses it, the reason given. Filters: <code>min_severity</code>, <code>status</code> (<code>open</code>, <code>confirmed</code>, <code>dismissed</code>, <code>suppressed</code>, <code>unreviewed</code>), <code>limit</code>, <code>offset</code></td>
+</tr>
+<tr>
+<td><code>get_finding</code></td>
+<td>one finding in full, by fingerprint: the scanner's message, the code around it, the verdict and its reasoning, the proposed fix and whether re-scanning verified it, recorded feedback, and how many scans reported it</td>
+</tr>
+<tr>
+<td><code>rule_health</code></td>
+<td>per rule, how analysts have labeled its findings, and whether <code>--calibrate</code> would rule the rule out</td>
+</tr>
+</tbody>
+</table>
+<p><code>list_findings</code> returns the findings as the scanners reported them in that run, before
+any baseline or <code>--diff</code> filter, so it can list more than the scan's own report did.</p>
+<h2>What it will not do</h2>
+<p><strong>It does not write.</strong> No tool records feedback, dismisses a finding, starts a scan or
+changes a file, and the server's handle on the vault refuses writes. This is on
+purpose. The assistant on the other end has just read text that came out of a scanned
+repository, and that text can contain instructions. If a tool could change what
+Achilles believes about a finding, hostile code could talk its own finding away
+through the assistant. Record feedback with <code>achilles --feedback</code>, or in the War Room.</p>
+<p><strong>It does not serve secrets.</strong> A credential finding is listed, because someone has to
+rotate the credential, but without its matched text and without the code around it.
+Other text passes through the same masking the War Room applies.</p>
+<p><strong>It does not trust what it serves, and neither should the assistant.</strong> Scanner
+messages, model reasoning, code and diffs are copied from scanned repositories and from
+models that read them. Every result says so, and the server tells the client at
+start-up to treat that text as data. That reduces the risk of a prompt injection
+reaching the assistant through a finding; it does not remove it. Use the server with
+repositories and assistants you would be comfortable pairing anyway, and keep the
+assistant's own permissions tight.</p>
+<p><strong>It bounds its answers.</strong> Lists are capped (50 findings by default, 200 at most) and
+long text is cut, so one answer cannot fill an assistant's context.</p>
+<h2>Notes</h2>
+<ul>
+<li>A scan that lists <code>incompleteTools</code> did not cover everything. An empty list of
+  findings from it is not evidence of safety, and the server says the same to the
+  client.</li>
+<li>If the vault cannot be read, a tool answers with an error rather than an empty
+  result.</li>
+<li>The server reads the vault as it is at each call, so a scan that finishes while the
+  client is open is visible to the next question.</li>
+<li>It speaks protocol revisions 2024-11-05, 2025-03-26 and 2025-06-18, and offers only
+  the tools capability.</li>
+</ul></section>
     <footer>Generated from docs/*.md by docs/build.py · LLM-assisted SAST</footer>
   </main>
 </div>

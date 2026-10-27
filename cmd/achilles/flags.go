@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Warzuponus/achilles/internal/model"
+	"github.com/Warzuponus/achilles/internal/surface"
 	"github.com/Warzuponus/achilles/internal/triage/llm"
 	"github.com/Warzuponus/achilles/internal/vault"
 )
@@ -96,6 +97,9 @@ type options struct {
 	reviewOn            bool
 	scaAdvice           bool
 	threatModelOut      string
+	prioritize          string       // --prioritize: severity | surface
+	planOut             string       // --plan-out: write the pre-scan attack-surface map here
+	surface             *surface.Map // built by buildPlan; nil unless planWanted
 	targetLabel         string
 	sourceCommit        string
 
@@ -209,6 +213,8 @@ func defineFlags() (*flag.FlagSet, *options) {
 	fs.BoolVar(&o.reviewOn, "review", false, "run the holistic full-repo security review agent (needs --llm-model)")
 	fs.BoolVar(&o.scaAdvice, "sca-advice", false, "run the SCA dependency-upgrade advisor (merge-safety-scored; needs --llm-model)")
 	fs.StringVar(&o.threatModelOut, "threat-model", "", "infer an OTM threat model and write it to this file (needs --llm-model)")
+	fs.StringVar(&o.prioritize, "prioritize", "severity", "order the AI review and --deep-verify take findings in, which decides what is reviewed when --llm-budget or --max-cost runs out: severity | surface (severity weighted by how exposed the file is: network entry points, dangerous operations, missing guards, credentials, LLM calls). Reordering only: every finding is still reviewed when the budget allows")
+	fs.StringVar(&o.planOut, "plan-out", "", "map the target's attack surface before scanning (entry points, dangerous operations, guards, assets, AI surface, deployment files, per-file hotspot scores) and write it to this JSON file. No model is called")
 	fs.StringVar(&o.targetLabel, "target-label", "", "record this stable, non-secret identity (e.g. a repo URL) as the run's target instead of the scanned path (used by achilles-fleet for fetched checkouts)")
 	fs.StringVar(&o.sourceCommit, "source-commit", "", "record the scanned source's commit sha in the run metadata (used by achilles-fleet)")
 	fs.BoolVar(&o.aiOn, "ai", false, "full AI-verified scan: --triage --remediate --review --sca-advice, and write report.html, report.md and achilles.sarif into --report-dir (needs an LLM key and --llm-model or --llm-provider)")
@@ -271,6 +277,9 @@ func parseFlags(argv []string) (*options, error) {
 		o.failOn = string(sev) // canonical: "High" and " high" mean high
 	}
 	if err := o.applyPresets(explicit); err != nil {
+		return nil, err
+	}
+	if err := validPrioritize(o.prioritize); err != nil {
 		return nil, err
 	}
 	return o, nil

@@ -98,7 +98,9 @@ and Achilles prints the destination host before it starts. Before sending:
 `--timeout` (default 5m) bounds the scanners. The AI phases have their own
 `--llm-budget` (default 45m) and review `--llm-concurrency` findings (default 4) at a
 time, most severe first, so if the budget runs out what was reviewed is what matters
-most. Whatever was not reached is reported as such, in the log and in every report,
+most. `--prioritize surface` weights that order by how exposed each file is (network
+input, dangerous operations, missing guards), so the most exposed findings go first;
+see [Surface map](surface-map.md). Whatever was not reached is reported as such, in the log and in every report,
 and stays in the gate: an unreviewed finding is never treated as a dismissed one.
 
 ### What the AI review can and cannot tell you

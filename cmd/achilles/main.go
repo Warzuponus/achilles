@@ -180,6 +180,11 @@ func run(argv []string) error {
 	recordJSON(ev, vault.Record{RunID: runID, Phase: "scan", Kind: vault.KindScanMeta},
 		scanMetaPayload(absTarget, o.targetLabel, o.sourceCommit, string(m), o.profile, toolIDs(reg)))
 
+	// Model phase: map the attack surface before the scanners run (no model call).
+	if err := buildPlan(o, ev, runID, absTarget, os.Stderr); err != nil {
+		return err
+	}
+
 	scan, diags, err := scanTarget(ctx, o, ev, runID, absTarget, reg, shadow)
 	if err != nil {
 		return err

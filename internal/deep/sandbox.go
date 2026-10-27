@@ -802,3 +802,18 @@ func (s *Sandbox) search(ctx context.Context, re *regexp.Regexp, glob, subdir st
 	}
 	return Result{Text: text, Paths: paths, Lines: shown}
 }
+
+// ProtectedPath reports whether a slash-separated path relative to a scan root
+// names a credential file or a directory the deep agent never reads (.git, .ssh,
+// the Evidence Vault, ...). Other whole-repository walks use it so they skip the
+// same files.
+func ProtectedPath(rel string) bool { return protectedPath(rel) }
+
+// TestFile reports whether a slash-separated relative path looks like a test,
+// where an entry point or a sink is a fixture rather than something an attacker
+// reaches.
+func TestFile(rel string) bool { return testFile(rel) }
+
+// NoiseDir reports whether a directory name is a dependency or cache tree that
+// whole-repository walks skip.
+func NoiseDir(name string) bool { return noiseDirs[strings.ToLower(name)] }

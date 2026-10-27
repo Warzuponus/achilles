@@ -11,6 +11,7 @@ scheduled scans) see [DEPLOY.md](../DEPLOY.md); for contributing see [ONBOARDING
 | [Reports & Gating](reports-and-gating.md) | choose an output format (HTML/SARIF/JUnit/Markdown), gate CI on new findings, and cut noise with baselines + diff-aware scans |
 | [LLM Triage & Agents](llm-and-agents.md) | turn on LLM triage/judge/remediation, run the review / SCA-advice / threat-model agents, and route each task to a different model (any OpenAI-compatible endpoint, incl. Ollama) |
 | [Deep Verification](deep-verify.md) | let the model read the repository (bounded, read-only) to settle the findings a single-file review could not |
+| [Surface Map & Review Order](surface-map.md) | map the attack surface before scanning and spend a limited AI budget on the most exposed code first (`--prioritize surface`, `--plan-out`) |
 | [Hunt Mode](hunt.md) | let the model follow the data from entry points to find what no rule describes, with every candidate reviewed before it counts |
 | [Verifying Fixes](verifying-fixes.md) | understand how proposed patches are re-scanned before `--fix-pr` or an issue calls them verified |
 | [Benchmarking Detection](benchmarking.md) | measure how much of a known-vulnerable codebase Achilles actually finds, and where each miss was lost |

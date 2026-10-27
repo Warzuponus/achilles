@@ -7,6 +7,19 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Surface map and risk-ordered review** (`--prioritize surface`, `--plan-out`).
+  Before the scanners run, Achilles can map the target's attack surface with no
+  model call: entry points, dangerous operations (SQL, exec, eval, deserialization,
+  file access, outbound requests, unescaped HTML), guards (authentication,
+  authorization, CSRF, validation, rate limiting), assets (credentials, personal
+  data, sessions) and AI surface (LLM SDK calls, tool definitions, MCP servers,
+  vector stores), plus deployment files. Each file gets a 0-1 hotspot score with
+  its reasons. Under `--prioritize surface` the AI review and `--deep-verify` take
+  findings by severity weighted by that score, so when the budget runs out the
+  least exposed code is what was left. It only reorders: no finding, severity,
+  scanner or verdict changes. `--plan-out FILE` writes the map as JSON (no source
+  text), and the vault records it as `scan_plan`. First milestone of the pre-scan
+  modelling phase; see [docs/surface-map.md](docs/surface-map.md).
 - **A clearer result for every reviewed finding** (prompt `triage/v7`), modelled on
   the result contract of Cloudflare's security-audit skill:
   - **Hardening notes.** A fourth verdict, `hardening`: the flagged weakness is real,

@@ -41,6 +41,7 @@ const (
 	KindReview           Kind = "review"       // holistic full-repo security review (--review)
 	KindAdvisory         Kind = "advisory"     // SCA dependency-upgrade advice (--sca-advice)
 	KindThreatModel      Kind = "threat_model" // OTM threat model (--threat-model)
+	KindScanPlan         Kind = "scan_plan"    // pre-scan attack-surface map (--prioritize surface, --plan-out)
 )
 
 // SchemaVersion is the version of the record format this build writes. It is

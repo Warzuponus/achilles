@@ -401,3 +401,34 @@ func TestApply_ConfirmDropsTheUncertainVerdictsOpenQuestions(t *testing.T) {
 		t.Errorf("open questions survived a confirmation: %+v", f.Verdict)
 	}
 }
+
+// A review priority reorders findings inside a tier and nothing else: a nil one is
+// Select, and no priority lifts a finding into a higher tier or out of exclusion.
+func TestSelectBy_PriorityOrdersWithinTierOnly(t *testing.T) {
+	at := func(f model.Finding, file string) model.Finding { f.Location.File = file; return f }
+	secret := at(finding(model.SeverityCritical, nil), "hot.py")
+	secret.Tool = "trufflehog"
+	fs := []model.Finding{
+		at(finding(model.SeverityHigh, vd(model.ClassUncertain, 0.5)), "cold.py"),    // 0 tier 1
+		at(finding(model.SeverityHigh, vd(model.ClassTruePositive, 0.95)), "hot.py"), // 1 tier 1, exposed
+		at(finding(model.SeverityMedium, nil), "hot.py"),                             // 2 tier 3, exposed
+		at(finding(model.SeverityMedium, vd(model.ClassUncertain, 0.5)), "cold.py"),  // 3 tier 2
+		secret, // 4 never
+	}
+	prio := func(f *model.Finding) float64 {
+		r := float64(f.Severity.Rank())
+		if f.Location.File == "hot.py" {
+			return r * 1.5
+		}
+		return r
+	}
+	if got, want := SelectBy(fs, 10, prio), []int{1, 0, 3, 2}; !equalInts(got, want) {
+		t.Fatalf("SelectBy = %v, want %v", got, want)
+	}
+	if got, want := SelectBy(fs, 10, nil), Select(fs, 10); !equalInts(got, want) {
+		t.Fatalf("a nil priority must be Select: %v vs %v", got, want)
+	}
+	if got := Select(fs, 10); got[0] != 0 {
+		t.Fatalf("without a priority the contested high leads: %v", got)
+	}
+}

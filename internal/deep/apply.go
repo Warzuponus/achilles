@@ -162,17 +162,32 @@ func needsAttention(v *model.Verdict) bool {
 // shadow-rule findings (they do not gate), findings already deep-verified, and
 // settled medium/low findings. The order is stable: ties keep scan order.
 func Select(findings []model.Finding, n int) []int {
+	return SelectBy(findings, n, nil)
+}
+
+// SelectBy is Select with a review priority: within each tier, findings are taken
+// highest priority first, then most severe. priority(f) must be the severity rank
+// when it knows nothing more about f (see surface.Risk), so a nil priority, or one
+// that adds nothing, gives exactly Select's order. It never changes which findings
+// qualify or which tier they fall in.
+func SelectBy(findings []model.Finding, n int, priority func(*model.Finding) float64) []int {
 	if n <= 0 {
 		return nil
 	}
-	type cand struct{ idx, tier, sev, attn int }
+	type cand struct {
+		idx, tier, sev, attn int
+		prio                 float64
+	}
 	var cs []cand
 	for i := range findings {
 		f := &findings[i]
 		if f.IsSecret() || f.IsDependencyAdvisory() || f.Shadow || f.Deep != nil {
 			continue
 		}
-		c := cand{idx: i, sev: f.Severity.Rank()}
+		c := cand{idx: i, sev: f.Severity.Rank(), prio: float64(f.Severity.Rank())}
+		if priority != nil {
+			c.prio = priority(f)
+		}
 		switch {
 		case c.sev >= model.SeverityHigh.Rank():
 			c.tier = 0
@@ -195,6 +210,9 @@ func Select(findings []model.Finding, n int) []int {
 		x, y := cs[a], cs[b]
 		if x.tier != y.tier {
 			return x.tier < y.tier
+		}
+		if x.prio != y.prio {
+			return x.prio > y.prio
 		}
 		if x.sev != y.sev {
 			return x.sev > y.sev

@@ -93,6 +93,7 @@ func triageScan(ctx context.Context, o *options, ev vault.Store, runID string, s
 			embedModel: o.llmEmbed, remediate: o.remediateOn, rag: o.ragOn, tasks: tasks,
 			dryRun: o.dryRun, maxCost: o.maxCost, prices: priceTable, excluded: excluded,
 			noCode: o.llmNoCode, keepDismissed: o.keepDismissed, calibrate: o.calibrate, concurrency: o.llmConcurrency, samples: o.llmSamples,
+			priority: o.reviewPriority(),
 		}
 		if o.verdictCacheDays > 0 && !o.dryRun {
 			// The key that makes cached verdicts trustworthy lives in the Achilles
@@ -140,9 +141,27 @@ type triageOpts struct {
 	concurrency   int  // findings triaged in parallel; <1 means 1
 	samples       int  // --llm-samples: re-ask borderline verdicts this many times in total; <2 means once
 
+	// priority orders pass 1 (--prioritize surface); nil = most severe first.
+	priority func(*model.Finding) float64
+
 	// afterTriage runs once every finding has its first verdict and before AI-dismissed
 	// findings are moved out of the gate (--deep-verify hooks in here). nil = none.
 	afterTriage func(context.Context) error
+}
+
+// orderPass1 sorts the findings to review, most important first: by priority when
+// one is given (--prioritize surface), then by severity; ties keep scan order.
+// With no priority it is most severe first.
+func orderPass1(findings []model.Finding, idx []int, priority func(*model.Finding) float64) {
+	sort.SliceStable(idx, func(a, b int) bool {
+		x, y := &findings[idx[a]], &findings[idx[b]]
+		if priority != nil {
+			if px, py := priority(x), priority(y); px != py {
+				return px > py
+			}
+		}
+		return x.Severity.Rank() > y.Severity.Rank()
+	})
 }
 
 // abortAfterFailures is how many failed findings in a row, with not one success,
@@ -358,17 +377,15 @@ func runTriage(ctx context.Context, ev vault.Store, runID string, scan *model.Sc
 	// Pass 1 — everything that gets its own triage: uncorrelated findings and
 	// cluster representatives. A representative is not necessarily the lowest
 	// index in its cluster (it's the highest-severity member), so this has to
-	// complete before anything inherits. Most severe first: if the LLM budget runs
-	// out, what was reviewed is what matters most.
+	// complete before anything inherits. Most important first: if the LLM budget
+	// runs out, what was reviewed is what matters most.
 	var pass1 []int
 	for i := range scan.Findings {
 		if _, inherited := inheritFrom[i]; !inherited {
 			pass1 = append(pass1, i)
 		}
 	}
-	sort.SliceStable(pass1, func(a, b int) bool {
-		return scan.Findings[pass1[a]].Severity.Rank() > scan.Findings[pass1[b]].Severity.Rank()
-	})
+	orderPass1(scan.Findings, pass1, o.priority)
 	workers := o.concurrency
 	if workers < 1 {
 		workers = 1

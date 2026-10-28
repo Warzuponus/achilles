@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/Warzuponus/achilles/internal/surface"
 )
 
 func runInitIn(t *testing.T, args ...string) (stdout, stderr string, err error) {
@@ -63,6 +65,11 @@ func TestInit_GitHubRepository(t *testing.T) {
 		t.Errorf("the workflow uses a secret or has an unfilled placeholder:\n%s", wf)
 	}
 
+	// The threat-context template is written, and parses as an empty context.
+	if _, err := surface.ParseContext([]byte(read(t, filepath.Join(repo, ".achilles", "threat-context.yaml")))); err != nil {
+		t.Errorf("the threat-context template does not parse: %v", err)
+	}
+
 	// .gitignore gains the vault, once, after what was there.
 	gi := read(t, filepath.Join(repo, ".gitignore"))
 	if !strings.HasPrefix(gi, "bin/\n") || strings.Count(gi, "/.achilles/vault.jsonl*") != 1 {
@@ -71,7 +78,7 @@ func TestInit_GitHubRepository(t *testing.T) {
 
 	// Running it again changes nothing and says so.
 	out, _, err = runInitIn(t, "--no-baseline", repo)
-	if err != nil || strings.Count(out, "kept ") != 2 || strings.Contains(out, "updated  .gitignore") {
+	if err != nil || strings.Count(out, "kept ") != 3 || strings.Contains(out, "updated  .gitignore") {
 		t.Errorf("second run (err %v):\n%s", err, out)
 	}
 	if read(t, filepath.Join(repo, ".gitignore")) != gi {

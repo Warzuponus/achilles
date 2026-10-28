@@ -125,11 +125,16 @@ func TestRun_NoPlanUnlessAsked(t *testing.T) {
 	}
 }
 
-func TestBuildPlan_UnwritablePlanOutIsAnError(t *testing.T) {
+func TestRecordPlan_UnwritablePlanOutIsAnError(t *testing.T) {
 	o := &options{prioritize: prioritizeSeverity, planOut: filepath.Join(t.TempDir(), "no-such-dir", "plan.json")}
+	m, err := surface.Build(t.TempDir(), surface.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.surface = m
 	_, ev := triageFixture(t)
 	var w bytes.Buffer
-	if err := buildPlan(o, ev, "run", t.TempDir(), &w); err == nil {
+	if err := recordPlan(o, ev, "run", &w); err == nil {
 		t.Error("a requested plan file that cannot be written must fail the run")
 	}
 }

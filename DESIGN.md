@@ -145,7 +145,7 @@ A scan runs as an ordered set of **configurable, skippable phases**. This is an 
 
 | Phase | Does | Built from |
 |-------|------|-----------|
-| **1. Recon** | Detect languages, frameworks, entrypoints, exact dep versions → scan plan | enrich + inventory (feeds §9); the attack-surface map (`internal/surface`, `--plan-out`) scores each file and, under `--prioritize surface`, orders the AI review and deep verification by risk |
+| **1. Recon** | Detect languages, frameworks, entrypoints, exact dep versions → scan plan | enrich + inventory (feeds §9); the attack-surface map (`internal/surface`, `--plan-out`) scores each file and, under `--prioritize surface`, orders the AI review and deep verification by risk; with the repository's `.achilles/threat-context.yaml` it sets a scan depth (MAESTRO's five questions) and a tool plan that skips scanners with nothing to analyze and adds installed opt-in ones, each named with its reason (`--all-tools` skips nothing) |
 | **2. Scan** | Run applicable engines in parallel containers → raw output | §6 execution + scanner adapters |
 | **3. Triage / Judge** | Normalize → correlate/dedup → LLM triage → adversarial judge verification | §5 + §7 |
 | **4. Remediation** | For confirmed findings, produce fixes/diffs or guidance (opt-in) | §7 + a dedicated remediation prompt |

@@ -39,30 +39,16 @@ func (o *options) reviewPriority() func(*model.Finding) float64 {
 	return o.surface.Priority
 }
 
-// buildPlan is the Model phase: it maps the target's attack surface before the
-// scanners run, writes it to --plan-out, records it in the vault and, under
-// --prioritize surface, keeps it for ordering the review.
-//
-// The map only orders work. If it cannot be built, the review falls back to
-// severity order and says so; only an explicitly requested --plan-out file that
-// cannot be produced is an error.
-func buildPlan(o *options, ev vault.Store, runID, absTarget string, w io.Writer) error {
-	if !o.planWanted() {
-		return nil
-	}
-	m, err := surface.Build(absTarget, surface.Options{})
-	if err != nil {
-		if o.planOut != "" {
-			return fmt.Errorf("--plan-out: map the attack surface: %w", err)
+// recordPlan records the scan plan made by prepareModel in the vault, writes it
+// to --plan-out and, under --prioritize surface, says how the review is ordered.
+// Only an explicitly requested --plan-out file that cannot be written is an error.
+func recordPlan(o *options, ev vault.Store, runID string, w io.Writer) error {
+	m := o.surface
+	if m == nil {
+		if o.prioritize == prioritizeSurface {
+			fmt.Fprintln(w, "achilles: no surface map, so the AI review keeps severity order")
 		}
-		fmt.Fprintf(w, "achilles: surface map failed (%v); the AI review keeps severity order\n", err)
 		return nil
-	}
-	o.surface = m
-	fmt.Fprintln(w, planSummary(m))
-	if m.Truncated {
-		fmt.Fprintf(w, "achilles: surface map is INCOMPLETE: the walk stopped after %d file(s) / %d MiB; files past that score 0 and are reviewed in severity order\n",
-			m.FilesRead, m.BytesRead>>20)
 	}
 	if o.prioritize == prioritizeSurface {
 		fmt.Fprintln(w, "achilles: review order: by risk (severity weighted by file exposure, --prioritize surface); unreached findings are still reported as unreached")

@@ -63,10 +63,11 @@ func isKubernetes(src []byte) bool {
 type pattern struct {
 	kind, class, summary string
 	re                   *regexp.Regexp
+	lits                 []string // see requiredLiterals
 }
 
 func p(kind, class, summary, re string) pattern {
-	return pattern{kind: kind, class: class, summary: summary, re: regexp.MustCompile(re)}
+	return pattern{kind: kind, class: class, summary: summary, re: regexp.MustCompile(re), lits: requiredLiterals(re)}
 }
 
 // Patterns shared by every language. They are deliberately coarse: a missed
@@ -171,7 +172,24 @@ func scanFile(rel, lang string, src []byte) []Fact {
 	for _, ep := range inventory.DetectEntryPoints(rel, src) {
 		out = append(out, Fact{Kind: KindEntry, Class: ep.Kind, File: rel, Line: ep.Line, Summary: ep.Summary})
 	}
-	pats := append(append([]pattern(nil), sinks[lang]...), common...)
+	// A pattern none of whose required literals is in the file cannot match any
+	// line of it, and most patterns are not in most files. The same test on each
+	// line spares the regexp on nearly every line that is left.
+	lowered := bytes.ToLower(src)
+	var pats []pattern
+	for _, pt := range sinks[lang] {
+		if pt.mayMatch(lowered) {
+			pats = append(pats, pt)
+		}
+	}
+	for _, pt := range common {
+		if pt.mayMatch(lowered) {
+			pats = append(pats, pt)
+		}
+	}
+	if len(pats) == 0 {
+		return out
+	}
 	seen := map[string]bool{}
 	lineNo := 0
 	inBlock := false
@@ -198,9 +216,10 @@ func scanFile(rel, lang string, src []byte) []Fact {
 		if isComment(lang, t) {
 			continue
 		}
+		low := bytes.ToLower(raw)
 		for _, pt := range pats {
 			key := pt.kind + "|" + pt.class
-			if seen[key] || !pt.re.MatchString(line) {
+			if seen[key] || !pt.mayMatch(low) || !pt.re.MatchString(line) {
 				continue
 			}
 			seen[key] = true
@@ -220,4 +239,57 @@ func isComment(lang, t string) bool {
 		return strings.HasPrefix(t, "//") || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "*")
 	}
 	return false
+}
+
+// codeLang names a source file's language with the names the tool registry uses
+// (configs/tools.yaml `languages`). It is wider than langOf, which covers only the
+// languages that have sink patterns.
+var codeLang = map[string]string{
+	".go": "go", ".py": "python",
+	".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+	".ts": "typescript", ".tsx": "typescript", ".mts": "typescript", ".cts": "typescript",
+	".java": "java", ".kt": "kotlin", ".kts": "kotlin", ".scala": "scala", ".groovy": "groovy",
+	".rb": "ruby", ".php": "php", ".cs": "csharp", ".vb": "vbnet",
+	".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".hpp": "cpp", ".hh": "cpp",
+	".rs": "rust", ".sh": "shell", ".bash": "shell",
+}
+
+func countLang(rel string) string {
+	return codeLang[strings.ToLower(path.Ext(rel))]
+}
+
+// sniffInfra reports whether a file that is not source code may be a deployment
+// file recognised by its content (Kubernetes, CloudFormation, ARM, Bicep).
+func sniffInfra(rel string) bool {
+	switch strings.ToLower(path.Ext(rel)) {
+	case ".yaml", ".yml", ".json", ".template", ".bicep":
+		return true
+	}
+	return false
+}
+
+var (
+	cfnRE = regexp.MustCompile(`(?m)(^AWSTemplateFormatVersion\s*:|"AWSTemplateFormatVersion"\s*:|^\s*Type:\s*['"]?AWS::[A-Za-z0-9]+::|"Type"\s*:\s*"AWS::[A-Za-z0-9]+::)`)
+	samRE = regexp.MustCompile(`(?m)^Transform:\s*['"]?AWS::Serverless`)
+	armRE = regexp.MustCompile(`"\$schema"\s*:\s*"https://schema\.management\.azure\.com/schemas/[^"]*deploymentTemplate\.json`)
+)
+
+// infraByContent classifies a configuration file by its head.
+func infraByContent(rel string, src []byte) string {
+	base := strings.ToLower(path.Base(rel))
+	switch {
+	case strings.HasSuffix(base, ".bicep"):
+		return "bicep"
+	case base == "kustomization.yaml" || base == "kustomization.yml":
+		return "kubernetes"
+	case base == "serverless.yml" || base == "serverless.yaml":
+		return "serverless"
+	case armRE.Match(src):
+		return "arm"
+	case samRE.Match(src) || cfnRE.Match(src):
+		return "cloudformation"
+	case isKubernetes(src):
+		return "kubernetes"
+	}
+	return ""
 }

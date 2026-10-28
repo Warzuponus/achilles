@@ -54,6 +54,12 @@ func WriteHuman(w io.Writer, s model.Scan) {
 		fmt.Fprintf(w, "\nScanner configuration from the scanned repository was in effect (%s). "+
 			"It can remove findings before Achilles sees them.\n", strings.Join(s.RepoConfig, "; "))
 	}
+	if p := s.ToolPlan; p != nil {
+		fmt.Fprintf(w, "\n%s.\n", toolPlanHeader(p))
+		for _, l := range toolPlanLines(p) {
+			fmt.Fprintf(w, "  - %s\n", l)
+		}
+	}
 	if t := s.Triage; t != nil && t.Aborted != "" {
 		fmt.Fprintf(w, "\nWARNING: the AI review did NOT complete (%s). The findings below are scanner output that was not reviewed.\n", t.Aborted)
 	}

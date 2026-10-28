@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Warzuponus/achilles/internal/surface"
 	"github.com/Warzuponus/achilles/internal/toolchain"
 )
 
@@ -32,6 +33,10 @@ const initUsage = `usage: achilles init [--ci auto|github|gitlab|none] [--no-bas
 Sets a repository up for Achilles in one step:
 
   .achilles.yaml                  how the repository is scanned (fail on high, use the baseline)
+  .achilles/threat-context.yaml   what the code is (business critical? internet facing? ...),
+                                  its crown jewels and out-of-scope paths: picks the scan depth,
+                                  the scanners and the review order (every question starts
+                                  commented out; answer the ones you can)
   .achilles/baseline.json         the findings in the code today, so CI fails only on new ones
                                   (seeded by a scan when the default scanners are installed)
   .github/workflows/achilles.yml  a pull-request and default-branch scan (GitHub), or
@@ -81,7 +86,10 @@ func runInit(args []string, stdout, stderr io.Writer) error {
 	if kind == "auto" {
 		kind, why = detectCI(dir)
 	}
-	files := []initFile{{path: ".achilles.yaml", content: settingsTemplate, note: "how this repository is scanned"}}
+	files := []initFile{
+		{path: ".achilles.yaml", content: settingsTemplate, note: "how this repository is scanned"},
+		{path: surface.ContextFiles[0], content: surface.ContextTemplate, note: "what this code is and what matters most in it: answer what you can"},
+	}
 	switch kind {
 	case "github":
 		files = append(files, initFile{path: ".github/workflows/achilles.yml",
@@ -134,6 +142,11 @@ func runInit(args []string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "  %s %s — %s\n", verb, f.path, f.note)
 		wrote = append(wrote, f.path)
+	}
+
+	if !*dryRun && gitOutput(dir, "check-ignore", surface.ContextFiles[0]) != "" {
+		fmt.Fprintf(stdout, "  NOTE     .gitignore ignores %s; add the line !/%s after the rule that ignores it, so it is committed\n",
+			surface.ContextFiles[0], surface.ContextFiles[0])
 	}
 
 	added, err := ignoreVault(root, *dryRun)

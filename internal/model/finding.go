@@ -222,6 +222,10 @@ type Scan struct {
 	// RepoConfigChanged is the subset of RepoConfig that the diff under review
 	// (--diff) itself modifies.
 	RepoConfigChanged []string `json:"repoConfigChanged,omitempty"`
+	// ToolPlan is what the scan plan decided about the scanners: which it skipped
+	// as having nothing useful to analyze, which opt-in scanners it added, and what
+	// it recommends. nil when no plan was made.
+	ToolPlan *ToolPlan `json:"toolPlan,omitempty"`
 	// BaselineApplied is true when the scan was compared with a baseline, so
 	// Findings holds only what is new relative to it.
 	BaselineApplied bool `json:"baselineApplied,omitempty"`
@@ -232,6 +236,57 @@ type Scan struct {
 	// confirm. Like Dismissed they are not in Findings, so they do not gate, file
 	// issues or count; reports list them as leads.
 	Hunted []Finding `json:"hunted,omitempty"`
+}
+
+// ToolPlan is the scan plan's choice of scanners. Every skip and addition is
+// listed with a reason a reader can check, so a scanner that did not run is never
+// silent.
+type ToolPlan struct {
+	// Depth is how deeply the target should be scanned (lightweight, standard or
+	// full, after the OWASP MAESTRO depth questions), and why.
+	Depth        string   `json:"depth,omitempty"`
+	DepthReasons []string `json:"depthReasons,omitempty"`
+	// ContextFile is the repository's threat-context file, if one was read.
+	ContextFile string `json:"contextFile,omitempty"`
+	// AllTools is set under --all-tools: nothing was skipped.
+	AllTools  bool           `json:"allTools,omitempty"`
+	Decisions []ToolDecision `json:"decisions,omitempty"`
+}
+
+// Actions of a ToolDecision.
+const (
+	ToolSkipped     = "skipped"
+	ToolAdded       = "added"
+	ToolRecommended = "recommended"
+)
+
+// ToolDecision is one choice about one scanner (or, for a recommendation, about
+// a flag).
+type ToolDecision struct {
+	Tool   string `json:"tool"`
+	Action string `json:"action"`
+	Reason string `json:"reason"`
+	// Fix is the flag that reverses a skip or applies a recommendation.
+	Fix string `json:"fix,omitempty"`
+}
+
+// Skipped returns the ids of the tools the plan skipped.
+func (p *ToolPlan) Skipped() []string { return p.ids(ToolSkipped) }
+
+// Added returns the ids of the tools the plan added.
+func (p *ToolPlan) Added() []string { return p.ids(ToolAdded) }
+
+func (p *ToolPlan) ids(action string) []string {
+	if p == nil {
+		return nil
+	}
+	var out []string
+	for _, d := range p.Decisions {
+		if d.Action == action {
+			out = append(out, d.Tool)
+		}
+	}
+	return out
 }
 
 // TriageStats is the coverage of the AI review over a scan. A report that shows

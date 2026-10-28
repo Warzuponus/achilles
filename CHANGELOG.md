@@ -20,6 +20,27 @@ All notable changes to this project are recorded here. The format follows
   scanner or verdict changes. `--plan-out FILE` writes the map as JSON (no source
   text), and the vault records it as `scan_plan`. First milestone of the pre-scan
   modelling phase; see [docs/surface-map.md](docs/surface-map.md).
+- **Threat-context file, scan depth and tool plan.** A repository can commit
+  `.achilles/threat-context.yaml` (`achilles init` writes a commented one): the five
+  depth questions from the OWASP MAESTRO playbook (business critical, confidential
+  data, externally facing, autonomous, multi-agent), crown-jewel paths that are
+  reviewed first, and out-of-scope paths that are reviewed last. From it and the
+  surface map Achilles picks a scan depth (full, standard or lightweight; an
+  unanswered question is never read as "no") and a tool plan: it skips a scanner
+  that has nothing to analyze (gosec or govulncheck with no `go.mod`, Psalm with no
+  `psalm.xml`, FindSecBugs with no bytecode, Security Code Scan with no .NET
+  project, Railroader outside a Rails app, Checkov with no IaC files, a scanner
+  whose languages appear only in tests or out-of-scope paths), adds an opt-in
+  scanner whose files are present when the context file exists and the scanner is
+  installed (zizmor for GitHub workflows), and recommends `--profile full` at full
+  depth. Every skip and addition is named with its reason on stderr and in the
+  human, Markdown, HTML, JSON and SARIF reports. `--all-tools` skips nothing. The
+  plan is made only when asked for (`--plan-out`, `--prioritize surface`), when a
+  context file exists, under `--profile full` or with `--all-tools`; otherwise the
+  run is unchanged. `--no-repo-config` ignores the context file, a context file
+  that caused a skip is listed with the repository's configuration (and flagged
+  when a `--diff` changes it), and one that does not parse fails the run. The
+  surface map is also about five times faster.
 - **A clearer result for every reviewed finding** (prompt `triage/v7`), modelled on
   the result contract of Cloudflare's security-audit skill:
   - **Hardening notes.** A fourth verdict, `hardening`: the flagged weakness is real,

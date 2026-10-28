@@ -79,8 +79,11 @@ func buildRegistry(o *options, cfg *config.Config, gate policy.Gate, runner xexe
 		if tc.ID == "syft" {
 			continue // SBOM generator, not a findings scanner — see the --sbom step
 		}
-		if !tc.RunsInProfile(o.profile) && !o.optedIn(tc.OptIn) {
+		if !tc.RunsInProfile(o.profile) && !o.optedIn(tc.OptIn) && !o.planAdds(tc.ID) {
 			continue
+		}
+		if o.planSkips(tc.ID) {
+			continue // named, with the reason, by prepareModel and in every report
 		}
 		if err := gate.Allow(tc.ToLicense()); err != nil {
 			fmt.Fprintf(os.Stderr, "achilles: skipping %s — %v\n", tc.ID, err)

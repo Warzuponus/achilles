@@ -28,13 +28,13 @@
 # would silently skip its taint analysis. The build stage below, which compiles what
 # this image actually runs, uses 1.27.2. Move this pin when gosec catches up.
 ARG WITH_GO=true
-FROM golang:1.27.1@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2 AS go-true
+FROM golang:1.27.2@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8 AS go-true
 FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS go-false
 RUN mkdir -p /usr/local/go
 FROM go-${WITH_GO} AS gotoolchain
 
 # ---- build the Go binaries and the two Go-based scanners ------------------------
-FROM --platform=$BUILDPLATFORM golang:1.27.2@sha256:5bc7f572bbaa98885a3a1fd9c0aa76b59e3e14e8628bfc316bbfd0c701e4818c AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.2@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8 AS build
 ARG TARGETOS=linux
 ARG TARGETARCH
 ARG GOSEC_VERSION=v2.27.1

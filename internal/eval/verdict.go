@@ -27,11 +27,15 @@ type RunOutcome struct {
 	Surfaced bool `json:"surfaced"`
 	// Outcome is what the product does with the finding (see Outcome). It is a
 	// different question from Surfaced, with a third answer.
-	Outcome   Outcome `json:"outcome,omitempty"`
-	Predicted Label   `json:"predicted"`
-	Correct   bool    `json:"correct"`
-	LatencyMS int64   `json:"latencyMs"`
-	Err       string  `json:"error,omitempty"`
+	Outcome Outcome `json:"outcome,omitempty"`
+	// NeedsValidation marks an uncertain verdict that named its blockers or a
+	// validation plan (Verdict.NeedsValidation), so the report can tell a
+	// question a human can act on from a bare "uncertain".
+	NeedsValidation bool   `json:"needsValidation,omitempty"`
+	Predicted       Label  `json:"predicted"`
+	Correct         bool   `json:"correct"`
+	LatencyMS       int64  `json:"latencyMs"`
+	Err             string `json:"error,omitempty"`
 }
 
 // Outcome is what the product does with a finding once it has been reviewed.
@@ -55,6 +59,38 @@ const (
 	// OutcomeDismissed: ruled out and moved out of the gate (Finding.Dismissed).
 	OutcomeDismissed Outcome = "dismissed"
 )
+
+// ClassMix counts runs of one ground-truth class by the classification the review
+// returned. The headline scores fold these into confirmed or not; this keeps the
+// four-way answer, so "hardening" and "needs validation" can be measured on their
+// own. Hardening on a genuine issue says a real weakness is already mitigated,
+// which dismisses it: on the TP row it is an error, on the FP row an acceptable
+// way to clear the noise.
+type ClassMix struct {
+	TruePositive    int `json:"truePositive"`
+	FalsePositive   int `json:"falsePositive"`
+	Hardening       int `json:"hardening"`
+	NeedsValidation int `json:"needsValidation"` // uncertain, with blockers or a validation plan
+	Uncertain       int `json:"uncertain"`       // uncertain, naming nothing that would decide it
+	Errors          int `json:"errors"`
+}
+
+func (m *ClassMix) add(o RunOutcome) {
+	switch {
+	case o.Err != "":
+		m.Errors++
+	case o.Classification == "true_positive":
+		m.TruePositive++
+	case o.Classification == "false_positive":
+		m.FalsePositive++
+	case o.Classification == "hardening":
+		m.Hardening++
+	case o.NeedsValidation:
+		m.NeedsValidation++
+	default:
+		m.Uncertain++
+	}
+}
 
 // GateMatrix counts runs (cases x repeats) by ground truth and by what the product
 // did. It is the confusion matrix for the decision users actually experience.
@@ -153,6 +189,10 @@ type VerdictReport struct {
 
 	// Gate is the three-way outcome the product applies, counted over every run.
 	Gate GateMatrix `json:"gate"`
+	// TPClasses and FPClasses split every run by the classification returned,
+	// per ground-truth class (see ClassMix).
+	TPClasses ClassMix `json:"tpClasses"`
+	FPClasses ClassMix `json:"fpClasses"`
 
 	MeanConfidenceCorrect float64 `json:"meanConfidenceCorrect"`
 	MeanConfidenceWrong   float64 `json:"meanConfidenceWrong"`
@@ -225,6 +265,7 @@ func (rn Runner) Run(ctx context.Context, c Corpus, runID string) VerdictReport 
 				out.Confidence = v.Confidence
 				out.Refuted = v.Refuted
 				out.Surfaced = v.Surfaced()
+				out.NeedsValidation = v.NeedsValidation()
 				out.Predicted = LabelFP
 				if out.Surfaced {
 					out.Predicted = LabelTP
@@ -240,6 +281,11 @@ func (rn Runner) Run(ctx context.Context, c Corpus, runID string) VerdictReport 
 				allConf = append(allConf, v.Confidence)
 			}
 			rep.Gate.add(cs.Label, out.Outcome)
+			if cs.Label == LabelTP {
+				rep.TPClasses.add(out)
+			} else {
+				rep.FPClasses.add(out)
+			}
 			out.Correct = out.Predicted == cs.Label
 			if out.Err == "" {
 				if out.Correct {
@@ -386,6 +432,7 @@ func (r VerdictReport) Write(w io.Writer, verbose bool) {
 	fmt.Fprintf(w, "  TP recall:           %.1f%%  (genuine issues confirmed, %d TP case(s))\n", 100*r.TPRecall, r.TPCases)
 	fmt.Fprintf(w, "  FP suppression:      %.1f%%  (safe code not confirmed, %d FP case(s))\n", 100*r.FPSuppression, r.FPCases)
 	r.writeGate(w)
+	r.writeClasses(w)
 	// A mean over no samples is not 0.00 — printing it as a number invites reading
 	// "no wrong answers" as "wrong answers had zero confidence".
 	fmt.Fprintf(w, "  confidence when right/wrong: %s / %s\n",
@@ -456,6 +503,30 @@ func (r VerdictReport) writeGate(w io.Writer) {
 	}
 	if g.TPDismissed+g.FPDismissed > 0 {
 		fmt.Fprintf(w, "  dismissed that were safe:    %.1f%%\n", 100*g.DismissedPrecision())
+	}
+	fmt.Fprintln(w)
+}
+
+// writeClasses prints the four-way answer the review gave, per ground-truth class.
+func (r VerdictReport) writeClasses(w io.Writer) {
+	if r.TPClasses == (ClassMix{}) && r.FPClasses == (ClassMix{}) {
+		return // a report recorded before the split existed
+	}
+	fmt.Fprintf(w, "  What the review called each finding (runs)\n")
+	fmt.Fprintf(w, "    %-16s %8s %8s %10s %10s %10s %7s\n", "", "true_pos", "false_pos", "hardening", "needs-val", "uncertain", "errors")
+	for _, row := range []struct {
+		name string
+		m    ClassMix
+	}{{"genuine (tp)", r.TPClasses}, {"safe (fp)", r.FPClasses}} {
+		fmt.Fprintf(w, "    %-16s %8d %8d %10d %10d %10d %7d\n", row.name,
+			row.m.TruePositive, row.m.FalsePositive, row.m.Hardening, row.m.NeedsValidation, row.m.Uncertain, row.m.Errors)
+	}
+	if n := r.TPClasses.Hardening; n > 0 {
+		fmt.Fprintf(w, "  genuine issues called hardening: %d  <- a real weakness judged already mitigated\n", n)
+	}
+	if u := r.TPClasses.NeedsValidation + r.TPClasses.Uncertain + r.FPClasses.NeedsValidation + r.FPClasses.Uncertain; u > 0 {
+		fmt.Fprintf(w, "  uncertain verdicts that named what would decide them: %.1f%%\n",
+			100*ratio(r.TPClasses.NeedsValidation+r.FPClasses.NeedsValidation, u))
 	}
 	fmt.Fprintln(w)
 }

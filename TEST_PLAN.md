@@ -62,20 +62,26 @@ make eval-gate         # triage context coverage against the committed baseline
 | GitHub integrations | mock-server tests only: issue lifecycle, de-duplication, PR comments. **Never run against a live repository in CI.** |
 | War Room | `httptest`: project isolation, redaction, feedback, audit export, Host and cross-origin guards, the Content-Security-Policy, no third-party script |
 | Fleet | planning and dispatch with a fake runner; fetching from local git repositories |
+| Surface map and tool plan | unit tests over small fixture trees: facts and hotspot scores, the threat-context file (parsing and refusing unknown keys, crown jewels, out-of-scope paths), scan depth, every skip and addition in the tool plan, `--all-tools` |
+| Hunt mode | scripted fake model over fixture code: it may report only lines it was shown, candidates are added for review, and unconfirmed ones are listed apart in every report and kept out of SARIF |
 | Eval harness | corpus validation, scoring math, regression detection; `make eval-corpus` checks the corpus's claims about scanners by running them |
 
 ## What is not verified
 
-- **Accuracy on real repositories.** The triage eval is 18 labeled cases and the
-  detection benchmark is 24 labeled issues in synthetic fixtures. They catch gross
-  regressions; they are not precision and recall on real code. See
-  [evals/README.md](evals/README.md) and [docs/benchmarking.md](docs/benchmarking.md).
+- **Accuracy on real repositories, beyond a few benchmarks.** The triage eval is 18
+  labeled cases and the synthetic detection benchmark 24 labeled issues. Detection is
+  also scored on five deliberately vulnerable apps (DVWA, NodeGoat, PyGoat, RailsGoat,
+  WebGoat), on the OWASP Benchmark for Java and Python, and out of sample on OWASP
+  Juice Shop, but the own rules were partly written against all of them, and none of
+  these measure the AI review on real code. See [evals/README.md](evals/README.md) and
+  [docs/benchmarking.md](docs/benchmarking.md).
 - **Verdict-mode eval numbers for the current prompt.** The recorded model runs in
   `evals/` predate the latest prompt version and have not been repeated on it.
   Verdict mode needs an API key and spends money, so it is run deliberately, not in CI.
 - **Live GitHub writes.** Issue filing, PR comments and `--fix-pr` are tested against
   mock servers and a local git remote, not against github.com.
-- **The `anthropic` provider preset** has not been run against the live API.
+- **The `anthropic` provider preset against `api.anthropic.com`.** Its live tests have
+  passed through OpenRouter's Messages-compatible endpoint, not Anthropic's own API.
 - **Tests on macOS.** Release binaries are built for it; CI tests Linux and Windows.
 - **The scan hub example workflow and the fleet `CronJob` patterns** are documented
   setups, not tested ones.

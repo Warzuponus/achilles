@@ -60,16 +60,18 @@ internal/scanner      the scanner interface and registry
 internal/normalize    tool output (SARIF and a few native formats) → findings
 internal/model        the finding, verdict and SARIF types
 internal/noise        drops vendored, generated and minified files
+internal/suppress     inline achilles:ignore suppressions
 internal/baseline     known findings, so a gate fails only on new ones
 internal/vcs          changed files for --diff
 internal/correlate    groups one defect reported by several tools
+internal/surface      the pre-scan surface map, threat-context file and tool plan
 
 internal/enrich       adds the code around a finding for the model
 internal/redact       masks credentials before text leaves the machine
 internal/triage       the model review, the adversarial judge, fix suggestions
   llm                 the OpenAI-compatible client and per-task routing
   llm/llmtest         a fake client for hermetic tests
-internal/deep         --deep-verify: bounded, read-only repository lookups
+internal/deep         --deep-verify and --hunt: bounded, read-only repository lookups
 internal/verifyfix    re-scans a proposed fix; the scope rule for what a fix may touch
 internal/cost         the pre-flight cost estimate (--dry-run, --max-cost)
 internal/knowledge    feedback, calibration and retrieval of past verdicts
@@ -82,12 +84,14 @@ internal/research     research agents and rule synthesis (experimental)
 internal/report       human, HTML, Markdown, SARIF and JUnit output
 internal/issues       files and maintains GitHub issues
 internal/github       the small GitHub REST client
+internal/gitlab       the GitLab merge request note and tracking signatures
 internal/gitops       the git steps behind --fix-pr
 internal/vault        the Evidence Vault (file and PostgreSQL)
 internal/metrics      rollups over the vault
 internal/tenant       the project registry for the War Room
 internal/server       the War Room: handlers, templates, redaction
 internal/fleet        fleet config, planning and dispatch
+internal/mcp          the read-only MCP server over the vault (achilles mcp)
 internal/eval         the eval harness
 
 evals/                the labeled triage corpus and the detection benchmark

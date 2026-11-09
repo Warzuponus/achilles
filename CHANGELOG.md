@@ -138,6 +138,17 @@ All notable changes to this project are recorded here. The format follows
   constraints structured outputs reject. The deep-verify step schema had neither, so
   the API would have refused it and those calls fell back to unenforced JSON.
 
+### Documentation
+- **A roadmap** ([ROADMAP.md](ROADMAP.md)): what each release shipped, what stands
+  between `main` and v0.4.0, what is planned and what is deliberately not.
+- DESIGN.md's status section no longer lists the verdict cache, the per-repository
+  config file, SARIF `baselineState` and mid-run `--max-cost` enforcement as unbuilt;
+  TEST_PLAN.md records the benchmark and Juice Shop runs, the surface map and hunt mode
+  tests, and that the Anthropic live tests ran through OpenRouter; the README covers
+  the scan plan, the Juice Shop score and the AI-model rules; the CLI reference lists
+  `--target-label` and `--source-commit`; CONTRIBUTING.md's code map lists
+  `internal/surface`, `gitlab`, `mcp` and `suppress`.
+
 ## [0.3.1] - 2026-10-19
 
 Achilles' own rules measured against the OWASP Benchmark and rebuilt from what it

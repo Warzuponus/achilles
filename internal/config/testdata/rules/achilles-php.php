@@ -211,3 +211,26 @@ function die_on_error($c) {
     // ok: achilles.php.xss-html-building
     $r = mysqli_query($c, "SELECT 1") or die('<pre>' . $_GET['debug'] . '</pre>');
 }
+
+function weak_session_ids() {
+    $_SESSION['last_session_id']++;
+    $cookie_value = time();
+    // ruleid: achilles.php.weak-random
+    setcookie("dvwaSession", $cookie_value);
+    // ruleid: achilles.php.weak-random
+    $reset_token = md5(uniqid());
+    // ruleid: achilles.php.weak-random
+    $_SESSION['csrf_token'] = mt_rand();
+    // ok: achilles.php.weak-random
+    setcookie("session_id", bin2hex(random_bytes(32)));
+    // ok: achilles.php.weak-random
+    setcookie("last_visit", time());
+    // ok: achilles.php.weak-random
+    $token_expires = time() + 3600;
+    // ok: achilles.php.weak-random
+    $_SESSION['csrf_token_time'] = time();
+    $now = time();
+    // ok: achilles.php.weak-random
+    $token = json_encode(array("token" => sign($secret, $now + 300)));
+}
+

@@ -696,6 +696,17 @@ rules:
               metavariable: $VAR
               regex: (?i)^[a-z_]*(token|secret|password|passwd|nonce|salt|otp|apikey|api_key|session_id|sessionid|reset_code|resetcode|remember_me|rememberme)[a-z_0-9]*$
           - focus-metavariable: $E
+      - patterns:
+          # The return value of a function whose name says it makes one
+          # (generate_api_key, new_reset_token).
+          - pattern-inside: |
+              def $FN(...):
+                ...
+          - pattern: return $E
+          - metavariable-regex:
+              metavariable: $FN
+              regex: (?i)^_?(create|generate|gen|make|new|build|issue|random)[a-z_0-9]*(token|secret|password|passwd|nonce|salt|otp|apikey|api_key|session_id|sessionid|reset_code|resetcode|reset_link|remember_me|rememberme)[a-z_0-9]*$
+          - focus-metavariable: $E
 
   - id: achilles.python.insecure-cookie
     languages: [python]
@@ -752,3 +763,30 @@ rules:
               - pattern: 'flask.session[$K] = $V'
               - pattern: 'request.session[$K] = $V'
           - focus-metavariable: $K
+
+  - id: achilles.python.redos
+    languages: [python]
+    severity: WARNING
+    message: >
+      A regular expression repeats a group that can itself match a run of the same
+      characters, as in (a+)+ or (\w+\s?)*. On a long input that almost matches,
+      the engine tries every way to split the run between the two repetitions, which
+      grows exponentially, and the worker stalls (ReDoS). Drop the outer or the
+      inner repetition, or bound the input length before matching.
+    metadata:
+      cwe: ["CWE-1333: Inefficient Regular Expression Complexity"]
+      category: security
+    # A group whose only required part is one repeated atom, itself repeated. A
+    # group with a required delimiter, such as ([a-z]+\.)+, cannot be split more
+    # than one way and is not reported.
+    # Report the regex where it is written, not again at each use of a variable
+    # holding it.
+    options:
+      constant_propagation: false
+    patterns:
+      - pattern-either:
+          - pattern: re.$F("$RE", ...)
+          - pattern: re.$F(r"$RE", ...)
+      - metavariable-regex:
+          metavariable: $RE
+          regex: '.*(?<!\\)\((?:\?:)?(?:(?:\\\\.|\\.|\[(?:\\.|[^\]\\])*\]|[^()\\\[\]+*?{}|]|\((?:\\.|[^()\\])*\))(?:[?*]|\{0,\d*\}))*(?:\\\\.|\\.|\[(?:\\.|[^\]\\])*\]|[^()\\\[\]+*?{}|]|\((?:\\.|[^()\\])*\))(?:[+*]|\{\d+,\d*\})(?:(?:\\\\.|\\.|\[(?:\\.|[^\]\\])*\]|[^()\\\[\]+*?{}|]|\((?:\\.|[^()\\])*\))(?:[?*]|\{0,\d*\}))*\)(?:[+*]|\{\d+,\d*\})'

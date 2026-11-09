@@ -3,8 +3,12 @@
 import hashlib
 import os
 import pickle
+import random
+import re
+import secrets
 import shutil
 import ssl
+import string
 import subprocess
 
 import requests
@@ -331,6 +335,33 @@ def paths(codecs, pathlib, base):
     # ruleid: achilles.python.path-traversal
     (pathlib.Path("/srv/files") / name).read_text()
 
+
+
+def generate_api_key():
+    chars = string.ascii_lowercase + string.digits
+    # ruleid: achilles.python.weak-random
+    return "".join(random.choices(chars, k=16))
+
+
+def generate_reset_token():
+    # ok: achilles.python.weak-random
+    return secrets.token_urlsafe(32)
+
+
+def pick_colour():
+    # ok: achilles.python.weak-random
+    return random.choice(["red", "green"])
+
+
+def regexes(s):
+    # ruleid: achilles.python.redos
+    re.match(r"^(a+)+$", s)
+    # ruleid: achilles.python.redos
+    re.compile("(\\w+\\s?)*$")
+    # ok: achilles.python.redos
+    re.compile(r"^([a-z0-9-]+\.)+[a-z]{2,}$")
+    # ok: achilles.python.redos
+    re.search(r"(\d{1,3}\.){3}\d{1,3}", s)
 
 
 if __name__ == "__main__":

@@ -443,3 +443,33 @@ rules:
           - metavariable-regex:
               metavariable: $A
               regex: (?i)^["'](md5|sha1)["']$
+
+  - id: achilles.ruby.redos
+    languages: [ruby]
+    severity: WARNING
+    message: >
+      A regular expression repeats a group that can itself match a run of the same
+      characters, as in (a+)+ or (\w+\s?)*. On a long input that almost matches,
+      the engine tries every way to split the run between the two repetitions, which
+      grows exponentially, and the request thread stalls (ReDoS). Ruby 3.2 and later
+      cache most such matches; on older Rubies set Regexp.timeout. Either way, drop
+      the outer or the inner repetition, or bound the input length before matching.
+    metadata:
+      cwe: ["CWE-1333: Inefficient Regular Expression Complexity"]
+      category: security
+    # A group whose only required part is one repeated atom, itself repeated. A
+    # group with a required delimiter, such as ([a-z]+\.)+, cannot be split more
+    # than one way and is not reported.
+    # Report the regex where it is written, not again at each use of a variable
+    # holding it.
+    options:
+      constant_propagation: false
+    patterns:
+      - pattern-either:
+          - pattern: /$RE/
+          # Opengrep reads a double-quoted Ruby string with a backslash in it as
+          # interpolated, so only single-quoted ones match here.
+          - pattern: Regexp.new("$RE", ...)
+      - metavariable-regex:
+          metavariable: $RE
+          regex: '.*(?<!\\)\((?:\?:)?(?:(?:\\\\.|\\.|\[(?:\\.|[^\]\\])*\]|[^()\\\[\]+*?{}|]|\((?:\\.|[^()\\])*\))(?:[?*]|\{0,\d*\}))*(?:\\\\.|\\.|\[(?:\\.|[^\]\\])*\]|[^()\\\[\]+*?{}|]|\((?:\\.|[^()\\])*\))(?:[+*]|\{\d+,\d*\})(?:(?:\\\\.|\\.|\[(?:\\.|[^\]\\])*\]|[^()\\\[\]+*?{}|]|\((?:\\.|[^()\\])*\))(?:[?*]|\{0,\d*\}))*\)(?:[+*]|\{\d+,\d*\})'

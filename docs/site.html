@@ -426,6 +426,16 @@ you set there wins over the repository's file.</p>
 <td><code>default</code></td>
 <td>the <strong>project</strong> these results belong to (a namespace for grouping the repos you scan). The postgres backend stores it under the key <code>tenant-&lt;id&gt;</code>, which is what the War Room reads</td>
 </tr>
+<tr>
+<td><code>--target-label</code></td>
+<td>—</td>
+<td>record this stable, non-secret identity (for example a repo URL) as the run's target instead of the scanned path. Used by <code>achilles-fleet</code> for fetched checkouts</td>
+</tr>
+<tr>
+<td><code>--source-commit</code></td>
+<td>—</td>
+<td>record the scanned source's commit sha in the run metadata (used by <code>achilles-fleet</code>; GitLab secret findings name it)</td>
+</tr>
 </tbody>
 </table>
 <h2>Noise, baselines &amp; diff-aware scanning</h2>
@@ -2420,7 +2430,7 @@ the repository has a threat-context file, under <code>--profile full</code>, or 
 </tr>
 <tr>
 <td>Checkov</td>
-<td>no infrastructure-as-code files</td>
+<td>no infrastructure-as-code files, CI pipelines (GitHub Actions, GitLab CI, Azure Pipelines, Bitbucket, CircleCI) or OpenAPI documents</td>
 </tr>
 <tr>
 <td>any language-specific scanner</td>
@@ -2428,6 +2438,8 @@ the repository has a threat-context file, under <code>--profile full</code>, or 
 </tr>
 </tbody>
 </table>
+<p>These rules were checked against real repositories, by running every skipped
+scanner anyway: see <a href="../evals/scan-plan/README.md">evals/scan-plan</a>.</p>
 <p>A scanner asked for by name (<code>--with</code>, <code>--secrets-history</code>) is never skipped, and a
 map that stopped early skips nothing. Opengrep, Trivy, Gitleaks and OSV-Scanner
 are never skipped.</p>

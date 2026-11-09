@@ -98,3 +98,25 @@ JOIN_TOKEN = "SWMTKN-1-3pu6hszjas19xyp7ghgosyx9k8atbfcr8p2is99znpy26u2lkl-7p73s1
 # pattern backtracked past PCRE's limit on it, and the exclusion then failed for
 # every line of the file (the identifier cases above would be reported).
 MEDIA_TYPE_BLOCK_USERS = "application/vnd.github.giant-sentry-fist-preview+json"
+
+# ruleid: achilles.generic.hardcoded-crypto-key
+KEY = "123456789101112123456789101112123456789101112"
+# ruleid: achilles.generic.hardcoded-crypto-key
+ACCESS_TOKEN_SALT = "S4828341189aefiasd#ASDF"
+# ruleid: achilles.generic.hardcoded-crypto-key
+RG_IV = "PPKLKAJDKGHALDJL482823458028"
+# ruleid: achilles.generic.hardcoded-crypto-key
+ENCRYPTION_KEY = "9f86d081884c7d659a2feaa0c55ad015"
+# ok: achilles.generic.hardcoded-crypto-key
+CACHE_KEY = "users:list:v2:all-active"
+# ok: achilles.generic.hardcoded-crypto-key
+SORT_KEY = "created_at_desc_2024"
+# ok: achilles.generic.hardcoded-crypto-key
+ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"]
+# ok: achilles.generic.hardcoded-crypto-key
+key = "a8f5f167f44f4964e6c998dee827110c"
+# ok: achilles.generic.hardcoded-crypto-key
+SALT = "short1"
+# ok: achilles.generic.hardcoded-crypto-key
+STRIPE_PUBLIC_KEY_IV = "pk1234567890abcdefghij"
+

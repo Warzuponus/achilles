@@ -43,7 +43,7 @@ steps:
   - uses: Warzuponus/achilles@v0.3.1
     with:
       llm-api-key: ${{ secrets.LLM_API_KEY }}
-      llm-provider: openrouter     # or openai | ollama
+      llm-provider: openrouter     # or openai | ollama | anthropic
       llm-model: ${{ vars.LLM_MODEL }}
       issues: "true"
 ```
@@ -120,7 +120,9 @@ baseline and diff gating, inline suppressions (`achilles:ignore`), the GitHub Ac
 issue filing, `achilles init`, `achilles tools install` and `achilles doctor`.
 
 **Experimental** (they work and are tested, but have had less real-world use, and
-their flags or behavior may change): `--fix-pr`, `--deep-verify`, `--hunt`, `--llm-samples`,
+their flags or behavior may change): the surface map and scan plan (`--prioritize
+surface`, `--plan-out`, `.achilles/threat-context.yaml`, `--all-tools`), `--fix-pr`,
+`--deep-verify`, `--hunt`, `--llm-samples`,
 `--calibrate` and `--feedback`, `--rag`, `--threat-model`, `--sbom`, the research
 agents (`--research`, `--mine-rules`), the `anthropic` provider preset, the War Room
 (`achillesd`), the fleet dispatcher (`achilles-fleet`), `--profile full` with its
@@ -128,7 +130,9 @@ per-language tool images, the MCP server (`achilles mcp`), and the GitLab report
 `--gitlab-secret-detection`, `--gitlab-dependency-scanning`, `--gitlab-code-quality`: checked against GitLab's published
 report schemas, and accepted and read by gitlab.com from a real pipeline). `--gitlab-mr-comment` has been run
 against gitlab.com too: it posts the note and updates it in place. The
-[User Guides](docs/README.md) cover each of them.
+[User Guides](docs/README.md) cover each of them. Everything added since v0.3.1 is in
+the [CHANGELOG](CHANGELOG.md) under Unreleased, and what comes next is in the
+[Roadmap](ROADMAP.md).
 
 ## Know the limits
 
@@ -138,8 +142,9 @@ against gitlab.com too: it posts the note and updates it in place. The
   [SECURITY.md](SECURITY.md).
 - **Coverage depends on the scanners.** The default set covers Go, dependencies, IaC
   and secrets well. Code-level coverage for Python, JavaScript, Java, Ruby and PHP comes
-  mostly from Opengrep rules: Achilles ships about 90 of its own for Python,
-  JavaScript and TypeScript, Java, Ruby, PHP and credentials (Apache-2.0, loaded in
+  mostly from Opengrep rules: Achilles ships about 100 of its own for Python,
+  JavaScript and TypeScript, Java, Ruby, PHP, credentials and code that calls AI
+  models (Apache-2.0, loaded in
   every mode), and `achilles tools install` adds the community rules (a Commons Clause
   licence applies; they are skipped under `--mode commercial`, see
   [THIRD-PARTY.md](THIRD-PARTY.md)). The heavier per-language analyzers
@@ -150,12 +155,15 @@ against gitlab.com too: it posts the note and updates it in place. The
   Until gosec catches up, scan Go code with Go 1.27.1 (the Docker image does).
 - **Accuracy is measured, and modest on recall:** on 270 documented vulnerabilities in
   five deliberately vulnerable apps (DVWA, NodeGoat, PyGoat, RailsGoat, WebGoat), the
-  scanners with Achilles' own rules find 31% (36% with the community rule pack), and
-  that includes access-control and logic flaws no pattern rule can find. On the OWASP
-  Benchmark, which has decoys and so measures false positives too, the own rules score
+  scanners with Achilles' own rules find 35% (the community rule pack added 5 points
+  before the latest rules), and that includes access-control and logic flaws no
+  pattern rule can find. On the OWASP Benchmark, which has decoys and so measures false positives too, the own rules score
   69.7 for Java and 50.3 for Python (true-positive minus false-positive rate). The
   rules were partly written against these benchmarks, so expect less elsewhere; their
-  out-of-sample scores, before that work, were 4.7 and 19.5. There is also an 18-case
+  out-of-sample scores, before that work, were 4.7 and 19.5. The first out-of-sample
+  run on real application code, OWASP Juice Shop, found 5 of the 13 coding challenges
+  a static rule can reach, at 63% precision (12 of 13 after rules written from that
+  run, which is in-sample again). There is also an 18-case
   labeled triage corpus and a 24-issue synthetic regression benchmark. See
   [evals/](evals/README.md) and [Benchmarking Detection](docs/benchmarking.md).
 - **You choose the model and pay the provider.** `--dry-run` prints a cost estimate
@@ -173,11 +181,13 @@ local web view over the Evidence Vault, reachable only from your own machine; it
 ## How it works
 
 ```
+plan      (optional) map the attack surface → read .achilles/threat-context.yaml
+          → pick the scan depth and which scanners have something to analyze
 scan      load the tool registry → license-mode gate → run the scanners → SARIF
           → normalize into findings → drop vendored and generated files
           → baseline and --diff → group the same defect reported by several tools
 review    (--ai) add code context → model verdict → adversarial judge
-          → fix suggestion → re-scan the fix
+          → fix suggestion and regression test → re-scan the fix
 report    human, HTML, Markdown, SARIF, JUnit, GitLab → GitHub issues → --fail-on gate
 record    every step is appended to the Evidence Vault (a local file, or PostgreSQL)
 ```
@@ -186,7 +196,7 @@ record    every step is appended to the Evidence Vault (a local file, or Postgre
   SARIF is a config entry, with no Go code.
 - The model client speaks the OpenAI-compatible API (`--llm-provider`, or
   `--llm-base-url` plus `--llm-model`), so a hosted provider, a gateway or a local
-  runtime all work. The review and the judge can use different models
+  runtime all work; `--llm-provider anthropic` uses Anthropic's Messages API natively. The review and the judge can use different models
   (`--model-config`).
 - `--mode commercial` refuses any tool not marked commercial-safe in the registry and
   skips the community Opengrep rules. Copyleft scanners are only ever run as separate

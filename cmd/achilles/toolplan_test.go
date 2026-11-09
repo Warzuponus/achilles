@@ -135,9 +135,22 @@ func TestRun_ThreatContextAddsAnInstalledOptInScanner(t *testing.T) {
 	if s.ToolPlan.Depth != surface.DepthFull || !hasDecision(s.ToolPlan, "--profile full", model.ToolRecommended) {
 		t.Errorf("business critical: depth full, and the full profile is recommended: %+v", s.ToolPlan)
 	}
-	// The context skipped checkov, so it is listed with the repository's configuration.
-	if !slices.Contains(s.RepoConfig, "threat context: .achilles/threat-context.yaml") {
-		t.Errorf("repo config: %v", s.RepoConfig)
+	// Checkov audits the workflow, so it runs, and the context skipped nothing: it
+	// is not listed with the repository's configuration.
+	if !slices.Contains(s.Tools, "checkov") || slices.Contains(s.RepoConfig, "threat context: .achilles/threat-context.yaml") {
+		t.Errorf("workflow present: checkov runs; tools %v, repo config %v", s.Tools, s.RepoConfig)
+	}
+
+	// Without the workflow the context skips checkov, so it is listed.
+	if err := os.RemoveAll(filepath.Join(target, ".github")); err != nil {
+		t.Fatal(err)
+	}
+	s, err = runPlanned(t, "--config", cfg, "--vault", vaultPath, target)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if slices.Contains(s.Tools, "checkov") || !slices.Contains(s.RepoConfig, "threat context: .achilles/threat-context.yaml") {
+		t.Errorf("no workflow: checkov skipped and the context listed; tools %v, repo config %v", s.Tools, s.RepoConfig)
 	}
 
 	// --no-repo-config ignores the file.
@@ -201,10 +214,15 @@ func TestDecideTools_Rules(t *testing.T) {
 	missing := func(tc config.ToolConfig) (bool, string) { return false, tc.ID + " is not installed" }
 
 	p := decideTools(&options{profile: "full"}, tools, m, installed)
-	for _, id := range []string{"gosec", "checkov", "shellcheck"} {
+	for _, id := range []string{"gosec", "shellcheck"} {
 		if !slices.Contains(p.Skipped(), id) {
 			t.Errorf("%s should be skipped: %+v", id, p.Decisions)
 		}
+	}
+	// Checkov audits GitHub workflows too, so a repository with workflows and no
+	// IaC still has something for it (gin and zlib did: CKV2_GHA_1).
+	if slices.Contains(p.Skipped(), "checkov") {
+		t.Errorf("checkov has the workflow to audit: %+v", p.Decisions)
 	}
 	if slices.Contains(p.Skipped(), "opengrep") || !slices.Contains(p.Added(), "zizmor") {
 		t.Errorf("opengrep is never skipped; zizmor is added: %+v", p.Decisions)
@@ -226,5 +244,42 @@ func TestDecideTools_Rules(t *testing.T) {
 	m.Truncated = true
 	if p := decideTools(&options{profile: "full"}, tools, m, installed); len(p.Skipped()) != 0 {
 		t.Errorf("truncated map: %+v", p.Decisions)
+	}
+}
+
+// Checkov reads more than IaC: each of these alone is enough to keep it, and a
+// repository with none of them skips it.
+func TestDecideTools_CheckovInputs(t *testing.T) {
+	tools := &config.Config{Tools: []config.ToolConfig{{ID: "checkov", Enabled: true, Languages: []string{"generic"}}}}
+	installed := func(config.ToolConfig) (bool, string) { return true, "" }
+	for name, files := range map[string]map[string]string{
+		"github workflow":   {".github/workflows/ci.yml": "on: push\n"},
+		"gitlab ci":         {".gitlab-ci.yml": "test:\n  script: [make]\n"},
+		"circleci":          {".circleci/config.yml": "version: 2.1\n"},
+		"bitbucket":         {"bitbucket-pipelines.yml": "pipelines: {}\n"},
+		"openapi yaml":      {"api/openapi.yaml": "openapi: 3.0.3\ninfo: {title: x, version: '1'}\n"},
+		"swagger json":      {"docs/swagger.json": "{\n  \"swagger\": \"2.0\",\n  \"info\": {}\n}\n"},
+		"terraform json":    {"infra/main.tf.json": "{\"resource\": {}}\n"},
+		"dockerfile build/": {"build/package/Dockerfile": "FROM alpine\n"},
+		"nothing":           {"main.py": "print(1)\n", "config/app.json": "{\"name\": \"x\"}\n", "Jenkinsfile": "pipeline {}\n"},
+	} {
+		root := t.TempDir()
+		for rel, body := range files {
+			p := filepath.Join(root, filepath.FromSlash(rel))
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		m, err := surface.Build(root, surface.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		skipped := slices.Contains(decideTools(&options{profile: "full"}, tools, m, installed).Skipped(), "checkov")
+		if skipped != (name == "nothing") {
+			t.Errorf("%s: checkov skipped = %v (markers %v)", name, skipped, m.Markers)
+		}
 	}
 }

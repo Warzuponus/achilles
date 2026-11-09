@@ -29,7 +29,7 @@ All notable changes to this project are recorded here. The format follows
   unanswered question is never read as "no") and a tool plan: it skips a scanner
   that has nothing to analyze (gosec or govulncheck with no `go.mod`, Psalm with no
   `psalm.xml`, FindSecBugs with no bytecode, Security Code Scan with no .NET
-  project, Railroader outside a Rails app, Checkov with no IaC files, a scanner
+  project, Railroader outside a Rails app, Checkov with no IaC files, CI pipelines or OpenAPI documents, a scanner
   whose languages appear only in tests or out-of-scope paths), adds an opt-in
   scanner whose files are present when the context file exists and the scanner is
   installed (zizmor for GitHub workflows), and recommends `--profile full` at full
@@ -112,6 +112,18 @@ All notable changes to this project are recorded here. The format follows
   Anthropic` workflow, started by hand, runs them plus an `--ai --deep-verify` scan of
   the sample.
 
+- **Rules for misses on the five vulnerable apps: recall 31.1% to 35.2%** (84 to 95 of
+  270, own rules). ReDoS for JavaScript, Python, Ruby and Java (a repeated group that
+  can split one run of characters more than one way, as in `(a+)+`); weak randomness
+  for PHP (`time()`, `uniqid()`, `mt_rand()` in a session or token cookie, a session
+  token or a secret-named variable); hard-coded keys, IVs and salts in upper-case
+  constants (`KEY`, `RG_IV`, `ACCESS_TOKEN_SALT`). The Java taint rules now take a
+  Spring handler's unannotated `String` parameters as request data, and the Java SQL
+  rules match JDBC calls on a connection or statement declared with `var`. The Python
+  and Java weak-randomness rules also count the return value of a function named like
+  it makes a secret (`generate_api_key`). All 16 new findings on the five apps were
+  read by hand and are real; see [docs/benchmarking.md](docs/benchmarking.md).
+
 ### Changed
 - Triage prompts are now `triage/v7`, so cached verdicts from v6 are not reused, and
   dismissal counts are not comparable across the boundary: some v6 false positives are
@@ -119,6 +131,12 @@ All notable changes to this project are recorded here. The format follows
   (`make eval-gate`: 13,948 to 17,638 prompt tokens over the corpus).
 
 ### Fixed
+- **The scan plan no longer skips Checkov on repositories that have CI pipelines or
+  OpenAPI documents but no IaC.** Checkov audits GitHub Actions, GitLab CI, Azure
+  Pipelines, Bitbucket and CircleCI files and OpenAPI documents too; on gin and
+  zlib the skipped run lost CKV2_GHA_1 workflow findings. `.tf.json` and
+  Dockerfiles or Terraform inside build directories now count as IaC. Found by
+  running the plan on 19 real repositories ([evals/scan-plan](evals/scan-plan/README.md)).
 - One taint sink that several sources reach was reported once per source by Opengrep:
   Juice Shop's product search came out as three identical SQL injections. Copies at
   the same exact span are now one finding.
@@ -137,6 +155,17 @@ All notable changes to this project are recorded here. The format follows
   the Messages API now get `additionalProperties: false` on every object and lose the
   constraints structured outputs reject. The deep-verify step schema had neither, so
   the API would have refused it and those calls fell back to unenforced JSON.
+
+### Documentation
+- **A roadmap** ([ROADMAP.md](ROADMAP.md)): what each release shipped, what stands
+  between `main` and v0.4.0, what is planned and what is deliberately not.
+- DESIGN.md's status section no longer lists the verdict cache, the per-repository
+  config file, SARIF `baselineState` and mid-run `--max-cost` enforcement as unbuilt;
+  TEST_PLAN.md records the benchmark and Juice Shop runs, the surface map and hunt mode
+  tests, and that the Anthropic live tests ran through OpenRouter; the README covers
+  the scan plan, the Juice Shop score and the AI-model rules; the CLI reference lists
+  `--target-label` and `--source-commit`; CONTRIBUTING.md's code map lists
+  `internal/surface`, `gitlab`, `mcp` and `suppress`.
 
 ## [0.3.1] - 2026-10-19
 

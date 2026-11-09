@@ -90,6 +90,8 @@ you set there wins over the repository's file.
 | `--vault` | `.achilles/vault.jsonl` | vault path (file backend) |
 | `--vault-backend` | `file` | `file` or `postgres`. `postgres` reads its connection string from `$ACHILLES_VAULT_DSN` (env only — never a flag, it holds a password) |
 | `--vault-tenant` | `default` | the **project** these results belong to (a namespace for grouping the repos you scan). The postgres backend stores it under the key `tenant-<id>`, which is what the War Room reads |
+| `--target-label` | — | record this stable, non-secret identity (for example a repo URL) as the run's target instead of the scanned path. Used by `achilles-fleet` for fetched checkouts |
+| `--source-commit` | — | record the scanned source's commit sha in the run metadata (used by `achilles-fleet`; GitLab secret findings name it) |
 
 ## Noise, baselines & diff-aware scanning
 

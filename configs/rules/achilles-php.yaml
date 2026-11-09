@@ -535,3 +535,54 @@ rules:
       - metavariable-regex:
           metavariable: $ALGO
           regex: (?i)^["']?(.*-ecb|des.*|rc4.*|rc2.*|bf-.*|blowfish.*|cast5.*|idea.*)["']?$
+
+  - id: achilles.php.weak-random
+    mode: taint
+    languages: [php]
+    severity: WARNING
+    message: >
+      A session cookie, token or other secret is made from the clock or from a
+      predictable generator (time, microtime, uniqid, rand, mt_rand, lcg_value). An
+      attacker who knows roughly when it was made, or has seen a few others, can
+      guess it. Use random_bytes() (bin2hex(random_bytes(32))) or random_int().
+    metadata:
+      cwe: ["CWE-330: Use of Insufficiently Random Values"]
+      category: security
+    pattern-sources:
+      - pattern-either:
+          - pattern: time()
+          - pattern: microtime(...)
+          - pattern: hrtime(...)
+          - pattern: uniqid(...)
+          - pattern: rand(...)
+          - pattern: mt_rand(...)
+          - pattern: lcg_value()
+          - pattern: str_shuffle(...)
+          - pattern: array_rand(...)
+    # time() + 3600 is an expiry time stored beside a token, not the token itself.
+    pattern-sanitizers:
+      - pattern: $A + $B
+      - pattern: $A - $B
+    pattern-sinks:
+      - patterns:
+          # A cookie whose name says it holds a session or a credential.
+          - pattern-either:
+              - pattern: setcookie($NAME, $V, ...)
+              - pattern: setrawcookie($NAME, $V, ...)
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: (?i)^["'](?![a-z0-9_-]*(expir|ttl|time|stamp|_at[\"']?$|created|issued|lifetime|until|_age|length|count))[a-z0-9_-]*(sess|token|auth|remember|nonce|csrf|secret|apikey|api_key)[a-z0-9_-]*["']$
+          - focus-metavariable: $V
+      - patterns:
+          - pattern: $_SESSION[$K] = $V
+          - metavariable-regex:
+              metavariable: $K
+              regex: (?i)^["'](?![a-z0-9_-]*(expir|ttl|time|stamp|_at[\"']?$|created|issued|lifetime|until|_age|length|count))[a-z_]*(token|secret|nonce|csrf|otp|reset|apikey|api_key)[a-z_0-9]*["']$
+          - focus-metavariable: $V
+      - patterns:
+          # A variable whose name says it is a secret.
+          - pattern: $VAR = $E
+          - metavariable-regex:
+              metavariable: $VAR
+              regex: (?i)^\$(?![a-z0-9_-]*(expir|ttl|time|stamp|_at$|created|issued|lifetime|until|_age|length|count))[a-z_]*(token|secret|password|passwd|nonce|salt|otp|apikey|api_key|session_id|sessionid|reset_code|resetcode|remember_me|rememberme)[a-z_0-9]*$
+          - focus-metavariable: $E

@@ -262,9 +262,9 @@ echoes or includes it in another, and the rules follow taint within a file only.
 DVWA's medium SQL-injection level escapes the input with `mysqli_real_escape_string`
 but uses it unquoted, and the rule takes the escape as a fix. Its high level reads
 the input from the session. RailsGoat's DOM XSS lives in inline scripts in ERB
-templates. Business-logic flaws (access control, IDOR, CSRF, password reset logic),
-ReDoS and vulnerable dependencies are for the AI review, the dependency scanners or
-nobody: no pattern rule finds them.
+templates. Business-logic flaws (access control, IDOR, CSRF, password reset logic)
+and vulnerable dependencies are for the AI review, the dependency scanners or nobody:
+no pattern rule finds them. (ReDoS was on this list until the 2026-11-09 rules below.)
 
 That is precision: what the rules report on real application code, and that what
 they report is almost always right. Recall on the same applications is next.
@@ -321,6 +321,70 @@ Read it with these limits in mind:
   DOM XSS in inline `<script>` blocks; hard-coded passwords too short or plain to
   tell from test data; and logic flaws, which are for the AI review (`--hunt`) or a
   person.
+
+### Rules added on 2026-11-09
+
+Measured on 2026-11-09 with Opengrep 1.25.0 alone (`--scan-config` with only the
+Opengrep entry of `configs/tools.yaml`), own rules (`--mode commercial`), AI review
+off. Opengrep is the only scanner that reports on these labels, so the other binary
+scanners do not change the figure.
+
+| | Before | After |
+|---|---|---|
+| **Overall** | **31.1%** (84) | **35.2%** (95) |
+| Injection (61) | 33 | 37 |
+| Weak crypto (21) | 7 | 10 |
+| Hard-coded secret (12) | 3 | 5 |
+| ReDoS (3) | 0 | 2 |
+
+By application: DVWA 23 to 24 of 72, NodeGoat 7 to 8 of 26, PyGoat 20 to 21 of 56,
+RailsGoat 12 to 15 of 32, WebGoat 22 to 27 of 84. (The 84 "before" is one more than
+the 83 above: the 2026-10-20 weak-randomness fix found one more.)
+
+What was added:
+
+- **Java SQL with no declared type.** A connection or statement declared with `var`
+  (`try (var connection = dataSource.getConnection())`) has no type to match, so
+  `prepareStatement`, `prepareCall`, `executeQuery`, `executeUpdate` and
+  `executeLargeUpdate` are now sinks on any receiver; those names are JDBC's own.
+  WebGoat's ORDER BY lesson, challenge 5's login and the JWT `kid` lookup.
+- **Spring handler parameters with no annotation.** Spring binds a handler's plain
+  `String` parameter from the request field of the same name. Every Java taint rule
+  now takes those as request data, in methods with a `@...Mapping` annotation; a
+  parameter with any other annotation (`@CurrentUser`, `@Value`) is not. WebGoat's
+  `attack5` lesson.
+- **ReDoS** (`achilles.{javascript,python,ruby,java}.redos`, CWE-1333): a regex
+  literal whose repeated group can split one run of characters more than one way,
+  as in `(a+)+` or `(\w+\s?)*`. A group with a required delimiter, such as
+  `([a-z0-9-]+\.)+`, cannot be split more than one way and is not reported, so the
+  third ReDoS label (RailsGoat's e-mail pattern, which repeats such groups) is still
+  missed.
+- **Weak randomness.** A PHP rule (`achilles.php.weak-random`): `time()`, `uniqid()`,
+  `rand()`, `mt_rand()` and the like in a session or token cookie, a token in
+  `$_SESSION`, or a variable named like a secret; `time() + 3600` is an expiry and is
+  not reported. The Python and Java rules now also count the return value of a
+  function named like it makes a secret (`generate_api_key`, `createPasswordReset`).
+- **Hard-coded keys, IVs and salts** (`achilles.generic.hardcoded-crypto-key`,
+  CWE-321): an upper-case constant named `KEY`, `IV` or `SALT` (or ending in one)
+  set to a literal of 16 or more characters with a digit in it. RailsGoat's AES key
+  and token salt.
+
+Precision: on the five applications the new rules add 16 findings, 11 of them on
+labels. The other five were read by hand and all are real: DVWA's CSRF token made
+with `md5(uniqid())`, RailsGoat's hard-coded IV, and WebGoat's JWT refresh tokens
+drawn from `RandomStringUtils` (reported twice, in the method that makes them and in
+the one that returns them). None of the earlier findings went away. On the Python 3.13
+standard library and the packages installed beside it the new rules add nothing.
+On the OWASP Benchmark, same setup, nothing moved: Java 71.2 and Python 50.3 before
+and after, with the same true- and false-positive counts in every category (the
+Benchmark has no ReDoS or hard-coded key categories, and its Java cases type their
+JDBC variables).
+
+Still missed, besides the causes above: WebGoat's XXE lessons are reported where the
+parser factory is created, eight lines from where the comment is parsed, so the
+label does not match; and DVWA's SQLite branches turn out to be lost only when the
+`case` before them ends in `break` (deleting that `break` brings the finding back),
+which is an Opengrep taint issue, not a rule gap.
 
 ## The OWASP Benchmark for Java
 

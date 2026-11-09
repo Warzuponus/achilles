@@ -158,3 +158,15 @@ def digests(password, blob)
   # ok: achilles.ruby.weak-hash
   Digest::SHA256.hexdigest(blob)
 end
+
+def regexes(email, username)
+  # ruleid: achilles.ruby.redos
+  username =~ /^(a+)+$/
+  # ruleid: achilles.ruby.redos
+  Regexp.new('(\w+\s?)*\z')
+  # ok: achilles.ruby.redos
+  email =~ /^([a-z0-9-]+\.)+[a-z]{2,}$/
+  # ok: achilles.ruby.redos
+  username =~ /^(ab)+$/
+end
+

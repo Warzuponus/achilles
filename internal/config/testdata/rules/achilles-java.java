@@ -293,4 +293,61 @@ public class Demo {
         request.getSession().setAttribute("visits", 1);
     }
 
+    // A Spring handler's plain String parameter is bound from the request. (Scans
+    // also follow it into a helper in the same file; --test runs without that.)
+    @PostMapping("/attack5")
+    public void implicitParam(String query) throws Exception {
+        try (var connection = dataSource.getConnection()) {
+            var statement = connection.createStatement();
+            // ruleid: achilles.java.sql-injection
+            statement.executeQuery(query);
+        }
+    }
+
+    @GetMapping("/servers")
+    public void sortServers(@RequestParam String column, @CurrentUsername String user) throws Exception {
+        try (var connection = dataSource.getConnection()) {
+            // ruleid: achilles.java.sql-injection, achilles.java.sql-string-building
+            var ps = connection.prepareStatement("select id from servers order by " + column);
+            // ok: achilles.java.sql-injection
+            var ps2 = connection.prepareStatement("select id from servers where owner = ?");
+        }
+    }
+
+    @GetMapping("/whoami")
+    public void annotatedNotFromRequest(@CurrentUsername String user) throws Exception {
+        try (var connection = dataSource.getConnection()) {
+            // ok: achilles.java.sql-injection
+            connection.createStatement().executeQuery(user);
+        }
+    }
+
+    public void notAHandler(String query) throws Exception {
+        try (var connection = dataSource.getConnection()) {
+            // ok: achilles.java.sql-injection
+            connection.createStatement().executeQuery(query);
+        }
+    }
+
+    public String createPasswordReset(String username) {
+        java.util.Random random = new java.util.Random();
+        // ruleid: achilles.java.weak-random
+        return Integer.toHexString(random.nextInt()) + username;
+    }
+
+    public int generateDiceRoll() {
+        // ok: achilles.java.weak-random
+        return new java.util.Random().nextInt(6);
+    }
+
+    public void regexes(String s) {
+        // ruleid: achilles.java.redos
+        java.util.regex.Pattern p1 = java.util.regex.Pattern.compile("^(a+)+$");
+        // ruleid: achilles.java.redos
+        boolean b = s.matches("(\\w+\\s?)*$");
+        // ok: achilles.java.redos
+        java.util.regex.Pattern p2 = java.util.regex.Pattern.compile("^([a-z0-9-]+\\.)+[a-z]{2,}$");
+        // ok: achilles.java.redos
+        String[] parts = s.split("(ab)+");
+    }
 }

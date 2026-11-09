@@ -511,3 +511,35 @@ func TestRunner_GateMatrixSeparatesKeptFromDismissed(t *testing.T) {
 		t.Errorf("errors: gate = %+v, want %+v", rep.Gate, want)
 	}
 }
+
+func TestRunner_SplitsHardeningAndNeedsValidation(t *testing.T) {
+	// The headline scores fold hardening and uncertain into "not confirmed"; the
+	// split must keep them apart, per ground-truth class.
+	c, err := LoadCorpus(tinyCorpus(t, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		hardening = `{"classification":"hardening","confidence":0.9,"exploitability":"not-reachable","reasoning":"r"}`
+		withPlan  = `{"classification":"uncertain","confidence":0.5,"exploitability":"unknown","reasoning":"r","blockers":["is the route public?"]}`
+		bare      = `{"classification":"uncertain","confidence":0.5,"exploitability":"unknown","reasoning":"r"}`
+	)
+	// Cases run id-sorted: case-fp then case-tp, twice each.
+	eng := engineWith(t, c.Root,
+		[]string{hardening, hardening, withPlan, bare},
+		[]string{judgeAccepts, judgeAccepts, judgeAccepts, judgeAccepts})
+
+	rep := Runner{Engine: eng, Repeat: 2}.Run(context.Background(), c, "r1")
+
+	if want := (ClassMix{Hardening: 2}); rep.FPClasses != want {
+		t.Errorf("fp row = %+v, want %+v", rep.FPClasses, want)
+	}
+	if want := (ClassMix{NeedsValidation: 1, Uncertain: 1}); rep.TPClasses != want {
+		t.Errorf("tp row = %+v, want %+v", rep.TPClasses, want)
+	}
+	var b strings.Builder
+	rep.Write(&b, false)
+	if out := b.String(); !strings.Contains(out, "needs-val") || !strings.Contains(out, "50.0%") {
+		t.Errorf("report should print the split and the named-blocker share:\n%s", out)
+	}
+}

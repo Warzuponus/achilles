@@ -50,7 +50,15 @@ answer?"* It reports two things, and they are different questions:
 
 The first set alone flatters a cautious model: one that answers "uncertain" to
 everything scores 100% FP suppression while removing nothing from anyone's report.
-Read both. The measurements recorded below predate the second table and the
+A third table splits every run by the classification the review returned
+(`true_positive`, `false_positive`, `hardening`, needs-validation, bare
+`uncertain`), per ground-truth class. It is how the `triage/v7` verdicts are
+measured: `hardening` on a genuine issue dismisses a real weakness as already
+mitigated, so it is an error on the TP row and an acceptable way to clear noise on
+the FP row; and the share of uncertain verdicts that named their blockers or a
+validation plan says whether "needs validation" gives the reader something to act on.
+
+Read all three. The measurements recorded below predate the second table and the
 current prompt version, so they are confirmation scores only.
 
 Keep the two straight: context mode can improve while verdict mode does not.

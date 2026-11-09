@@ -32,6 +32,25 @@ rules:
               - pattern-inside: |
                   $RET $M(..., @RequestBody $T $X, ...) { ... }
           - pattern: $X
+      # Spring binds a handler's plain String parameters from the request too (a
+      # query or form field of the same name), with no annotation. Ones with an
+      # annotation are bound from elsewhere (@CurrentUser, @Value) or are covered above.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  @$MAPPING(...)
+                  $RET $M(..., String $X, ...) { ... }
+              - pattern-inside: |
+                  @$MAPPING
+                  $RET $M(..., String $X, ...) { ... }
+          - metavariable-regex:
+              metavariable: $MAPPING
+              regex: ^(Get|Post|Put|Delete|Patch|Request)Mapping$
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN String $X, ...) { ... }
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN(...) String $X, ...) { ... }
+          - pattern: $X
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -54,6 +73,13 @@ rules:
               - pattern: $JDBC.queryForRowSet($SQL, ...)
               - pattern: $JDBC.queryForMap($SQL, ...)
               - pattern: $JDBC.queryForStream($SQL, ...)
+              # A connection or statement declared with var, or returned by a helper,
+              # has no type to match on. These method names are JDBC's own.
+              - pattern: $C.prepareStatement($SQL, ...)
+              - pattern: $C.prepareCall($SQL, ...)
+              - pattern: $S.executeQuery($SQL, ...)
+              - pattern: $S.executeUpdate($SQL, ...)
+              - pattern: $S.executeLargeUpdate($SQL, ...)
           - focus-metavariable: $SQL
       - patterns:
           # query/execute are common names: only on a receiver named like a JDBC
@@ -83,6 +109,13 @@ rules:
           - pattern: (java.sql.Statement $S).$EXEC(String.format(...), ...)
           - pattern: (java.sql.Connection $C).prepareStatement("..." + $X, ...)
           - pattern: (java.sql.Connection $C).prepareStatement("..." + $X + $Y, ...)
+          # Untyped (var, or a helper's return value): JDBC's own method names.
+          - pattern: $C.prepareStatement("..." + $X, ...)
+          - pattern: $C.prepareStatement("..." + $X + $Y, ...)
+          - pattern: $S.executeQuery("..." + $X, ...)
+          - pattern: $S.executeQuery("..." + $X + $Y, ...)
+          - pattern: $S.executeUpdate("..." + $X, ...)
+          - pattern: $S.executeUpdate("..." + $X + $Y, ...)
           # Built first, then executed (WebGoat's lessons build the query in a variable).
           - patterns:
               - pattern-either:
@@ -104,9 +137,15 @@ rules:
               - pattern-either:
                   - pattern: (java.sql.Statement $S).$EXEC($Q, ...)
                   - pattern: (java.sql.Connection $C).prepareStatement($Q, ...)
+                  - pattern: $C.prepareStatement($Q, ...)
+                  - pattern: $S.executeQuery($Q, ...)
+                  - pattern: $S.executeUpdate($Q, ...)
       # Literals joined together are one constant string.
       - pattern-not: (java.sql.Connection $C).prepareStatement("..." + "...", ...)
       - pattern-not: (java.sql.Statement $S).$EXEC("..." + "...", ...)
+      - pattern-not: $C.prepareStatement("..." + "...", ...)
+      - pattern-not: $S.executeQuery("..." + "...", ...)
+      - pattern-not: $S.executeUpdate("..." + "...", ...)
 
   - id: achilles.java.command-injection
     mode: taint
@@ -129,6 +168,25 @@ rules:
                   $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
               - pattern-inside: |
                   $RET $M(..., @PathVariable $T $X, ...) { ... }
+          - pattern: $X
+      # Spring binds a handler's plain String parameters from the request too (a
+      # query or form field of the same name), with no annotation. Ones with an
+      # annotation are bound from elsewhere (@CurrentUser, @Value) or are covered above.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  @$MAPPING(...)
+                  $RET $M(..., String $X, ...) { ... }
+              - pattern-inside: |
+                  @$MAPPING
+                  $RET $M(..., String $X, ...) { ... }
+          - metavariable-regex:
+              metavariable: $MAPPING
+              regex: ^(Get|Post|Put|Delete|Patch|Request)Mapping$
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN String $X, ...) { ... }
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN(...) String $X, ...) { ... }
           - pattern: $X
     pattern-sinks:
       - patterns:
@@ -169,6 +227,25 @@ rules:
                   $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
               - pattern-inside: |
                   $RET $M(..., @PathVariable $T $X, ...) { ... }
+          - pattern: $X
+      # Spring binds a handler's plain String parameters from the request too (a
+      # query or form field of the same name), with no annotation. Ones with an
+      # annotation are bound from elsewhere (@CurrentUser, @Value) or are covered above.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  @$MAPPING(...)
+                  $RET $M(..., String $X, ...) { ... }
+              - pattern-inside: |
+                  @$MAPPING
+                  $RET $M(..., String $X, ...) { ... }
+          - metavariable-regex:
+              metavariable: $MAPPING
+              regex: ^(Get|Post|Put|Delete|Patch|Request)Mapping$
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN String $X, ...) { ... }
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN(...) String $X, ...) { ... }
           - pattern: $X
     pattern-sanitizers:
       - pattern: FilenameUtils.getName(...)
@@ -216,6 +293,25 @@ rules:
                   $RET $M(..., @RequestParam $T $X, ...) { ... }
               - pattern-inside: |
                   $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+          - pattern: $X
+      # Spring binds a handler's plain String parameters from the request too (a
+      # query or form field of the same name), with no annotation. Ones with an
+      # annotation are bound from elsewhere (@CurrentUser, @Value) or are covered above.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  @$MAPPING(...)
+                  $RET $M(..., String $X, ...) { ... }
+              - pattern-inside: |
+                  @$MAPPING
+                  $RET $M(..., String $X, ...) { ... }
+          - metavariable-regex:
+              metavariable: $MAPPING
+              regex: ^(Get|Post|Put|Delete|Patch|Request)Mapping$
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN String $X, ...) { ... }
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN(...) String $X, ...) { ... }
           - pattern: $X
     pattern-sinks:
       - patterns:
@@ -379,6 +475,25 @@ rules:
               - pattern-inside: |
                   $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
           - pattern: $X
+      # Spring binds a handler's plain String parameters from the request too (a
+      # query or form field of the same name), with no annotation. Ones with an
+      # annotation are bound from elsewhere (@CurrentUser, @Value) or are covered above.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  @$MAPPING(...)
+                  $RET $M(..., String $X, ...) { ... }
+              - pattern-inside: |
+                  @$MAPPING
+                  $RET $M(..., String $X, ...) { ... }
+          - metavariable-regex:
+              metavariable: $MAPPING
+              regex: ^(Get|Post|Put|Delete|Patch|Request)Mapping$
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN String $X, ...) { ... }
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN(...) String $X, ...) { ... }
+          - pattern: $X
     pattern-sanitizers:
       # A server-side lookup keyed by the input picks one of the server's own
       # targets; a literal path prefix keeps the redirect on this site.
@@ -469,6 +584,25 @@ rules:
               - pattern-inside: |
                   $RET $M(..., @RequestBody $T $X, ...) { ... }
           - pattern: $X
+      # Spring binds a handler's plain String parameters from the request too (a
+      # query or form field of the same name), with no annotation. Ones with an
+      # annotation are bound from elsewhere (@CurrentUser, @Value) or are covered above.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  @$MAPPING(...)
+                  $RET $M(..., String $X, ...) { ... }
+              - pattern-inside: |
+                  @$MAPPING
+                  $RET $M(..., String $X, ...) { ... }
+          - metavariable-regex:
+              metavariable: $MAPPING
+              regex: ^(Get|Post|Put|Delete|Patch|Request)Mapping$
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN String $X, ...) { ... }
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN(...) String $X, ...) { ... }
+          - pattern: $X
     pattern-sanitizers:
       - pattern-either:
           - pattern: Encode.$FOR(...)
@@ -545,6 +679,25 @@ rules:
               - pattern-inside: |
                   $RET $M(..., @RequestBody $T $X, ...) { ... }
           - pattern: $X
+      # Spring binds a handler's plain String parameters from the request too (a
+      # query or form field of the same name), with no annotation. Ones with an
+      # annotation are bound from elsewhere (@CurrentUser, @Value) or are covered above.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  @$MAPPING(...)
+                  $RET $M(..., String $X, ...) { ... }
+              - pattern-inside: |
+                  @$MAPPING
+                  $RET $M(..., String $X, ...) { ... }
+          - metavariable-regex:
+              metavariable: $MAPPING
+              regex: ^(Get|Post|Put|Delete|Patch|Request)Mapping$
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN String $X, ...) { ... }
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN(...) String $X, ...) { ... }
+          - pattern: $X
     pattern-sanitizers:
       - pattern-either:
           - pattern: LdapEncoder.filterEncode(...)
@@ -598,6 +751,25 @@ rules:
                   $RET $M(..., @CookieValue(...) $T $X, ...) { ... }
               - pattern-inside: |
                   $RET $M(..., @RequestBody $T $X, ...) { ... }
+          - pattern: $X
+      # Spring binds a handler's plain String parameters from the request too (a
+      # query or form field of the same name), with no annotation. Ones with an
+      # annotation are bound from elsewhere (@CurrentUser, @Value) or are covered above.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  @$MAPPING(...)
+                  $RET $M(..., String $X, ...) { ... }
+              - pattern-inside: |
+                  @$MAPPING
+                  $RET $M(..., String $X, ...) { ... }
+          - metavariable-regex:
+              metavariable: $MAPPING
+              regex: ^(Get|Post|Put|Delete|Patch|Request)Mapping$
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN String $X, ...) { ... }
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN(...) String $X, ...) { ... }
           - pattern: $X
     pattern-sanitizers:
       - pattern-either:
@@ -674,6 +846,16 @@ rules:
               metavariable: $VAR
               regex: (?i)^[a-z_]*(token|secret|password|passwd|nonce|salt|otp|apikey|api_key|sessionid|session_id|resetcode|reset_code|rememberme)[a-z_0-9]*$
           - focus-metavariable: $E
+      - patterns:
+          # The return value of a method whose name says it makes one
+          # (generateApiKey, createPasswordReset).
+          - pattern-inside: |
+              $RET $FN(...) { ... }
+          - pattern: return $E;
+          - metavariable-regex:
+              metavariable: $FN
+              regex: (?i)^(create|generate|gen|make|new|build|issue|random)[a-z_0-9]*(token|secret|password|passwd|nonce|salt|otp|apikey|api_key|sessionid|session_id|resetcode|reset_code|passwordreset|resetlink|rememberme)[a-z_0-9]*$
+          - focus-metavariable: $E
 
   - id: achilles.java.insecure-cookie
     languages: [java]
@@ -734,6 +916,25 @@ rules:
               - pattern-inside: |
                   $RET $M(..., @RequestBody $T $X, ...) { ... }
           - pattern: $X
+      # Spring binds a handler's plain String parameters from the request too (a
+      # query or form field of the same name), with no annotation. Ones with an
+      # annotation are bound from elsewhere (@CurrentUser, @Value) or are covered above.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  @$MAPPING(...)
+                  $RET $M(..., String $X, ...) { ... }
+              - pattern-inside: |
+                  @$MAPPING
+                  $RET $M(..., String $X, ...) { ... }
+          - metavariable-regex:
+              metavariable: $MAPPING
+              regex: ^(Get|Post|Put|Delete|Patch|Request)Mapping$
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN String $X, ...) { ... }
+          - pattern-not-inside: |
+              $RET $M(..., @$ANN(...) String $X, ...) { ... }
+          - pattern: $X
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -748,3 +949,35 @@ rules:
               - pattern: $REQ.getSession().putValue($X, ...)
               - pattern: $REQ.getSession().putValue($N, $X)
           - focus-metavariable: $X
+
+  - id: achilles.java.redos
+    languages: [java]
+    severity: WARNING
+    message: >
+      A regular expression repeats a group that can itself match a run of the same
+      characters, as in (a+)+ or (\w+\s?)*. On a long input that almost matches,
+      the engine tries every way to split the run between the two repetitions, which
+      grows exponentially, and the request thread stalls (ReDoS). Drop the outer or the
+      inner repetition, or bound the input length before matching.
+    metadata:
+      cwe: ["CWE-1333: Inefficient Regular Expression Complexity"]
+      category: security
+    # A group whose only required part is one repeated atom, itself repeated. A
+    # group with a required delimiter, such as ([a-z]+\.)+, cannot be split more
+    # than one way and is not reported.
+    # Report the regex where it is written, not again at each use of a variable
+    # holding it.
+    options:
+      constant_propagation: false
+    patterns:
+      - pattern-either:
+          - pattern: Pattern.compile("$RE", ...)
+          - pattern: java.util.regex.Pattern.compile("$RE", ...)
+          - pattern: Pattern.matches("$RE", $S)
+          - pattern: $S.matches("$RE")
+          - pattern: $S.replaceAll("$RE", $R)
+          - pattern: $S.replaceFirst("$RE", $R)
+          - pattern: $S.split("$RE", ...)
+      - metavariable-regex:
+          metavariable: $RE
+          regex: '.*(?<!\\)\((?:\?:)?(?:(?:\\\\.|\\.|\[(?:\\.|[^\]\\])*\]|[^()\\\[\]+*?{}|]|\((?:\\.|[^()\\])*\))(?:[?*]|\{0,\d*\}))*(?:\\\\.|\\.|\[(?:\\.|[^\]\\])*\]|[^()\\\[\]+*?{}|]|\((?:\\.|[^()\\])*\))(?:[+*]|\{\d+,\d*\})(?:(?:\\\\.|\\.|\[(?:\\.|[^\]\\])*\]|[^()\\\[\]+*?{}|]|\((?:\\.|[^()\\])*\))(?:[?*]|\{0,\d*\}))*\)(?:[+*]|\{\d+,\d*\})'

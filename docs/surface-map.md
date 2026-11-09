@@ -162,8 +162,11 @@ It **skips** a scanner the profile turns on when it has nothing to analyze:
 | FindSecBugs | no compiled `.class`, `.jar` or `.war` in build output |
 | Security Code Scan | no `.csproj`, `.vbproj` or `.sln` |
 | Railroader | not a Rails app (no `config/routes.rb` or `config/application.rb`) |
-| Checkov | no infrastructure-as-code files |
+| Checkov | no infrastructure-as-code files, CI pipelines (GitHub Actions, GitLab CI, Azure Pipelines, Bitbucket, CircleCI) or OpenAPI documents |
 | any language-specific scanner | its languages appear only in tests or out-of-scope paths |
+
+These rules were checked against real repositories, by running every skipped
+scanner anyway: see [evals/scan-plan](../evals/scan-plan/README.md).
 
 A scanner asked for by name (`--with`, `--secrets-history`) is never skipped, and a
 map that stopped early skips nothing. Opengrep, Trivy, Gitleaks and OSV-Scanner

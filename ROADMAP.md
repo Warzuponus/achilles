@@ -45,8 +45,13 @@ These are what stand between `main` and the next release.
   model, with and without `--blind-judge`, and record it in `evals/`. The recorded
   model runs predate `triage/v7`, so nobody has measured how accurate the new
   hardening and needs-validation verdicts are. Needs an API key.
-- [ ] **Run the surface map and tool plan on a few real repositories** and check that
-  no scanner is skipped that had something to find.
+- [x] **Run the surface map and tool plan on a few real repositories** and check that
+  no scanner is skipped that had something to find. Done on 19 repositories across
+  Go, Python, JavaScript, Java, PHP, Ruby, C#, C and Terraform: the plan skipped
+  Checkov on repositories with GitHub workflows and no IaC, where Checkov reports
+  workflow findings. Fixed: Checkov now also counts CI pipelines and OpenAPI
+  documents. Every other skip was right. See
+  [evals/scan-plan](evals/scan-plan/README.md).
 - [ ] **Cut v0.4.0:** move Unreleased in the CHANGELOG under a version, bump the
   version in the README, DEPLOY.md and `action.yml` examples, and let the
   release workflows build the binaries and images.
@@ -57,9 +62,10 @@ Roughly in priority order.
 
 ### Accuracy
 
-- **Recall on real code.** The own rules find 31% of the 270 documented
-  vulnerabilities in five vulnerable apps (36% with the community pack). Work through
-  the misses in [docs/benchmarking.md](docs/benchmarking.md) that a rule can reach.
+- **Recall on real code.** The own rules find 35% of the 270 documented
+  vulnerabilities in five vulnerable apps (up from 31% on 2026-11-09). Work through
+  the misses in [docs/benchmarking.md](docs/benchmarking.md) that a rule can reach;
+  most of those left need taint that crosses files.
 - **A second out-of-sample target** that no rule was written against, now that Juice
   Shop is in-sample.
 - **Tune the surface-map weights** against the detection benchmark; today they are a

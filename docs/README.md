@@ -2,14 +2,15 @@
 
 Task-oriented guides for **using** Achilles. For *why* it's built the way it is
 see [DESIGN.md](../DESIGN.md); for the ways to run it (workstation, containers, GitHub Actions,
-scheduled scans) see [DEPLOY.md](../DEPLOY.md); for contributing see [ONBOARDING.md](../ONBOARDING.md).
+scheduled scans) see [DEPLOY.md](../DEPLOY.md); for contributing see [ONBOARDING.md](../ONBOARDING.md); for what is
+shipped and what is planned see [ROADMAP.md](../ROADMAP.md).
 
 | Guide | Read it when you want to… |
 |-------|---------------------------|
 | [Getting Started](getting-started.md) | install Achilles, run your first scan, and understand the core knobs (profiles, license mode, runners, the vault) |
 | [CLI Reference](cli-reference.md) | look up every flag, grouped by task, with copy-paste examples |
 | [Reports & Gating](reports-and-gating.md) | choose an output format (HTML/SARIF/JUnit/Markdown), gate CI on new findings, and cut noise with baselines + diff-aware scans |
-| [LLM Triage & Agents](llm-and-agents.md) | turn on LLM triage/judge/remediation, run the review / SCA-advice / threat-model agents, and route each task to a different model (any OpenAI-compatible endpoint, incl. Ollama) |
+| [LLM Triage & Agents](llm-and-agents.md) | turn on LLM triage/judge/remediation, run the review / SCA-advice / threat-model agents, and route each task to a different model (any OpenAI-compatible endpoint, incl. Ollama, or Anthropic's Messages API natively) |
 | [Deep Verification](deep-verify.md) | let the model read the repository (bounded, read-only) to settle the findings a single-file review could not |
 | [Surface Map & Scan Plan](surface-map.md) | map the attack surface before scanning, say what the code is in a threat-context file, skip scanners with nothing to analyze, and spend a limited AI budget on the most exposed code first (`--prioritize surface`, `--plan-out`, `--all-tools`) |
 | [Hunt Mode](hunt.md) | let the model follow the data from entry points to find what no rule describes, with every candidate reviewed before it counts |

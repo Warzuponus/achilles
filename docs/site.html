@@ -426,6 +426,16 @@ you set there wins over the repository's file.</p>
 <td><code>default</code></td>
 <td>the <strong>project</strong> these results belong to (a namespace for grouping the repos you scan). The postgres backend stores it under the key <code>tenant-&lt;id&gt;</code>, which is what the War Room reads</td>
 </tr>
+<tr>
+<td><code>--target-label</code></td>
+<td>—</td>
+<td>record this stable, non-secret identity (for example a repo URL) as the run's target instead of the scanned path. Used by <code>achilles-fleet</code> for fetched checkouts</td>
+</tr>
+<tr>
+<td><code>--source-commit</code></td>
+<td>—</td>
+<td>record the scanned source's commit sha in the run metadata (used by <code>achilles-fleet</code>; GitLab secret findings name it)</td>
+</tr>
 </tbody>
 </table>
 <h2>Noise, baselines &amp; diff-aware scanning</h2>

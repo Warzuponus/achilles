@@ -29,7 +29,7 @@ All notable changes to this project are recorded here. The format follows
   unanswered question is never read as "no") and a tool plan: it skips a scanner
   that has nothing to analyze (gosec or govulncheck with no `go.mod`, Psalm with no
   `psalm.xml`, FindSecBugs with no bytecode, Security Code Scan with no .NET
-  project, Railroader outside a Rails app, Checkov with no IaC files, a scanner
+  project, Railroader outside a Rails app, Checkov with no IaC files, CI pipelines or OpenAPI documents, a scanner
   whose languages appear only in tests or out-of-scope paths), adds an opt-in
   scanner whose files are present when the context file exists and the scanner is
   installed (zizmor for GitHub workflows), and recommends `--profile full` at full
@@ -119,6 +119,12 @@ All notable changes to this project are recorded here. The format follows
   (`make eval-gate`: 13,948 to 17,638 prompt tokens over the corpus).
 
 ### Fixed
+- **The scan plan no longer skips Checkov on repositories that have CI pipelines or
+  OpenAPI documents but no IaC.** Checkov audits GitHub Actions, GitLab CI, Azure
+  Pipelines, Bitbucket and CircleCI files and OpenAPI documents too; on gin and
+  zlib the skipped run lost CKV2_GHA_1 workflow findings. `.tf.json` and
+  Dockerfiles or Terraform inside build directories now count as IaC. Found by
+  running the plan on 19 real repositories ([evals/scan-plan](evals/scan-plan/README.md)).
 - One taint sink that several sources reach was reported once per source by Opengrep:
   Juice Shop's product search came out as three identical SQL injections. Copies at
   the same exact span are now one finding.

@@ -101,7 +101,8 @@ type Map struct {
 	// outside tests and out-of-scope paths. Build output is not counted.
 	Languages map[string]LangCount `json:"languages"`
 	// Markers are project files that some scanners need before they can run
-	// (go.mod, psalm.xml, a .NET project, compiled JVM bytecode, a Rails app).
+	// (go.mod, psalm.xml, a .NET project, compiled JVM bytecode, a Rails app,
+	// IaC, CI pipelines, OpenAPI documents).
 	Markers []string `json:"markers,omitempty"`
 	// Context is the threat-context file that shaped this map, if any.
 	Context *Context `json:"context,omitempty"`
@@ -130,6 +131,11 @@ const (
 	MarkerRails     = "rails-app"
 	MarkerIaC       = "iac"
 	MarkerWorkflows = "github-workflows"
+	// MarkerCIPipeline is a CI pipeline file other than a GitHub workflow that
+	// Checkov audits: GitLab CI, Azure Pipelines, Bitbucket Pipelines, CircleCI.
+	MarkerCIPipeline = "ci-pipeline"
+	// MarkerOpenAPI is an OpenAPI or Swagger document, which Checkov audits.
+	MarkerOpenAPI = "openapi"
 )
 
 // HasMarker reports whether the walk found a marker.
@@ -254,6 +260,11 @@ func Build(root string, opt Options) (*Map, error) {
 			if ext := strings.ToLower(path.Ext(rel)); ext == ".class" || ext == ".jar" || ext == ".war" {
 				m.markers[MarkerBytecode] = true
 			}
+			// Build directories often hold Dockerfiles or Terraform (build/package/
+			// Dockerfile): not mapped, but an IaC scanner still has them to analyze.
+			if k := infraKind(rel); k != "" && k != "ci-workflow" {
+				m.markers[MarkerIaC] = true
+			}
 			return nil
 		}
 		scoped := !testOnly(rel) && !matchAny(outOfScope, rel)
@@ -303,6 +314,9 @@ func Build(root string, opt Options) (*Map, error) {
 			if k := infraByContent(rel, src); k != "" && !hasInfra(m.Infra, rel) {
 				m.Infra = append(m.Infra, Infra{File: rel, Kind: k})
 			}
+			if isOpenAPI(src) {
+				m.markers[MarkerOpenAPI] = true
+			}
 			return nil
 		}
 		fileFacts := scanFile(rel, lang, src)
@@ -324,6 +338,9 @@ func Build(root string, opt Options) (*Map, error) {
 		m.markers[MarkerIaC] = m.markers[MarkerIaC] || i.Kind != "ci-workflow"
 		if i.Kind == "ci-workflow" && strings.Contains("/"+i.File, "/.github/workflows/") {
 			m.markers[MarkerWorkflows] = true
+		}
+		if i.Kind == "ci-workflow" && checkovPipeline(i.File) {
+			m.markers[MarkerCIPipeline] = true
 		}
 	}
 	m.finish(facts, read, opt)

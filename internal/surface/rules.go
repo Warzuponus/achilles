@@ -37,14 +37,15 @@ func infraKind(rel string) string {
 		return "dockerfile"
 	case strings.HasPrefix(base, "docker-compose") || strings.HasPrefix(base, "compose.") && (strings.HasSuffix(base, ".yml") || strings.HasSuffix(base, ".yaml")):
 		return "compose"
-	case strings.HasSuffix(base, ".tf"):
+	case strings.HasSuffix(base, ".tf") || strings.HasSuffix(base, ".tf.json"):
 		return "terraform"
 	case base == "chart.yaml":
 		return "helm"
 	case (strings.HasPrefix(lower, ".github/workflows/") || strings.Contains(lower, "/.github/workflows/")) &&
 		(strings.HasSuffix(base, ".yml") || strings.HasSuffix(base, ".yaml")):
 		return "ci-workflow"
-	case base == ".gitlab-ci.yml" || base == "jenkinsfile" || base == "azure-pipelines.yml":
+	case base == ".gitlab-ci.yml" || base == "jenkinsfile" || base == "azure-pipelines.yml" || base == "azure-pipelines.yaml" ||
+		base == "bitbucket-pipelines.yml" || strings.HasSuffix("/"+lower, "/.circleci/config.yml"):
 		return "ci-workflow"
 	}
 	return ""
@@ -273,6 +274,21 @@ var (
 	samRE = regexp.MustCompile(`(?m)^Transform:\s*['"]?AWS::Serverless`)
 	armRE = regexp.MustCompile(`"\$schema"\s*:\s*"https://schema\.management\.azure\.com/schemas/[^"]*deploymentTemplate\.json`)
 )
+
+var openAPIRE = regexp.MustCompile(`(?m)^\s*["']?(openapi|swagger)["']?\s*:\s*["']?[23]\.\d`)
+
+// isOpenAPI reports whether a YAML or JSON file is an OpenAPI (3.x) or Swagger
+// (2.0) document, by its version key.
+func isOpenAPI(src []byte) bool {
+	return openAPIRE.Match(src[:min(len(src), 4096)])
+}
+
+// checkovPipeline reports whether a CI file other than a GitHub workflow is one
+// Checkov audits; it has no Jenkinsfile checks.
+func checkovPipeline(rel string) bool {
+	l := "/" + strings.ToLower(rel)
+	return path.Base(l) != "jenkinsfile" && !strings.Contains(l, "/.github/workflows/")
+}
 
 // infraByContent classifies a configuration file by its head.
 func infraByContent(rel string, src []byte) string {

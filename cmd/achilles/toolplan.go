@@ -20,32 +20,39 @@ const profileFull = "full"
 // toolNeed is what a scanner must find in the target before it has anything to
 // analyze, and what to say when it is missing or present.
 type toolNeed struct {
-	marker  string
-	missing string // why the scanner is skipped without it
-	found   string // why an opt-in scanner is worth adding with it
+	markers []string // any one of them is enough
+	missing string   // why the scanner is skipped without it
+	found   string   // why an opt-in scanner is worth adding with it
 }
 
 // toolNeeds lists the scanners that analyze nothing without a particular kind of
 // project file. A scanner that is not listed is never skipped for a missing file.
 // Markers in tests and out-of-scope paths do not count.
 var toolNeeds = map[string]toolNeed{
-	"gosec": {marker: surface.MarkerGoMod,
+	"gosec": {markers: []string{surface.MarkerGoMod},
 		missing: "no go.mod outside tests and out-of-scope paths; gosec type-checks Go modules and has nothing to analyze without one"},
-	"govulncheck": {marker: surface.MarkerGoMod,
+	"govulncheck": {markers: []string{surface.MarkerGoMod},
 		missing: "no go.mod outside tests and out-of-scope paths; govulncheck reads a Go module's dependencies"},
-	"psalm": {marker: surface.MarkerPsalm,
+	"psalm": {markers: []string{surface.MarkerPsalm},
 		missing: "no psalm.xml at the repository root; Achilles runs Psalm with the project's own psalm.xml"},
-	"findsecbugs": {marker: surface.MarkerBytecode,
+	"findsecbugs": {markers: []string{surface.MarkerBytecode},
 		missing: "no compiled .class, .jar or .war in build output (build/, target/, out/ ...); FindSecBugs analyzes bytecode, so build the project first"},
-	"security-code-scan": {marker: surface.MarkerDotNet,
+	"security-code-scan": {markers: []string{surface.MarkerDotNet},
 		missing: "no .csproj, .vbproj or .sln; Security Code Scan builds a .NET project"},
-	"railroader": {marker: surface.MarkerRails,
+	"railroader": {markers: []string{surface.MarkerRails},
 		missing: "not a Rails application (no config/routes.rb or config/application.rb)"},
-	"checkov": {marker: surface.MarkerIaC,
-		missing: "no infrastructure-as-code files (Terraform, Kubernetes, Helm, CloudFormation, ARM, Dockerfiles, Compose)"},
-	"zizmor": {marker: surface.MarkerWorkflows,
+	// Checkov also audits CI pipelines and OpenAPI documents: on real repositories
+	// with no IaC it still reports workflow findings (CKV2_GHA_1) and API ones.
+	"checkov": {markers: []string{surface.MarkerIaC, surface.MarkerWorkflows, surface.MarkerCIPipeline, surface.MarkerOpenAPI},
+		missing: "no infrastructure-as-code files (Terraform, Kubernetes, Helm, CloudFormation, ARM, Dockerfiles, Compose), CI pipelines or OpenAPI documents"},
+	"zizmor": {markers: []string{surface.MarkerWorkflows},
 		missing: "no GitHub Actions workflows",
 		found:   "the repository has GitHub Actions workflows, which zizmor audits"},
+}
+
+// metBy reports whether the map found any of the files the scanner needs.
+func (n toolNeed) metBy(m *surface.Map) bool {
+	return slices.ContainsFunc(n.markers, m.HasMarker)
 }
 
 // prepareModel is the Model phase, run before the scanners are chosen: it reads
@@ -175,12 +182,12 @@ func decideTools(o *options, cfg *config.Config, m *surface.Map, launch func(con
 			if o.allTools || m.Truncated {
 				continue
 			}
-			if hasNeed && !m.HasMarker(need.marker) && languagesPresent(tc, m) {
+			if hasNeed && !need.metBy(m) && languagesPresent(tc, m) {
 				plan.Decisions = append(plan.Decisions, model.ToolDecision{Tool: tc.ID, Action: model.ToolSkipped, Reason: need.missing, Fix: "--all-tools"})
 			} else if why := onlyOutOfScope(tc, m); why != "" {
 				plan.Decisions = append(plan.Decisions, model.ToolDecision{Tool: tc.ID, Action: model.ToolSkipped, Reason: why, Fix: "--all-tools"})
 			}
-		case tc.OptIn != "" && !asked && hasNeed && need.found != "" && m.HasMarker(need.marker):
+		case tc.OptIn != "" && !asked && hasNeed && need.found != "" && need.metBy(m):
 			fix := "--with " + tc.OptIn
 			switch ok, why := launch(tc); {
 			case !o.allTools && m.Context == nil:

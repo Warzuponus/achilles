@@ -45,8 +45,13 @@ These are what stand between `main` and the next release.
   model, with and without `--blind-judge`, and record it in `evals/`. The recorded
   model runs predate `triage/v7`, so nobody has measured how accurate the new
   hardening and needs-validation verdicts are. Needs an API key.
-- [ ] **Run the surface map and tool plan on a few real repositories** and check that
-  no scanner is skipped that had something to find.
+- [x] **Run the surface map and tool plan on a few real repositories** and check that
+  no scanner is skipped that had something to find. Done on 19 repositories across
+  Go, Python, JavaScript, Java, PHP, Ruby, C#, C and Terraform: the plan skipped
+  Checkov on repositories with GitHub workflows and no IaC, where Checkov reports
+  workflow findings. Fixed: Checkov now also counts CI pipelines and OpenAPI
+  documents. Every other skip was right. See
+  [evals/scan-plan](evals/scan-plan/README.md).
 - [ ] **Cut v0.4.0:** move Unreleased in the CHANGELOG under a version, bump the
   version in the README, DEPLOY.md and `action.yml` examples, and let the
   release workflows build the binaries and images.

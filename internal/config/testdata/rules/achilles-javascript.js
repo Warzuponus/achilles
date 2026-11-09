@@ -289,4 +289,19 @@ app.use("/api", rateLimit({
 // ok: achilles.javascript.rate-limit-key-from-header
 const forwarded = req.headers["x-forwarded-for"];
 
+function regexes(bankRouting) {
+  // ruleid: achilles.javascript.redos
+  const nested = /([0-9]+)+\#/;
+  // ruleid: achilles.javascript.redos
+  const built = new RegExp("(\\s*\\w+)*$");
+  // ok: achilles.javascript.redos
+  const fixed = /([0-9]+)\#/;
+  // ok: achilles.javascript.redos
+  const host = /^([a-z0-9-]+\.)+[a-z]{2,}$/;
+  // ok: achilles.javascript.redos
+  const ratio = a / (b + c) + d / 2;
+  // ok: achilles.javascript.redos
+  return nested.test(bankRouting);
+}
+
 app.listen(3000);

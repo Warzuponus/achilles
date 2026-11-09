@@ -155,9 +155,9 @@ the [CHANGELOG](CHANGELOG.md) under Unreleased, and what comes next is in the
   Until gosec catches up, scan Go code with Go 1.27.1 (the Docker image does).
 - **Accuracy is measured, and modest on recall:** on 270 documented vulnerabilities in
   five deliberately vulnerable apps (DVWA, NodeGoat, PyGoat, RailsGoat, WebGoat), the
-  scanners with Achilles' own rules find 31% (36% with the community rule pack), and
-  that includes access-control and logic flaws no pattern rule can find. On the OWASP
-  Benchmark, which has decoys and so measures false positives too, the own rules score
+  scanners with Achilles' own rules find 35% (the community rule pack added 5 points
+  before the latest rules), and that includes access-control and logic flaws no
+  pattern rule can find. On the OWASP Benchmark, which has decoys and so measures false positives too, the own rules score
   69.7 for Java and 50.3 for Python (true-positive minus false-positive rate). The
   rules were partly written against these benchmarks, so expect less elsewhere; their
   out-of-sample scores, before that work, were 4.7 and 19.5. The first out-of-sample

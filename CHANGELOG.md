@@ -112,6 +112,18 @@ All notable changes to this project are recorded here. The format follows
   Anthropic` workflow, started by hand, runs them plus an `--ai --deep-verify` scan of
   the sample.
 
+- **Rules for misses on the five vulnerable apps: recall 31.1% to 35.2%** (84 to 95 of
+  270, own rules). ReDoS for JavaScript, Python, Ruby and Java (a repeated group that
+  can split one run of characters more than one way, as in `(a+)+`); weak randomness
+  for PHP (`time()`, `uniqid()`, `mt_rand()` in a session or token cookie, a session
+  token or a secret-named variable); hard-coded keys, IVs and salts in upper-case
+  constants (`KEY`, `RG_IV`, `ACCESS_TOKEN_SALT`). The Java taint rules now take a
+  Spring handler's unannotated `String` parameters as request data, and the Java SQL
+  rules match JDBC calls on a connection or statement declared with `var`. The Python
+  and Java weak-randomness rules also count the return value of a function named like
+  it makes a secret (`generate_api_key`). All 16 new findings on the five apps were
+  read by hand and are real; see [docs/benchmarking.md](docs/benchmarking.md).
+
 ### Changed
 - Triage prompts are now `triage/v7`, so cached verdicts from v6 are not reused, and
   dismissal counts are not comparable across the boundary: some v6 false positives are

@@ -62,9 +62,10 @@ Roughly in priority order.
 
 ### Accuracy
 
-- **Recall on real code.** The own rules find 31% of the 270 documented
-  vulnerabilities in five vulnerable apps (36% with the community pack). Work through
-  the misses in [docs/benchmarking.md](docs/benchmarking.md) that a rule can reach.
+- **Recall on real code.** The own rules find 35% of the 270 documented
+  vulnerabilities in five vulnerable apps (up from 31% on 2026-11-09). Work through
+  the misses in [docs/benchmarking.md](docs/benchmarking.md) that a rule can reach;
+  most of those left need taint that crosses files.
 - **A second out-of-sample target** that no rule was written against, now that Juice
   Shop is in-sample.
 - **Tune the surface-map weights** against the detection benchmark; today they are a

@@ -5,13 +5,13 @@ the [CHANGELOG](CHANGELOG.md); the architecture is in [DESIGN.md](DESIGN.md); wh
 has and has not been tested is in [TEST_PLAN.md](TEST_PLAN.md). Nothing below is a
 promise of a date.
 
-Last reviewed: 2026-11-10, against `main` after #63.
+Last reviewed: 2026-11-10, after the v0.4.0 release.
 
 ## Where it stands
 
-The latest release is **v0.3.1** (2026-10-19). **v0.4.0** is prepared on `main` (its
-CHANGELOG section, version references and docs are in place) and every check before
-the tag is done: it is ready to tag.
+The latest release is **v0.4.0** (2026-11-10). Before it was tagged, the new verdicts
+were measured with a real model and the scan plan was checked on 19 real
+repositories (see below).
 
 | Release | Date | Headline |
 |---|---|---|
@@ -19,7 +19,7 @@ the tag is done: it is ready to tag.
 | v0.2.0 | 2026-10-14 | `achilles init`, 62 built-in rules in every licence mode, inline suppressions, the MCP server, secret scanning of git history |
 | v0.3.0 | 2026-10-18 | First recall figure on real code (five vulnerable apps), taint between functions, ERB templates, the native Anthropic client, GitLab dependency reports |
 | v0.3.1 | 2026-10-19 | Own rules rebuilt from the OWASP Benchmark (Java 4.7 to 69.7, Python 19.5 to 50.3), GitLab checked on gitlab.com, Windows long-path fix |
-| v0.4.0 | not yet tagged | Surface map and risk-ordered review, threat-context file with scan depth and tool plan, clearer AI verdicts (hardening, needs validation, assessed severity), source-to-sink paths, a regression test with every fix, AI-model rules, hunt mode, recall on five vulnerable apps 31% to 35%, first out-of-sample score (Juice Shop) |
+| v0.4.0 | 2026-11-10 | Surface map and risk-ordered review, threat-context file with scan depth and tool plan, clearer AI verdicts (hardening, needs validation, assessed severity), source-to-sink paths, a regression test with every fix, AI-model rules, hunt mode, recall on five vulnerable apps 31% to 35%, first out-of-sample score (Juice Shop) |
 
 ### In v0.4.0
 
@@ -47,31 +47,20 @@ the tag is done: it is ready to tag.
   shipped pair, with or without the blind judge; no genuine issue dismissed or called
   hardening. Eval fixtures are now staged under neutral names. #63
 
-## Next: v0.4.0
+### Checked before the tag
 
-These are what stand between `main` and the next release.
-
-- [x] **Re-run the verdict eval on the current prompt** (`triage/v8`) with a real
+- **Re-run the verdict eval on the current prompt** (`triage/v8`) with a real
   model, with and without `--blind-judge`, and record it in `evals/`. Done
   2026-11-10: 94.4% balanced accuracy either way, no genuine issue dismissed, and
   no genuine issue called hardening ([evals/README.md](evals/README.md#measured-triagev8-2026-11-10)).
   The run also found that fixture paths leaked the label; fixtures are now staged.
-- [ ] **Confirm `minimax-m3.1-flash` for the triage seat.** It scored 100% in one
-  staged run at about a third of `minimax-m2.7`'s price. Re-run with `--repeat 5`
-  before changing `configs/models.ollama.yaml`.
-- [x] **Run the surface map and tool plan on a few real repositories** and check that
+- **Run the surface map and tool plan on a few real repositories** and check that
   no scanner is skipped that had something to find. Done on 19 repositories across
   Go, Python, JavaScript, Java, PHP, Ruby, C#, C and Terraform: the plan skipped
   Checkov on repositories with GitHub workflows and no IaC, where Checkov reports
   workflow findings. Fixed: Checkov now also counts CI pipelines and OpenAPI
   documents. Every other skip was right. See
   [evals/scan-plan](evals/scan-plan/README.md).
-- [x] **Prepare v0.4.0:** the CHANGELOG section, the version in the README,
-  DEPLOY.md, the docs and the `action.yml` examples, and the HTML guide.
-- [ ] **Tag v0.4.0** (re-date the CHANGELOG section if the tag lands on another day;
-  the `minimax-m3.1-flash` check above changes routing only and does not block it), and let the release workflows build the
-  binaries and images. Then the steps after a tag in
-  [CONTRIBUTING.md](CONTRIBUTING.md#releasing-maintainers).
 
 ## Planned
 
@@ -79,6 +68,9 @@ Roughly in priority order.
 
 ### Accuracy
 
+- **Confirm `minimax-m3.1-flash` for the triage seat.** It scored 100% in one
+  staged run at about a third of `minimax-m2.7`'s price. Re-run with `--repeat 5`
+  before changing `configs/models.ollama.yaml`.
 - **Recall on real code.** The own rules find 35% of the 270 documented
   vulnerabilities in five vulnerable apps (up from 31% on 2026-11-09). Work through
   the misses in [docs/benchmarking.md](docs/benchmarking.md) that a rule can reach;
@@ -107,7 +99,7 @@ candidates:
 
 - **The `anthropic` provider preset:** its live tests have passed through OpenRouter's
   Messages-compatible endpoint; run them against `api.anthropic.com` itself.
-- **`--deep-verify`, `--fix-pr` and the surface map**, after the v0.4.0 checks above.
+- **`--deep-verify`, `--fix-pr` and the surface map**, now that v0.4.0 has measured them.
 - **Live GitHub writes** (issue filing, PR comments, `--fix-pr`) checked against a real
   repository, as the GitLab integration was on gitlab.com.
 

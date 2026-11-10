@@ -5,13 +5,13 @@ the [CHANGELOG](CHANGELOG.md); the architecture is in [DESIGN.md](DESIGN.md); wh
 has and has not been tested is in [TEST_PLAN.md](TEST_PLAN.md). Nothing below is a
 promise of a date.
 
-Last reviewed: 2026-11-09, against `main` after #62.
+Last reviewed: 2026-11-10, against `main` after #63.
 
 ## Where it stands
 
 The latest release is **v0.3.1** (2026-10-19). **v0.4.0** is prepared on `main` (its
-CHANGELOG section, version references and docs are in place) and is tagged once the
-verdict eval below is recorded.
+CHANGELOG section, version references and docs are in place) and every check before
+the tag is done: it is ready to tag.
 
 | Release | Date | Headline |
 |---|---|---|
@@ -43,6 +43,9 @@ verdict eval below is recorded.
   weak-randomness, hard-coded key and Spring taint rules. #62
 - **The verdict eval counts every classification** (hardening, needs validation),
   ready for the `triage/v8` re-run. #59
+- **`triage/v8` measured with a real model**: 94.4% balanced accuracy with the
+  shipped pair, with or without the blind judge; no genuine issue dismissed or called
+  hardening. Eval fixtures are now staged under neutral names. #63
 
 ## Next: v0.4.0
 
@@ -65,8 +68,8 @@ These are what stand between `main` and the next release.
   [evals/scan-plan](evals/scan-plan/README.md).
 - [x] **Prepare v0.4.0:** the CHANGELOG section, the version in the README,
   DEPLOY.md, the docs and the `action.yml` examples, and the HTML guide.
-- [ ] **Tag v0.4.0** once the verdict eval above is recorded (re-date the CHANGELOG
-  section if the tag lands on another day), and let the release workflows build the
+- [ ] **Tag v0.4.0** (re-date the CHANGELOG section if the tag lands on another day;
+  the `minimax-m3.1-flash` check above changes routing only and does not block it), and let the release workflows build the
   binaries and images. Then the steps after a tag in
   [CONTRIBUTING.md](CONTRIBUTING.md#releasing-maintainers).
 

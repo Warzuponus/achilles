@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-09
+
+Achilles now looks at a repository before it scans it: a surface map that orders the
+AI review by exposure, and a committed threat-context file that sets the scan depth and
+skips scanners with nothing to analyze, each skip named in the report. The AI review
+gives a clearer result for every finding (hardening notes, needs-validation questions,
+attacker, impact and an assessed severity, checked line references), findings carry
+their source-to-sink path, every fix comes with a regression test, and new rules cover
+code that calls AI models. The own rules find more of the documented vulnerabilities in
+five vulnerable apps (31% to 35%), have their first out-of-sample score on real code
+(OWASP Juice Shop) and a reproducible comparison with other open-source SAST tools. The
+scan plan was checked on 19 real repositories before release.
+Cached AI verdicts from v0.3.1 are not reused (see Changed).
+
 ### Added
 - **Surface map and risk-ordered review** (`--prioritize surface`, `--plan-out`).
   Before the scanners run, Achilles can map the target's attack surface with no
@@ -111,7 +125,10 @@ All notable changes to this project are recorded here. The format follows
   them at another Messages-compatible server such as OpenRouter's). The `Live
   Anthropic` workflow, started by hand, runs them plus an `--ai --deep-verify` scan of
   the sample.
-
+- **The verdict eval reports every classification.** `achilles-eval --mode verdict`
+  used to fold `hardening` and `uncertain` into "not confirmed". It now also counts
+  each run by the classification returned, per ground-truth class, and the share of
+  uncertain verdicts that named their blockers or a validation plan.
 - **Rules for misses on the five vulnerable apps: recall 31.1% to 35.2%** (84 to 95 of
   270, own rules). ReDoS for JavaScript, Python, Ruby and Java (a repeated group that
   can split one run of characters more than one way, as in `(a+)+`); weak randomness
@@ -125,10 +142,13 @@ All notable changes to this project are recorded here. The format follows
   read by hand and are real; see [docs/benchmarking.md](docs/benchmarking.md).
 
 ### Changed
-- Triage prompts are now `triage/v7`, so cached verdicts from v6 are not reused, and
-  dismissal counts are not comparable across the boundary: some v6 false positives are
-  now hardening notes. The triage system prompt is about 200 tokens longer per finding
-  (`make eval-gate`: 13,948 to 17,638 prompt tokens over the corpus).
+- Triage prompts are now `triage/v8` (v7 brought the verdict changes above, v8 the
+  guidance for findings that involve a model), so cached verdicts from v0.3.1
+  (`triage/v6`) are not reused, and dismissal counts are not comparable across the
+  boundary: some v6 false positives are now hardening notes. The triage system prompt
+  is about 200 tokens longer per finding (`make eval-gate`: 13,948 to 17,638 prompt
+  tokens over the corpus, measured at v7). Fix suggestions are now `remediation/v2`, so
+  cached fixes are regenerated too, and deep verifications record `deep/v3`.
 
 ### Fixed
 - **The scan plan no longer skips Checkov on repositories that have CI pipelines or

@@ -40,7 +40,7 @@ to `.github/workflows/`:
 permissions: { contents: read, issues: write }
 steps:
   - uses: actions/checkout@v4
-  - uses: Warzuponus/achilles@v0.3.1
+  - uses: Warzuponus/achilles@v0.4.0
     with:
       llm-api-key: ${{ secrets.LLM_API_KEY }}
       llm-provider: openrouter     # or openai | ollama | anthropic
@@ -114,7 +114,7 @@ yet? `make run` feeds a sample SARIF file through the normalize and report steps
 
 ### Stable and experimental
 
-**Stable in v0.3.1:** the `achilles` CLI, the five default scanners and the built-in
+**Stable in v0.4.0:** the `achilles` CLI, the five default scanners and the built-in
 rules, `--ai` (review plus adversarial judge), the HTML, Markdown and SARIF reports,
 baseline and diff gating, inline suppressions (`achilles:ignore`), the GitHub Action,
 issue filing, `achilles init`, `achilles tools install` and `achilles doctor`.
@@ -130,7 +130,7 @@ per-language tool images, the MCP server (`achilles mcp`), and the GitLab report
 `--gitlab-secret-detection`, `--gitlab-dependency-scanning`, `--gitlab-code-quality`: checked against GitLab's published
 report schemas, and accepted and read by gitlab.com from a real pipeline). `--gitlab-mr-comment` has been run
 against gitlab.com too: it posts the note and updates it in place. The
-[User Guides](docs/README.md) cover each of them. Everything added since v0.3.1 is in
+[User Guides](docs/README.md) cover each of them. Everything added since v0.4.0 is in
 the [CHANGELOG](CHANGELOG.md) under Unreleased, and what comes next is in the
 [Roadmap](ROADMAP.md).
 

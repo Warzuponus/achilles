@@ -5,12 +5,13 @@ the [CHANGELOG](CHANGELOG.md); the architecture is in [DESIGN.md](DESIGN.md); wh
 has and has not been tested is in [TEST_PLAN.md](TEST_PLAN.md). Nothing below is a
 promise of a date.
 
-Last reviewed: 2026-11-09, against `main` after #55.
+Last reviewed: 2026-11-09, against `main` after #62.
 
 ## Where it stands
 
-The latest release is **v0.3.1** (2026-10-19). Since then a large set of changes has
-merged to `main` and is waiting for **v0.4.0** (see Unreleased in the CHANGELOG).
+The latest release is **v0.3.1** (2026-10-19). **v0.4.0** is prepared on `main` (its
+CHANGELOG section, version references and docs are in place) and is tagged once the
+verdict eval below is recorded.
 
 | Release | Date | Headline |
 |---|---|---|
@@ -18,9 +19,9 @@ merged to `main` and is waiting for **v0.4.0** (see Unreleased in the CHANGELOG)
 | v0.2.0 | 2026-10-14 | `achilles init`, 62 built-in rules in every licence mode, inline suppressions, the MCP server, secret scanning of git history |
 | v0.3.0 | 2026-10-18 | First recall figure on real code (five vulnerable apps), taint between functions, ERB templates, the native Anthropic client, GitLab dependency reports |
 | v0.3.1 | 2026-10-19 | Own rules rebuilt from the OWASP Benchmark (Java 4.7 to 69.7, Python 19.5 to 50.3), GitLab checked on gitlab.com, Windows long-path fix |
-| Unreleased | | See below |
+| v0.4.0 | not yet tagged | Surface map and risk-ordered review, threat-context file with scan depth and tool plan, clearer AI verdicts (hardening, needs validation, assessed severity), source-to-sink paths, a regression test with every fix, AI-model rules, hunt mode, recall on five vulnerable apps 31% to 35%, first out-of-sample score (Juice Shop) |
 
-### Merged since v0.3.1
+### In v0.4.0
 
 - **Out-of-sample evaluation on OWASP Juice Shop** (`achilles-eval --mode
   juice-shop`): 5 of 13 reachable challenges at 63% precision before, 12 of 13 at 73%
@@ -36,6 +37,12 @@ merged to `main` and is waiting for **v0.4.0** (see Unreleased in the CHANGELOG)
 - **Pre-scan modelling, milestones 1 and 2:** the surface map with risk-ordered review
   (`--prioritize surface`, `--plan-out`), and the threat-context file with scan depth
   and a tool plan that skips scanners with nothing to analyze. #54, #55
+- **Scan plan checked on 19 real repositories**; it no longer skips Checkov where
+  there are CI pipelines or OpenAPI documents. #61
+- **Recall on the five vulnerable apps from 31.1% to 35.2%** with new ReDoS, PHP
+  weak-randomness, hard-coded key and Spring taint rules. #62
+- **The verdict eval counts every classification** (hardening, needs validation),
+  ready for the `triage/v8` re-run. #59
 
 ## Next: v0.4.0
 
@@ -56,9 +63,12 @@ These are what stand between `main` and the next release.
   workflow findings. Fixed: Checkov now also counts CI pipelines and OpenAPI
   documents. Every other skip was right. See
   [evals/scan-plan](evals/scan-plan/README.md).
-- [ ] **Cut v0.4.0:** move Unreleased in the CHANGELOG under a version, bump the
-  version in the README, DEPLOY.md and `action.yml` examples, and let the
-  release workflows build the binaries and images.
+- [x] **Prepare v0.4.0:** the CHANGELOG section, the version in the README,
+  DEPLOY.md, the docs and the `action.yml` examples, and the HTML guide.
+- [ ] **Tag v0.4.0** once the verdict eval above is recorded (re-date the CHANGELOG
+  section if the tag lands on another day), and let the release workflows build the
+  binaries and images. Then the steps after a tag in
+  [CONTRIBUTING.md](CONTRIBUTING.md#releasing-maintainers).
 
 ## Planned
 

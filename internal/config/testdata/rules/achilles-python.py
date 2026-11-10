@@ -254,6 +254,8 @@ def ldap_and_xpath(conn, tree, lxml, escape_filter_chars):
     conn.search("ou=people,dc=example,dc=com", f"(uid={uid})")
     # ok: achilles.python.ldap-injection
     conn.search("ou=people,dc=example,dc=com", f"(uid={escape_filter_chars(uid)})")
+    # ok: achilles.python.ldap-injection
+    re.search(r"^([0-9a-zA-Z]([-.\w]*[0-9a-zA-Z])*@)$", str(uid))
     # ruleid: achilles.python.xpath-injection
     tree.xpath(f"//user[@name='{uid}']")
     # ok: achilles.python.xpath-injection

@@ -27,6 +27,7 @@ evals/detect/
     external.example.json  format example for pinned public apps (never scored)
   fixtures/                the deliberately vulnerable code the local targets point at
   real-apps/               labels for five public vulnerable apps at pinned commits (run on purpose; they clone)
+  holdout/                 labels for apps no rule was written against (DVNA, VAmPI); never write a rule from their misses
   baseline.json            the committed scorecard that `eval-detect-gate` compares against
 ```
 

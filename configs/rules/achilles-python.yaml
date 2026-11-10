@@ -564,6 +564,11 @@ rules:
               - pattern: $CONN.search_s($BASE, $SCOPE, $FILTER, ...)
               - pattern: $CONN.search_ext_s($BASE, $SCOPE, $FILTER, ...)
               - pattern: $CONN.search_st($BASE, $SCOPE, $FILTER, ...)
+          # re.search(pattern, string) and a compiled pattern's .search(string, pos)
+          # have the same shape as ldap3's search(base, filter): not LDAP.
+          - pattern-not: re.search(...)
+          - pattern-not: regex.search(...)
+          - pattern-not: re.compile(...).search(...)
           - focus-metavariable: $FILTER
 
   - id: achilles.python.xpath-injection

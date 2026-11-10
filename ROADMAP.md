@@ -83,8 +83,12 @@ Roughly in priority order.
   vulnerabilities in five vulnerable apps (up from 31% on 2026-11-09). Work through
   the misses in [docs/benchmarking.md](docs/benchmarking.md) that a rule can reach;
   most of those left need taint that crosses files.
-- **A second out-of-sample target** that no rule was written against, now that Juice
-  Shop is in-sample.
+- **Close the gaps the held-out apps showed, from other code.** DVNA and VAmPI
+  ([evals/detect/holdout](evals/detect/holdout/README.md)) put the own rules at 16%
+  out of sample, against 35% in-sample: no EJS template rule, no `libxmljs` XXE, no
+  hard-coded `express-session` secret, connexion path parameters not taken as
+  request data. Fix these as general patterns from other code; once a fix is made
+  because of the held-out set, move it to `real-apps/` and label a new held-out app.
 - **Tune the surface-map weights** against the detection benchmark; today they are a
   starting point.
 - **Measure the AI review on real code**, not only the 18-case corpus.

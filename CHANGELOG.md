@@ -146,6 +146,11 @@ Cached AI verdicts from v0.3.1 are not reused (see Changed).
   and Java weak-randomness rules also count the return value of a function named like
   it makes a secret (`generate_api_key`). All 16 new findings on the five apps were
   read by hand and are real; see [docs/benchmarking.md](docs/benchmarking.md).
+- **A held-out recall set** ([evals/detect/holdout](evals/detect/holdout/README.md)):
+  31 documented flaws in DVNA (Node.js, EJS) and VAmPI (Flask, connexion), labelled
+  from their own guides before any scan, and a rule that no rule may be written from
+  their misses. The own rules find 16.1% (35.2% on the in-sample apps), 38.7% with
+  the community pack. See [docs/benchmarking.md](docs/benchmarking.md#held-out-applications).
 
 ### Changed
 - Triage prompts are now `triage/v8` (v7 brought the verdict changes above, v8 the
@@ -161,6 +166,10 @@ Cached AI verdicts from v0.3.1 are not reused (see Changed).
   `testdata/go_trap_...`: the directory said the file is never built and the name gave
   away the answer, and newer models answered `false_positive` on that alone.
   Model-calling eval modes now copy each fixture to `app/file_NN.<ext>` first.
+- **The Python LDAP-injection rule no longer fires on `re.search`.** `re.search(pattern,
+  text)`, `regex.search` and a compiled pattern's `.search` have the same shape as
+  ldap3's `conn.search(base, filter)`; VAmPI's two e-mail checks were reported as
+  LDAP injection. Recall on the five vulnerable apps is unchanged (95 of 270).
 - **The scan plan no longer skips Checkov on repositories that have CI pipelines or
   OpenAPI documents but no IaC.** Checkov audits GitHub Actions, GitLab CI, Azure
   Pipelines, Bitbucket and CircleCI files and OpenAPI documents too; on gin and

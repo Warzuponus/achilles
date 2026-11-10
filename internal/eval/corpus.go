@@ -210,6 +210,43 @@ func (cs Case) fixtureLineCount(root string) (int, error) {
 	return len(strings.Split(string(data), "\n")), nil
 }
 
+// StagedDir is the directory fixtures are copied into by Staged. It reads like
+// ordinary application code on purpose.
+const StagedDir = "app"
+
+// Staged copies every fixture to dir/app/file_NN.<ext> and returns a corpus that
+// points there. Model-calling modes use it because the path is part of the
+// prompt: a fixture under "testdata/" tells the model the file is never built,
+// and models answered false_positive on that alone, whatever the code did. The
+// fixture names leak too ("go_trap_...", "..._allowlist", "..._userinput"), so
+// they are replaced as well. The verdict must come from the code.
+func (c Corpus) Staged(dir string) (Corpus, error) {
+	if err := os.MkdirAll(filepath.Join(dir, StagedDir), 0o750); err != nil {
+		return c, err
+	}
+	out := c
+	out.Root = dir
+	out.Cases = make([]Case, len(c.Cases))
+	staged := map[string]string{} // original fixture -> staged path; cases may share a fixture
+	for i, cs := range c.Cases {
+		body, err := cs.fixtureBody(c.Root)
+		if err != nil {
+			return c, fmt.Errorf("case %s: %w", cs.ID, err)
+		}
+		rel, ok := staged[cs.Fixture]
+		if !ok {
+			rel = fmt.Sprintf("%s/file_%02d%s", StagedDir, len(staged)+1, filepath.Ext(cs.Fixture))
+			staged[cs.Fixture] = rel
+		}
+		if err := os.WriteFile(filepath.Join(dir, rel), []byte(body), 0o600); err != nil {
+			return c, err
+		}
+		cs.Fixture = rel
+		out.Cases[i] = cs
+	}
+	return out, nil
+}
+
 // ToFinding converts a case into the Finding the triage layer consumes. The
 // fixture path is made relative-to-root so the enricher resolves it the same way
 // it resolves a real scan target's file.

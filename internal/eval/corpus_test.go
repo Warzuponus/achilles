@@ -235,3 +235,34 @@ func TestLoadCorpus_RejectsFixtureEscapingTheCorpusDir(t *testing.T) {
 		t.Errorf("error should name the reason, got: %v", err)
 	}
 }
+
+func TestCorpus_StagedHidesFixtureDirectory(t *testing.T) {
+	// The fixture's directory is part of the prompt; "testdata/" must not reach it.
+	c, err := LoadCorpus("../../evals/triage/corpus.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := c.Staged(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Cases) != len(c.Cases) {
+		t.Fatalf("staged %d cases, want %d", len(st.Cases), len(c.Cases))
+	}
+	for i, cs := range st.Cases {
+		if strings.Contains(cs.Fixture, "testdata") || strings.Contains(cs.Fixture, "trap") || !strings.HasPrefix(cs.Fixture, StagedDir+"/file_") {
+			t.Errorf("%s: staged fixture %q still names its directory", cs.ID, cs.Fixture)
+		}
+		got, err := cs.fixtureBody(st.Root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, _ := c.Cases[i].fixtureBody(c.Root)
+		if got != want {
+			t.Errorf("%s: staged copy differs from the fixture", cs.ID)
+		}
+		if f := cs.ToFinding(); strings.Contains(f.Location.File, "testdata") {
+			t.Errorf("%s: finding path %q leaks testdata", cs.ID, f.Location.File)
+		}
+	}
+}

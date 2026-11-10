@@ -202,6 +202,16 @@ func runModelMode(mode string, corpus eval.Corpus, en *enrich.Enricher, o verdic
 	}
 	// Credential selection is shared with the scanner (llm.NewFactory): the eval
 	// must be able to measure the models we actually run, whatever their auth.
+	// The model must not see where the fixtures live: "testdata/" tells it the
+	// file is never built, and models reasoned from that alone to false_positive.
+	stageDir, err := os.MkdirTemp("", "achilles-eval-stage-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stageDir)
+	if corpus, err = corpus.Staged(stageDir); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), o.timeout)
 	defer cancel()
 	factory, err := llm.NewFactory(o.auth)

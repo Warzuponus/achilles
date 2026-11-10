@@ -1,0 +1,12 @@
+# The measured Ollama pair (configs/models.ollama.yaml), served through OpenRouter.
+#
+#   achilles --llm-provider openrouter --llm-model minimax/minimax-m2.7 \
+#            --model-config configs/models.openrouter.yaml ...
+#
+# The API key comes from ACHILLES_LLM_API_KEY (never checked in). Only triage and
+# judge are measured by the eval corpus; see evals/README.md.
+tasks:
+  triage:
+    model: minimax/minimax-m2.7
+  judge:
+    model: minimax/minimax-m3

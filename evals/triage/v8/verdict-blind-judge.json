@@ -1,0 +1,755 @@
+{
+  "mode": "verdict",
+  "routing": {
+    "judge": "minimax/minimax-m3",
+    "triage": "minimax/minimax-m2.7"
+  },
+  "model": "minimax/minimax-m2.7",
+  "repeat": 3,
+  "blindJudge": true,
+  "cases": 18,
+  "tpCases": 9,
+  "fpCases": 9,
+  "correct": 17,
+  "accuracy": 0.9444444444444444,
+  "tpRecall": 1,
+  "fpSuppression": 0.8888888888888888,
+  "balancedAccuracy": 0.9444444444444444,
+  "gate": {
+    "tpConfirmed": 27,
+    "tpKept": 0,
+    "tpDismissed": 0,
+    "fpConfirmed": 3,
+    "fpKept": 0,
+    "fpDismissed": 24
+  },
+  "tpClasses": {
+    "truePositive": 27,
+    "falsePositive": 0,
+    "hardening": 0,
+    "needsValidation": 0,
+    "uncertain": 0,
+    "errors": 0
+  },
+  "fpClasses": {
+    "truePositive": 0,
+    "falsePositive": 13,
+    "hardening": 14,
+    "needsValidation": 0,
+    "uncertain": 0,
+    "errors": 0
+  },
+  "meanConfidenceCorrect": 0.9156862745098046,
+  "meanConfidenceWrong": 0.9333333333333332,
+  "calibrationGap": 0.027777777777777013,
+  "unstableCases": 2,
+  "errors": 0,
+  "promptTokens": 114594,
+  "completionTokens": 61518,
+  "results": [
+    {
+      "caseId": "go-exec-allowlisted",
+      "label": "fp",
+      "why": "The action is checked against a closed allowlist and anything absent is refused, so the value reaching exec.Command is always one of three literals. It is also passed as its own argv element with no shell involved, so even an unexpected value could not become a second command.\n",
+      "runs": [
+        {
+          "classification": "hardening",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 5229
+        },
+        {
+          "classification": "hardening",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4431
+        },
+        {
+          "classification": "hardening",
+          "confidence": 0.7,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 5217
+        }
+      ],
+      "predicted": "fp",
+      "correct": true
+    },
+    {
+      "caseId": "go-exec-request-arg",
+      "label": "tp",
+      "why": "A filename from the request is interpolated into a string handed to `sh -c`, so shell metacharacters in it execute.\n",
+      "runs": [
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 5397
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4848
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4259
+        }
+      ],
+      "predicted": "tp",
+      "correct": true
+    },
+    {
+      "caseId": "go-md5-cache-key",
+      "label": "fp",
+      "why": "The digest is a fixed-length map key for an in-process cache. It is never compared against a secret and never stored as a credential; a collision costs a cache miss, not a security boundary.\n",
+      "runs": [
+        {
+          "classification": "false_positive",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 6898
+        },
+        {
+          "classification": "hardening",
+          "confidence": 0.7,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 5573
+        },
+        {
+          "classification": "false_positive",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 5117
+        }
+      ],
+      "predicted": "fp",
+      "correct": true
+    },
+    {
+      "caseId": "go-md5-password-hash",
+      "label": "tp",
+      "why": "MD5 is used to hash a credential for storage — fast and collision-prone, which is exactly the wrong property for password hashing.\n",
+      "runs": [
+        {
+          "classification": "true_positive",
+          "confidence": 0.9,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4287
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 5079
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 3887
+        }
+      ],
+      "predicted": "tp",
+      "correct": true
+    },
+    {
+      "caseId": "go-rand-retry-jitter",
+      "label": "fp",
+      "why": "The random value is retry jitter — a timing hint, not a secret or an identifier. Predicting it gains an attacker nothing.\n",
+      "runs": [
+        {
+          "classification": "false_positive",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 5022
+        },
+        {
+          "classification": "hardening",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4602
+        },
+        {
+          "classification": "false_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 5096
+        }
+      ],
+      "predicted": "fp",
+      "correct": true
+    },
+    {
+      "caseId": "go-rand-session-token",
+      "label": "tp",
+      "why": "math/rand generates the value that authenticates a session. Its output is predictable, so tokens can be forged.\n",
+      "runs": [
+        {
+          "classification": "true_positive",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4522
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4368
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4551
+        }
+      ],
+      "predicted": "tp",
+      "correct": true
+    },
+    {
+      "caseId": "go-readfile-contained",
+      "label": "fp",
+      "why": "Request data does reach the path, so the taint flow gosec reports is real. But filepath.Join cleans its result, so a traversing name resolves to a path outside filesRoot, and the prefix check then refuses it before ReadFile is called. Containment is genuine; gosec's taint analysis simply does not model it — the same false positive this repo's own containedPath helper produces.\n",
+      "runs": [
+        {
+          "classification": "hardening",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 6758
+        },
+        {
+          "classification": "hardening",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4677
+        },
+        {
+          "classification": "hardening",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 126362
+        }
+      ],
+      "predicted": "fp",
+      "correct": true
+    },
+    {
+      "caseId": "go-readfile-request-path",
+      "label": "tp",
+      "why": "A caller-supplied name is appended to a directory with no normalization or containment check, so \"../..\" escapes the intended root.\n",
+      "runs": [
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4387
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4659
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4690
+        }
+      ],
+      "predicted": "tp",
+      "correct": true
+    },
+    {
+      "caseId": "go-sqli-allowlisted-table",
+      "label": "fp",
+      "why": "The table name does come from the request, so gosec's taint analysis is right that request data reaches the query — but the allowlist check refuses anything outside a closed set of two literals before the Sprintf runs, so the interpolated value can only ever be one of those two. A placeholder cannot bind an identifier, which is why interpolation is unavoidable here. Deciding this correctly means noticing the guard clause, not just the flow.\n",
+      "runs": [
+        {
+          "classification": "hardening",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4591
+        },
+        {
+          "classification": "hardening",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": false,
+          "latencyMs": 6484
+        },
+        {
+          "classification": "hardening",
+          "confidence": 0.9,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": false,
+          "latencyMs": 6043
+        }
+      ],
+      "predicted": "tp",
+      "correct": false,
+      "unstable": true
+    },
+    {
+      "caseId": "go-sqli-request-concat",
+      "label": "tp",
+      "why": "The name is read from the request query string and concatenated into the SQL text, so the caller controls the statement.\n",
+      "runs": [
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4161
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 5203
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 3983
+        }
+      ],
+      "predicted": "tp",
+      "correct": true
+    },
+    {
+      "caseId": "go-trap-md5-auth-compare",
+      "label": "tp",
+      "why": "Inverts go-md5-cache-key: the function is still called `cacheKey`, but its digest is compared against a stored credential by `authenticate` below, so MD5 is guarding authentication rather than keying a cache. The deciding evidence is at the CALL SITE, outside the flagged function.\n",
+      "runs": [
+        {
+          "classification": "true_positive",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4908
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 26386
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.85,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4460
+        }
+      ],
+      "predicted": "tp",
+      "correct": true
+    },
+    {
+      "caseId": "go-trap-readfile-allowlisted",
+      "label": "fp",
+      "why": "Inverts go-readfile-request-path: every identifier on the path says taint (`readUserFile`, `userControlledPath`), but the only caller-controlled value is an integer, it is bounds-checked, and the filename is then synthesized from it — so no caller-supplied text ever reaches ReadFile. Answering tp here means the names were trusted over the guard clause.\n",
+      "runs": [
+        {
+          "classification": "hardening",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4709
+        },
+        {
+          "classification": "hardening",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4499
+        },
+        {
+          "classification": "hardening",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": false,
+          "latencyMs": 7053
+        }
+      ],
+      "predicted": "fp",
+      "correct": true,
+      "unstable": true
+    },
+    {
+      "caseId": "go-trap-sqli-request-table",
+      "label": "tp",
+      "why": "Inverts go-sqli-allowlisted-table, and the two are now as close as a pair can get: same rule, same identifier, and the identical source line `reportTable := r.URL.Query().Get(\"table\")`. The ONLY difference is that the allowlist guard is absent here, so the request value reaches the Sprintf unconstrained. Answering fp means a guard was assumed from the shape of the code rather than read.\n",
+      "runs": [
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 3669
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4364
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4792
+        }
+      ],
+      "predicted": "tp",
+      "correct": true
+    },
+    {
+      "caseId": "py-eval-module-literal",
+      "label": "fp",
+      "why": "eval() is applied to a literal defined in this same file. Nothing on the path is caller-controlled or externally configurable.\n",
+      "runs": [
+        {
+          "classification": "false_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4328
+        },
+        {
+          "classification": "false_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4883
+        },
+        {
+          "classification": "false_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 3536
+        }
+      ],
+      "predicted": "fp",
+      "correct": true
+    },
+    {
+      "caseId": "py-eval-request-body",
+      "label": "tp",
+      "why": "The expression is taken from the POST body and passed to eval(), so the caller executes arbitrary Python in this process.\n",
+      "runs": [
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4964
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4566
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 5234
+        }
+      ],
+      "predicted": "tp",
+      "correct": true
+    },
+    {
+      "caseId": "py-shell-fixed-command",
+      "label": "fp",
+      "why": "The command is a fixed literal with no interpolation; shell=True is only there so the pipeline runs. No input reaches it.\n",
+      "runs": [
+        {
+          "classification": "false_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 3870
+        },
+        {
+          "classification": "false_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4328
+        },
+        {
+          "classification": "false_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 3508
+        }
+      ],
+      "predicted": "fp",
+      "correct": true
+    },
+    {
+      "caseId": "py-shell-request-dir",
+      "label": "tp",
+      "why": "A directory name from the query string is concatenated into a command run with shell=True, so injected metacharacters execute.\n",
+      "runs": [
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4716
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4361
+        },
+        {
+          "classification": "true_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": true,
+          "outcome": "confirmed",
+          "predicted": "tp",
+          "correct": true,
+          "latencyMs": 4228
+        }
+      ],
+      "predicted": "tp",
+      "correct": true
+    },
+    {
+      "caseId": "py-trap-shell-const",
+      "label": "fp",
+      "why": "Inverts py-shell-request-dir: the interpolated local is named `user_input`, but it holds a module constant, and no request data exists in this file at all. Answering tp here means the variable name outweighed its assignment.\n",
+      "runs": [
+        {
+          "classification": "false_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4819
+        },
+        {
+          "classification": "false_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4206
+        },
+        {
+          "classification": "false_positive",
+          "confidence": 0.95,
+          "refuted": false,
+          "surfaced": false,
+          "outcome": "dismissed",
+          "predicted": "fp",
+          "correct": true,
+          "latencyMs": 4495
+        }
+      ],
+      "predicted": "fp",
+      "correct": true
+    }
+  ]
+}

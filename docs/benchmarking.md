@@ -562,6 +562,74 @@ What changed besides the four rules:
   `parseInt()` first, and an Ethereum address (40 hex digits) is no longer a
   hard-coded secret.
 
+## Held-out applications
+
+Every set above is in-sample now: the five vulnerable apps, the OWASP Benchmark and
+Juice Shop all had rules written after reading their misses.
+[`evals/detect/holdout/`](../evals/detect/holdout/README.md) labels two apps that no
+rule has been written against, and its README sets the rule that keeps it that way:
+a miss here is recorded, not turned into a rule.
+
+- **DVNA** (Damn Vulnerable NodeJS Application; Express, Sequelize, EJS views): 23
+  labels from its solution guide.
+- **VAmPI** (a vulnerable REST API; Flask with connexion, SQLAlchemy): 8 labels from
+  its README and in-source comments.
+
+The labels were committed before either app was scanned. Measured on 2026-11-10 with
+Opengrep 1.25.0, gitleaks, osv-scanner and Trivy, AI review off:
+
+| | Own rules | With community rules |
+|---|---|---|
+| **Overall** | **16.1%** (5 of 31) | **38.7%** (12 of 31) |
+| Injection (3) | 2 | 2 |
+| XSS (7) | 0 | 5 |
+| Hard-coded secret (2) | 1 | 2 |
+| Deserialization (1) | 1 | 1 |
+| Open redirect (1) | 1 | 1 |
+| XXE (1) | 0 | 1 |
+| ReDoS (1) | 0 | 0 |
+| Access control, authentication, CSRF, info disclosure, misconfiguration, mass assignment (15) | 0 | 0 |
+
+How to read it:
+
+- **Own rules, 16.1%, against 35.2% in-sample on the five apps.** Leave out the 15
+  labels no pattern rule can reach and the own rules find 5 of 16 (31%) here, against
+  the community pack's 12 of 16. The gap is in-sample tuning showing through: the own
+  rules found DVNA's SQL injection, command injection, `node-serialize` and open
+  redirect, and VAmPI's hard-coded JWT key, and nothing else.
+- **What the own rules miss and the community pack finds:** unescaped EJS output
+  (`<%- value %>`, five XSS labels; the own template rules cover ERB, Jinja and
+  Django, not EJS), `libxmljs.parseXmlString(..., {noent: true})` (XXE), and a
+  hard-coded `express-session` secret (`'keyboard cat'`). All three are general
+  patterns. By the rule for the held-out set they are recorded here and not fixed
+  from it.
+- **What both miss:**
+  - VAmPI's SQL injection. The username is a connexion path parameter: connexion
+    passes it to the view function as an argument, so no `request.*` source appears
+    in the code. The f-string query reaches `db.session.execute(text(...))` two calls
+    away from the view.
+  - VAmPI's ReDoS, `([-.\w]*[0-9a-zA-Z])*@...`: the repeated group ends in a required
+    character, so the own rule's "can one run split more than one way" check passes it,
+    yet `[-.\w]*` can itself match that character.
+  - DVNA's DOM XSS (`innerHTML` in an inline `<script>` of an EJS view), as with
+    RailsGoat: inline scripts in templates are not scanned as JavaScript.
+  - The 15 logic flaws: access control, IDOR, password reset by a guessable token,
+    mass assignment, user enumeration, CSRF. These are for the AI review (`--hunt`)
+    or a person.
+- **One false positive fixed.** The own Python LDAP-injection rule reported VAmPI's
+  two `re.search(pattern, email)` calls, which have the shape of ldap3's
+  `conn.search(base, filter)`. It no longer matches `re.search`, `regex.search` or a
+  compiled pattern's `.search`. Removing a wrong finding does not raise recall, so
+  the set stays held out.
+- **Other findings, read by hand.** Own rules: Flask `debug=True` in VAmPI (real, not
+  labelled because the app does not document it). Community pack, beyond the
+  labels: DVNA's missing `csurf` middleware and six cookie-option findings on its
+  session (real; the guide puts its CSRF fix in the forms, where the labels are, so
+  the `csurf` finding at `server.js:11` does not count), the JWT key at the line that
+  uses it, two JSON error bodies built by string concatenation reported as XSS
+  (served as `application/json`: wrong), and a `path.join` over `readdir` output in
+  Sequelize's model loader (wrong).
+
 ## External targets
 
 Point the benchmark at pinned commits of public intentionally-vulnerable apps (NodeGoat,

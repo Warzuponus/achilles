@@ -163,7 +163,9 @@ the [CHANGELOG](CHANGELOG.md) under Unreleased, and what comes next is in the
   out-of-sample scores, before that work, were 4.7 and 19.5. The first out-of-sample
   run on real application code, OWASP Juice Shop, found 5 of the 13 coding challenges
   a static rule can reach, at 63% precision (12 of 13 after rules written from that
-  run, which is in-sample again). There is also an 18-case
+  run, which is in-sample again). On two held-out apps no rule has been written
+  against (DVNA and VAmPI), the own rules find 16% of 31 documented flaws and 39%
+  with the community rule pack. There is also an 18-case
   labeled triage corpus and a 24-issue synthetic regression benchmark. See
   [evals/](evals/README.md) and [Benchmarking Detection](docs/benchmarking.md).
 - **You choose the model and pay the provider.** `--dry-run` prints a cost estimate

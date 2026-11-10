@@ -1,0 +1,292 @@
+{
+  "description": "Damn Vulnerable NodeJS Application (Node.js/Express, Sequelize): every flaw that its solution guide (docs/solution/*.md) describes and that has a location in the source, labelled at that location. Held out: no rule may be written against it.",
+  "id": "dvna",
+  "schemaVersion": 1,
+  "source": {
+    "commit": "9ba473add536f66ac9007966acb2a775dd31277a",
+    "url": "https://github.com/appsecco/dvna.git"
+  },
+  "vulnerabilities": [
+    {
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "description": "userSearch concatenates req.body.login into a raw SQL string and runs it with sequelize.query (SQL injection).",
+      "endLine": 11,
+      "file": "core/appHandler.js",
+      "id": "DVNA-INJECTION-1",
+      "note": "docs/solution/a1-injection.md (SQL Injection, User Search)",
+      "startLine": 10
+    },
+    {
+      "class": "injection",
+      "cwe": [
+        "CWE-78"
+      ],
+      "description": "ping passes 'ping -c 2 ' + req.body.address to child_process.exec (OS command injection).",
+      "endLine": 39,
+      "file": "core/appHandler.js",
+      "id": "DVNA-INJECTION-2",
+      "note": "docs/solution/a1-injection.md (Command Injection, Connectivity Test)",
+      "startLine": 39
+    },
+    {
+      "class": "auth",
+      "cwe": [
+        "CWE-640",
+        "CWE-330"
+      ],
+      "description": "resetPw accepts a reset token that is md5(login), which anyone can compute, so any user's password can be reset.",
+      "endLine": 49,
+      "file": "core/authHandler.js",
+      "id": "DVNA-AUTH-1",
+      "note": "docs/solution/a2-broken-auth.md (Insecure Reset Password)",
+      "startLine": 49
+    },
+    {
+      "class": "auth",
+      "cwe": [
+        "CWE-640",
+        "CWE-330"
+      ],
+      "description": "resetPwSubmit checks the same predictable md5(login) token before setting the new password.",
+      "endLine": 78,
+      "file": "core/authHandler.js",
+      "id": "DVNA-AUTH-2",
+      "note": "docs/solution/a2-broken-auth.md (Insecure Reset Password); fix commit c8d519e changes this check too",
+      "startLine": 78
+    },
+    {
+      "class": "hardcoded-secret",
+      "cwe": [
+        "CWE-798",
+        "CWE-321"
+      ],
+      "description": "The express-session secret is the well-known example string 'keyboard cat', so session cookies can be forged.",
+      "endLine": 24,
+      "file": "server.js",
+      "id": "DVNA-SECRET-1",
+      "note": "docs/solution/a2-broken-auth.md (Insecure Session Secret)",
+      "startLine": 24
+    },
+    {
+      "class": "info-disclosure",
+      "cwe": [
+        "CWE-200",
+        "CWE-359"
+      ],
+      "description": "listUsersAPI returns whole User rows, password hashes included, to the browser.",
+      "endLine": 211,
+      "file": "core/appHandler.js",
+      "id": "DVNA-INFO-1",
+      "note": "docs/solution/a3-sensitive-data-exposure.md (Hashed Passwords Disclosed)",
+      "startLine": 207
+    },
+    {
+      "class": "info-disclosure",
+      "cwe": [
+        "CWE-532"
+      ],
+      "description": "The Sequelize connection keeps default query logging, so every query (with its values) goes to console.log.",
+      "endLine": 15,
+      "file": "models/index.js",
+      "id": "DVNA-INFO-2",
+      "note": "docs/solution/a3-sensitive-data-exposure.md (Logging of sensitive information)",
+      "startLine": 12
+    },
+    {
+      "class": "xxe",
+      "cwe": [
+        "CWE-611"
+      ],
+      "description": "bulkProducts parses an uploaded XML file with libxmljs and noent:true, which expands external entities (XXE).",
+      "endLine": 235,
+      "file": "core/appHandler.js",
+      "id": "DVNA-XXE-1",
+      "note": "docs/solution/a4-xxe.md",
+      "startLine": 235
+    },
+    {
+      "class": "authz",
+      "cwe": [
+        "CWE-285",
+        "CWE-862"
+      ],
+      "description": "The /admin/usersapi route only checks that the caller is logged in, not that they are an admin; the admin check is client-side in admin.ejs.",
+      "endLine": 42,
+      "file": "routes/app.js",
+      "id": "DVNA-AUTHZ-1",
+      "note": "docs/solution/a5-broken-access-control.md (Unauthorized Access to Users API)",
+      "startLine": 42
+    },
+    {
+      "class": "authz",
+      "cwe": [
+        "CWE-639"
+      ],
+      "description": "userEditSubmit loads the user to edit by req.body.id without checking it is the caller, so anyone can change another user's password, email and name (IDOR).",
+      "endLine": 149,
+      "file": "core/appHandler.js",
+      "id": "DVNA-AUTHZ-2",
+      "note": "docs/solution/a5-broken-access-control.md (Missing Authorization check in Edit User)",
+      "startLine": 145
+    },
+    {
+      "class": "info-disclosure",
+      "cwe": [
+        "CWE-209"
+      ],
+      "description": "calc passes req.body.eqn to mathjs.eval with no error handling, so a bad equation returns a stack trace.",
+      "endLine": 197,
+      "file": "core/appHandler.js",
+      "id": "DVNA-INFO-3",
+      "note": "docs/solution/a6-securty-misconfig.md (Application sends Stack Trace)",
+      "startLine": 197
+    },
+    {
+      "class": "misconfiguration",
+      "cwe": [
+        "CWE-200"
+      ],
+      "description": "The Express app is created without app.disable('x-powered-by'), so every response advertises Express.",
+      "endLine": 11,
+      "file": "server.js",
+      "id": "DVNA-MISCONFIGURATION-1",
+      "note": "docs/solution/a6-securty-misconfig.md (X-Powered-By header)",
+      "startLine": 11
+    },
+    {
+      "class": "xss",
+      "cwe": [
+        "CWE-79"
+      ],
+      "description": "The product search term is rendered with the unescaped EJS tag <%- (reflected XSS).",
+      "endLine": 20,
+      "file": "views/app/products.ejs",
+      "id": "DVNA-XSS-1",
+      "note": "docs/solution/a7-xss.md (Reflected XSS in Search Query)",
+      "startLine": 20
+    },
+    {
+      "class": "xss",
+      "cwe": [
+        "CWE-79"
+      ],
+      "description": "Product name is rendered with <%- (stored XSS).",
+      "endLine": 50,
+      "file": "views/app/products.ejs",
+      "id": "DVNA-XSS-2",
+      "note": "docs/solution/a7-xss.md (Stored XSS in Product Listing)",
+      "startLine": 50
+    },
+    {
+      "class": "xss",
+      "cwe": [
+        "CWE-79"
+      ],
+      "description": "Product code is rendered with <%- (stored XSS).",
+      "endLine": 51,
+      "file": "views/app/products.ejs",
+      "id": "DVNA-XSS-3",
+      "note": "docs/solution/a7-xss.md (Stored XSS in Product Listing)",
+      "startLine": 51
+    },
+    {
+      "class": "xss",
+      "cwe": [
+        "CWE-79"
+      ],
+      "description": "Product tags are rendered with <%- (stored XSS).",
+      "endLine": 52,
+      "file": "views/app/products.ejs",
+      "id": "DVNA-XSS-4",
+      "note": "docs/solution/a7-xss.md (Stored XSS in Product Listing)",
+      "startLine": 52
+    },
+    {
+      "class": "xss",
+      "cwe": [
+        "CWE-79"
+      ],
+      "description": "Product description is rendered with <%- (stored XSS).",
+      "endLine": 53,
+      "file": "views/app/products.ejs",
+      "id": "DVNA-XSS-5",
+      "note": "docs/solution/a7-xss.md (Stored XSS in Product Listing); fix commit 6acbb14 escapes this cell too",
+      "startLine": 53
+    },
+    {
+      "class": "xss",
+      "cwe": [
+        "CWE-79"
+      ],
+      "description": "The users page writes users[i].name into the DOM with innerHTML (DOM XSS).",
+      "endLine": 41,
+      "file": "views/app/adminusers.ejs",
+      "id": "DVNA-XSS-6",
+      "note": "docs/solution/a7-xss.md (DOM XSS in user listing)",
+      "startLine": 41
+    },
+    {
+      "class": "xss",
+      "cwe": [
+        "CWE-79"
+      ],
+      "description": "The users page writes users[i].email into the DOM with innerHTML (DOM XSS).",
+      "endLine": 42,
+      "file": "views/app/adminusers.ejs",
+      "id": "DVNA-XSS-7",
+      "note": "docs/solution/a7-xss.md (DOM XSS in user listing)",
+      "startLine": 42
+    },
+    {
+      "class": "deserialization",
+      "cwe": [
+        "CWE-502"
+      ],
+      "description": "bulkProductsLegacy passes the uploaded file to node-serialize's unserialize, which runs embedded functions (RCE).",
+      "endLine": 218,
+      "file": "core/appHandler.js",
+      "id": "DVNA-DESERIALIZATION-1",
+      "note": "docs/solution/a8-insecure-deserialization.md",
+      "startLine": 218
+    },
+    {
+      "class": "csrf",
+      "cwe": [
+        "CWE-352"
+      ],
+      "description": "The add/edit product form has no anti-CSRF token and the POST handler checks none.",
+      "endLine": 28,
+      "file": "views/app/modifyproduct.ejs",
+      "id": "DVNA-CSRF-1",
+      "note": "docs/solution/ax-csrf.md (CSRF in Add/Edit product)",
+      "startLine": 28
+    },
+    {
+      "class": "csrf",
+      "cwe": [
+        "CWE-352"
+      ],
+      "description": "The edit user form has no anti-CSRF token and the POST handler checks none.",
+      "endLine": 24,
+      "file": "views/app/useredit.ejs",
+      "id": "DVNA-CSRF-2",
+      "note": "docs/solution/ax-csrf.md (CSRF in User Edit)",
+      "startLine": 24
+    },
+    {
+      "class": "open-redirect",
+      "cwe": [
+        "CWE-601"
+      ],
+      "description": "redirect sends the user to req.query.url without validation (open redirect).",
+      "endLine": 188,
+      "file": "core/appHandler.js",
+      "id": "DVNA-OPEN-REDIRECT-1",
+      "note": "docs/solution/ax-unvalidated-redirects-and-forwards.md",
+      "startLine": 188
+    }
+  ]
+}

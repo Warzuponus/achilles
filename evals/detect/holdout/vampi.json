@@ -1,0 +1,112 @@
+{
+  "description": "VAmPI, the Vulnerable API (Python/Flask, connexion, SQLAlchemy): every flaw in the README's list of vulnerabilities that has a location in the source, labelled at the code the in-source comments mark. Held out: no rule may be written against it.",
+  "id": "vampi",
+  "schemaVersion": 1,
+  "source": {
+    "commit": "f16052dce83f05847133ec98f01c5193a41de7d8",
+    "url": "https://github.com/erev0s/VAmPI.git"
+  },
+  "vulnerabilities": [
+    {
+      "class": "injection",
+      "cwe": [
+        "CWE-89"
+      ],
+      "description": "get_user builds a SELECT with an f-string from the username path parameter and runs it with db.session.execute(text(...)) (SQL injection).",
+      "endLine": 73,
+      "file": "models/user_model.py",
+      "id": "VAMPI-INJECTION-1",
+      "note": "README 'SQLi Injection'; comment '# SQLi Injection'",
+      "startLine": 72
+    },
+    {
+      "class": "authz",
+      "cwe": [
+        "CWE-639",
+        "CWE-285"
+      ],
+      "description": "update_password looks up the user named in the URL, not the token's subject, so any logged-in user can change anyone's password.",
+      "endLine": 190,
+      "file": "api_views/users.py",
+      "id": "VAMPI-AUTHZ-1",
+      "note": "README 'Unauthorized Password Change'; comment '# Unauthorized update of password of another user'",
+      "startLine": 187
+    },
+    {
+      "class": "authz",
+      "cwe": [
+        "CWE-639"
+      ],
+      "description": "get_by_title fetches a book by title alone and returns its secret to any logged-in user (broken object level authorization).",
+      "endLine": 51,
+      "file": "api_views/books.py",
+      "id": "VAMPI-AUTHZ-2",
+      "note": "README 'Broken Object Level Authorization'; comment '# Broken Object Level Authorization'",
+      "startLine": 51
+    },
+    {
+      "class": "mass-assignment",
+      "cwe": [
+        "CWE-915",
+        "CWE-269"
+      ],
+      "description": "register_user copies an 'admin' field from the request body onto the new user, so anyone can register as an admin.",
+      "endLine": 66,
+      "file": "api_views/users.py",
+      "id": "VAMPI-MASS-ASSIGNMENT-1",
+      "note": "README 'Mass Assignment'; comment 'User is possible to define if she/he wants to be an admin !!'",
+      "startLine": 60
+    },
+    {
+      "class": "info-disclosure",
+      "cwe": [
+        "CWE-200",
+        "CWE-215"
+      ],
+      "description": "The unauthenticated /users/v1/_debug endpoint returns every user's username, plaintext password, email and admin flag.",
+      "endLine": 25,
+      "file": "api_views/users.py",
+      "id": "VAMPI-INFO-1",
+      "note": "README 'Excessive Data Exposure through debug endpoint'; app.py docstring 'Such an example is the debug endpoint'",
+      "startLine": 24
+    },
+    {
+      "class": "info-disclosure",
+      "cwe": [
+        "CWE-204",
+        "CWE-203"
+      ],
+      "description": "login_user returns different messages for a wrong password and an unknown username, which enumerates users.",
+      "endLine": 106,
+      "file": "api_views/users.py",
+      "id": "VAMPI-INFO-2",
+      "note": "README 'User and Password Enumeration'; comments '# Password Enumeration', '# User enumeration'",
+      "startLine": 102
+    },
+    {
+      "class": "redos",
+      "cwe": [
+        "CWE-1333"
+      ],
+      "description": "update_email checks the email with a regex with nested quantifiers, which backtracks catastrophically on crafted input (ReDoS).",
+      "endLine": 146,
+      "file": "api_views/users.py",
+      "id": "VAMPI-REDOS-1",
+      "note": "README 'RegexDOS (Denial of Service)'; comment '# Regex DoS'",
+      "startLine": 144
+    },
+    {
+      "class": "hardcoded-secret",
+      "cwe": [
+        "CWE-798",
+        "CWE-326"
+      ],
+      "description": "The JWT signing key is the hard-coded, guessable string 'random', so tokens can be forged.",
+      "endLine": 13,
+      "file": "config.py",
+      "id": "VAMPI-SECRET-1",
+      "note": "README 'JWT authentication bypass via weak signing key'",
+      "startLine": 13
+    }
+  ]
+}

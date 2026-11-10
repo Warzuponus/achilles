@@ -6,6 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **A held-out recall set** ([evals/detect/holdout](evals/detect/holdout/README.md)):
+  31 documented flaws in DVNA (Node.js, EJS) and VAmPI (Flask, connexion), labelled
+  from their own guides before any scan, and a rule that no rule may be written from
+  their misses. The own rules find 16.1% (35.2% on the in-sample apps), 38.7% with
+  the community pack. See [docs/benchmarking.md](docs/benchmarking.md#held-out-applications).
+
+### Fixed
+- **The Python LDAP-injection rule no longer fires on `re.search`.** `re.search(pattern,
+  text)`, `regex.search` and a compiled pattern's `.search` have the same shape as
+  ldap3's `conn.search(base, filter)`; VAmPI's two e-mail checks were reported as
+  LDAP injection. Recall on the five vulnerable apps is unchanged (95 of 270).
+
 ## [0.4.0] - 2026-11-10
 
 Achilles now looks at a repository before it scans it: a surface map that orders the

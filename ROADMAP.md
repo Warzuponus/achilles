@@ -41,10 +41,14 @@ merged to `main` and is waiting for **v0.4.0** (see Unreleased in the CHANGELOG)
 
 These are what stand between `main` and the next release.
 
-- [ ] **Re-run the verdict eval on the current prompt** (`triage/v8`) with a real
-  model, with and without `--blind-judge`, and record it in `evals/`. The recorded
-  model runs predate `triage/v7`, so nobody has measured how accurate the new
-  hardening and needs-validation verdicts are. Needs an API key.
+- [x] **Re-run the verdict eval on the current prompt** (`triage/v8`) with a real
+  model, with and without `--blind-judge`, and record it in `evals/`. Done
+  2026-11-10: 94.4% balanced accuracy either way, no genuine issue dismissed, and
+  no genuine issue called hardening ([evals/README.md](evals/README.md#measured-triagev8-2026-11-10)).
+  The run also found that fixture paths leaked the label; fixtures are now staged.
+- [ ] **Confirm `minimax-m3.1-flash` for the triage seat.** It scored 100% in one
+  staged run at about a third of `minimax-m2.7`'s price. Re-run with `--repeat 5`
+  before changing `configs/models.ollama.yaml`.
 - [x] **Run the surface map and tool plan on a few real repositories** and check that
   no scanner is skipped that had something to find. Done on 19 repositories across
   Go, Python, JavaScript, Java, PHP, Ruby, C#, C and Terraform: the plan skipped

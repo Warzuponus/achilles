@@ -58,8 +58,19 @@ mitigated, so it is an error on the TP row and an acceptable way to clear noise 
 the FP row; and the share of uncertain verdicts that named their blockers or a
 validation plan says whether "needs validation" gives the reader something to act on.
 
-Read all three. The measurements recorded below predate the second table and the
-current prompt version, so they are confirmation scores only.
+Read all three. The `triage/v8` measurement below has all three; the older ones
+under "Known limits" predate the second and third tables, the current prompt and
+fixture staging, so they are confirmation scores only.
+
+**Model-calling modes stage the fixtures first.** Each fixture is copied to
+`app/file_NN.<ext>` in a temporary directory, and that is the path the model sees.
+Before this, every prompt said `testdata/go_trap_sqli_request_table.go`: the
+directory told the model the file is never built, and the names gave away the
+label (`trap`, `allowlist`, `userinput`). On 2026-11-10 the newer models read it:
+DeepSeek v4.1 Flash, GLM 5.3 and Qwen 3.8 Flash called textbook SQL injection a
+false positive because "the go tool ignores testdata", and scored 55-61% as
+triage. Staged, DeepSeek v4.1 Flash scores 94.4%. Measurements taken before
+staging may carry this bias in either direction.
 
 Keep the two straight: context mode can improve while verdict mode does not.
 That gap is information, not a contradiction.
@@ -140,6 +151,51 @@ achilles-eval --mode context --out after.json --baseline before.json
 
 A metric with no baseline proves nothing, so this is the normal way to use the
 harness — not an afterthought.
+
+## Measured: `triage/v8` (2026-11-10)
+
+The current prompt, through OpenRouter (`configs/models.openrouter.yaml`), 18 cases
+x 3 repeats, fixtures staged. Reports: [`triage/v8/`](triage/v8/).
+
+| triage / judge | judge mode | bal.acc | TP recall | FP suppr | genuine dismissed | safe dismissed | unstable | cost |
+|---|---|---|---|---|---|---|---|---|
+| `minimax-m2.7` / `minimax-m3` (shipped) | standard | 94.4% | 100% | 88.9% | 0 of 27 | 22 of 27 | 3 | ~$0.10 |
+| `minimax-m2.7` / `minimax-m3` | `--blind-judge` | 94.4% | 100% | 88.9% | 0 of 27 | 24 of 27 | 2 | ~$0.10 |
+| `minimax-m3.1-flash` / `minimax-m3` | standard | **100%** | 100% | 100% | 0 of 27 | 27 of 27 | 0 | ~$0.05 |
+| `deepseek-v4.1-flash-1017` / `minimax-m3` | standard | 94.4% | 88.9% | 100% | 0 of 27 | 27 of 27 | 1 | ~$0.05 |
+
+What the review called each finding (runs, of 27 per class):
+
+| run | tp: true_pos / hardening / needs-val / uncertain | fp: false_pos / hardening / true_pos / needs-val |
+|---|---|---|
+| shipped, standard | 26 / 0 / 0 / 1 | 15 / 7 / 3 / 2 |
+| shipped, blind judge | 27 / 0 / 0 / 0 | 13 / 14 / 0 / 0 |
+| m3.1-flash triage | 27 / 0 / 0 / 0 | 24 / 3 / 0 / 0 |
+| v4.1-flash triage | 23 / 0 / 1 / 3 | 27 / 0 / 0 / 0 |
+
+- **Hardening is safe on this corpus.** No run called a genuine issue `hardening`
+  in any configuration, and it absorbed 7-14 of the 27 safe runs, which is the
+  intended use: a real weakness another control already stops.
+- **Needs-validation is rare and mostly well formed.** The shipped pair returned
+  `uncertain` 3 times in 54 runs, and 2 of those named their blockers or a
+  validation plan. Too few to say more.
+- **The blind judge is not worse, and not proven better.** Same headline score;
+  it dismissed two more safe runs and was slightly more stable. Its one miss
+  (`go-sqli-allowlisted-table`) was a `hardening` verdict it overturned, so a
+  blind judge can surface a finding the first pass correctly set aside. The
+  shipped pair's one miss with the standard judge was
+  `go-trap-readfile-allowlisted`, confirmed as a true positive.
+- **`minimax-m3.1-flash` is a candidate for the triage seat**: 100% with no
+  unstable case, at about a third of `minimax-m2.7`'s price. One clean run of 54
+  is not enough to switch; re-run it with `--repeat 5` before changing the routing.
+- **`deepseek-v4.1-flash-1017` as triage** missed by leaving
+  `go-rand-session-token` uncertain (kept in the gate, not dismissed).
+- **Judge-seat screens from the same day are not recorded**: they ran before
+  staging. Read only as a direction: `deepseek-v4-pro-0813` was close to
+  `minimax-m3`, while `glm-5.3` and `deepseek-v4.1-flash-1017` overturned 5-7 of
+  ~24 correct true-positive verdicts. `glm-5.3`, `deepseek-v4-pro-0813` and
+  `qwen3.8-flash` emitted 120k-250k completion tokens per run, several times the
+  others. `kimi-k3.1-pro` was not screened (about $1.50 a run at its price).
 
 ## Known limits
 

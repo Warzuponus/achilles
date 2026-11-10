@@ -6,7 +6,7 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-11-09
+## [0.4.0] - 2026-11-10
 
 Achilles now looks at a repository before it scans it: a surface map that orders the
 AI review by exposure, and a committed threat-context file that sets the scan depth and
@@ -17,7 +17,8 @@ their source-to-sink path, every fix comes with a regression test, and new rules
 code that calls AI models. The own rules find more of the documented vulnerabilities in
 five vulnerable apps (31% to 35%), have their first out-of-sample score on real code
 (OWASP Juice Shop) and a reproducible comparison with other open-source SAST tools. The
-scan plan was checked on 19 real repositories before release.
+scan plan was checked on 19 real repositories, and the new verdicts measured with a
+real model (94.4% balanced accuracy, no genuine issue dismissed), before release.
 Cached AI verdicts from v0.3.1 are not reused (see Changed).
 
 ### Added
@@ -129,6 +130,11 @@ Cached AI verdicts from v0.3.1 are not reused (see Changed).
   used to fold `hardening` and `uncertain` into "not confirmed". It now also counts
   each run by the classification returned, per ground-truth class, and the share of
   uncertain verdicts that named their blockers or a validation plan.
+- **`triage/v8` measured with a real model** (OpenRouter, 18 cases x 3 repeats,
+  `configs/models.openrouter.yaml`): the shipped pair (`minimax-m2.7` triage,
+  `minimax-m3` judge) scores 94.4% balanced accuracy, 100% true-positive recall,
+  with or without `--blind-judge`. No run dismissed a genuine issue or called one
+  `hardening`. See [evals/README.md](evals/README.md#measured-triagev8-2026-11-10).
 - **Rules for misses on the five vulnerable apps: recall 31.1% to 35.2%** (84 to 95 of
   270, own rules). ReDoS for JavaScript, Python, Ruby and Java (a repeated group that
   can split one run of characters more than one way, as in `(a+)+`); weak randomness
@@ -151,6 +157,10 @@ Cached AI verdicts from v0.3.1 are not reused (see Changed).
   cached fixes are regenerated too, and deep verifications record `deep/v3`.
 
 ### Fixed
+- **The verdict eval leaked its labels.** Fixture paths reached the prompt as
+  `testdata/go_trap_...`: the directory said the file is never built and the name gave
+  away the answer, and newer models answered `false_positive` on that alone.
+  Model-calling eval modes now copy each fixture to `app/file_NN.<ext>` first.
 - **The scan plan no longer skips Checkov on repositories that have CI pipelines or
   OpenAPI documents but no IaC.** Checkov audits GitHub Actions, GitLab CI, Azure
   Pipelines, Bitbucket and CircleCI files and OpenAPI documents too; on gin and

@@ -236,6 +236,15 @@ func extractRules(src io.ReadSeeker, dst string) error {
 	defer gz.Close()
 	tr := tar.NewReader(gz)
 
+	// Every write goes through an os.Root on dst, so even if unsafeEntryName
+	// missed a case, an entry cannot create or overwrite a file outside dst
+	// (no "..", absolute path or symlink escapes).
+	root, err := os.OpenRoot(dst)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
 	var files, rules int
 	var total int64
 	for {
@@ -269,11 +278,11 @@ func extractRules(src io.ReadSeeker, dst string) error {
 		if total += hdr.Size; total > maxRuleTotalBytes {
 			return fmt.Errorf("kept files exceed %d bytes", maxRuleTotalBytes)
 		}
-		out := filepath.Join(dst, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(out), 0o700); err != nil {
+		out := filepath.FromSlash(rel)
+		if err := root.MkdirAll(filepath.Dir(out), 0o700); err != nil {
 			return err
 		}
-		f, err := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
+		f, err := root.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err != nil {
 			return err
 		}

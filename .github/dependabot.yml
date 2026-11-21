@@ -31,3 +31,12 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: eclipse-temurin
         update-types: ["version-update:semver-major"]
+  # evals/detect/fixtures/deps-manifest pins vulnerable releases on purpose: the
+  # detection eval's ground truth expects osv-scanner to flag them. Ignoring every
+  # dependency here stops both version and security-update PRs for this directory.
+  - package-ecosystem: pip
+    directory: /evals/detect/fixtures/deps-manifest
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"

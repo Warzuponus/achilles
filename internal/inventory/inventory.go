@@ -98,7 +98,7 @@ func Scan(root string) (Inventory, error) {
 var goModRE = regexp.MustCompile(`(?m)^\s*([a-zA-Z0-9._/-]+)\s+(v[0-9][^\s]*)`)
 
 func parseGoMod(path string) []Dependency {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return nil
 	}
@@ -112,7 +112,7 @@ func parseGoMod(path string) []Dependency {
 var reqRE = regexp.MustCompile(`(?m)^([A-Za-z0-9._-]+)\s*(?:==|>=|~=|<=)\s*([0-9][^\s;#]*)`)
 
 func parseRequirements(path string) []Dependency {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return nil
 	}
@@ -124,7 +124,7 @@ func parseRequirements(path string) []Dependency {
 }
 
 func parsePackageJSON(path string) []Dependency {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return nil
 	}

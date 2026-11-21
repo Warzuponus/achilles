@@ -48,8 +48,8 @@ const (
 	EnvQuery          = "ACHILLES_LLM_QUERY"            // "api-version=2024-10-21"
 	EnvTimeout        = "ACHILLES_LLM_TIMEOUT"          // Go duration, e.g. "10m"
 	EnvOmitTemp       = "ACHILLES_LLM_OMIT_TEMPERATURE" // "true" for reasoning models
-	EnvMaxTokens      = "ACHILLES_LLM_MAX_TOKENS"       // integer
-	EnvMaxTokensParam = "ACHILLES_LLM_MAX_TOKENS_PARAM" // max_tokens | max_completion_tokens
+	EnvMaxTokens      = "ACHILLES_LLM_MAX_TOKENS"       // #nosec G101 -- an environment variable name, not a credential (integer)
+	EnvMaxTokensParam = "ACHILLES_LLM_MAX_TOKENS_PARAM" // #nosec G101 -- an environment variable name, not a credential (max_tokens | max_completion_tokens)
 	EnvMaxRetries     = "ACHILLES_LLM_MAX_RETRIES"      // integer; negative disables
 )
 

@@ -273,7 +273,7 @@ func extractRules(src io.ReadSeeker, dst string) error {
 		if err := os.MkdirAll(filepath.Dir(out), 0o700); err != nil {
 			return err
 		}
-		f, err := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		f, err := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 		if err != nil {
 			return err
 		}

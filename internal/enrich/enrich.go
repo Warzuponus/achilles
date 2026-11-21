@@ -99,7 +99,7 @@ func (e *Enricher) GitBlame(f model.Finding, root string) (Blame, bool) {
 	defer cancel()
 
 	args := []string{"-C", root, "blame", "-L", fmt.Sprintf("%d,%d", line, line), "--line-porcelain", "--", f.Location.File}
-	out, err := exec.CommandContext(ctx, "git", args...).Output()
+	out, err := exec.CommandContext(ctx, "git", args...).Output() // #nosec G204 -- argument list, never a shell; the binary and arguments are chosen by Achilles or by the operator's own config
 	if err != nil {
 		return Blame{}, false
 	}

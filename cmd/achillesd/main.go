@@ -88,7 +88,7 @@ func main() {
 			"(publish it on 127.0.0.1) or sits behind your own authenticating proxy")
 	}
 	if len(hosts) > 0 {
-		log.Printf("achillesd: also accepting Host header(s): %s", strings.Join(hosts, ", "))
+		log.Printf("achillesd: also accepting Host header(s): %s", strings.Join(hosts, ", ")) // #nosec G706 -- the hosts come from the operator's own --allowed-hosts flag or env, not from a request
 	}
 	if err := httpSrv.ListenAndServe(); err != nil {
 		log.Fatalf("achillesd: %v", err)

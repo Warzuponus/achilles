@@ -393,7 +393,7 @@ func envOr(key, fallback string) string {
 }
 
 func writeToFile(path string, fn func(io.Writer) error) error {
-	f, err := os.Create(path)
+	f, err := os.Create(path) // #nosec G304 G703 -- the path comes from the operator's own flags or config, or from a directory Achilles manages; the path comes from the operator's own command-line flags
 	if err != nil {
 		return err
 	}

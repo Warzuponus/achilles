@@ -55,10 +55,10 @@ func (r *RuleRepo) Quarantine(runID string, rule GeneratedRule, res ValidationRe
 
 func (r *RuleRepo) write(runID, sub string, rule GeneratedRule, res ValidationResult, reason string, admitted bool) error {
 	dir := filepath.Join(r.dir, sub)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- generated rules live in the repository (.achilles/generated-rules) to be reviewed and committed
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, rule.ID+".yaml"), []byte(rule.RuleYAML), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, rule.ID+".yaml"), []byte(rule.RuleYAML), 0o644); err != nil { // #nosec G306 -- generated rules live in the repository (.achilles/generated-rules) to be reviewed and committed
 		return err
 	}
 	meta := ruleMeta{ID: rule.ID, Provenance: rule.Provenance, Validation: res, Reason: reason, Admitted: admitted}
@@ -66,7 +66,7 @@ func (r *RuleRepo) write(runID, sub string, rule GeneratedRule, res ValidationRe
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, rule.ID+".meta.json"), mb, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, rule.ID+".meta.json"), mb, 0o644); err != nil { // #nosec G306 -- generated rules live in the repository (.achilles/generated-rules) to be reviewed and committed
 		return err
 	}
 

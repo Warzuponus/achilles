@@ -30,14 +30,14 @@ func ChangedFiles(root, ref string) ([]string, error) {
 	}
 
 	// Changed vs the ref (staged + unstaged).
-	out, err := exec.CommandContext(ctx, "git", "-C", root, "diff", "--name-only", ref).Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", root, "diff", "--name-only", ref).Output() // #nosec G204 -- argument list, never a shell; the binary and arguments are chosen by Achilles or by the operator's own config
 	if err != nil {
 		return nil, err
 	}
 	add(out)
 
 	// Untracked files (new, not yet committed).
-	if unt, err := exec.CommandContext(ctx, "git", "-C", root, "ls-files", "--others", "--exclude-standard").Output(); err == nil {
+	if unt, err := exec.CommandContext(ctx, "git", "-C", root, "ls-files", "--others", "--exclude-standard").Output(); err == nil { // #nosec G204 -- argument list, never a shell; the binary and arguments are chosen by Achilles or by the operator's own config
 		add(unt)
 	}
 

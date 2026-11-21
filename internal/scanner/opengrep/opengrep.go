@@ -114,7 +114,7 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 		return scanner.RawResult{}, fmt.Errorf("opengrep failed (exit %d): %s", res.ExitCode, string(res.Stderr))
 	}
 
-	data, err := os.ReadFile(filepath.Join(outDir, "results.sarif"))
+	data, err := os.ReadFile(filepath.Join(outDir, "results.sarif")) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return scanner.RawResult{}, fmt.Errorf("read opengrep sarif output: %w (stderr: %s)", err, string(res.Stderr))
 	}

@@ -92,7 +92,7 @@ func (r CLIRunner) buildArgs(j Job) []string {
 // Scan runs one job. It never returns an error from the function itself — a
 // failed scan is reported in Result.Err so the dispatcher keeps going.
 func (r CLIRunner) Scan(ctx context.Context, j Job) Result {
-	cmd := exec.CommandContext(ctx, r.Bin, r.buildArgs(j)...)
+	cmd := exec.CommandContext(ctx, r.Bin, r.buildArgs(j)...) // #nosec G204 -- argument list, never a shell; the binary and arguments are chosen by Achilles or by the operator's own config
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

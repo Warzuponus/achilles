@@ -99,7 +99,7 @@ func runOSEnv(ctx context.Context, name string, args []string, extraEnv []string
 // process group, cancellation kills the whole group (plus onCancel), and WaitDelay
 // bounds the wait for the pipes.
 func runCmd(ctx context.Context, name string, args []string, o runOpts) (Result, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- argument list, never a shell; the binary and arguments are chosen by Achilles or by the operator's own config
 	if len(o.extraEnv) > 0 {
 		cmd.Env = append(os.Environ(), o.extraEnv...)
 	}

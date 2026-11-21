@@ -27,7 +27,7 @@ type Repo struct {
 
 // ExecRunner is the production Runner: it shells out to git.
 func ExecRunner(ctx context.Context, dir, stdinFile string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...) // #nosec G204 -- argument list, never a shell; the binary and arguments are chosen by Achilles or by the operator's own config
 	if stdinFile != "" {
 		f, err := os.Open(stdinFile) // #nosec G304 -- operator-controlled temp file we just wrote
 		if err != nil {

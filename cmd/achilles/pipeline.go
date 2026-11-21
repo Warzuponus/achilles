@@ -183,7 +183,7 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 		fmt.Fprintf(os.Stderr, "achilles: skipping %d tool(s) not applicable to %v: %v\n", len(skipped), tgt.Languages, skipped)
 	}
 	if o.sarifOut != "" {
-		if err := os.MkdirAll(o.sarifOut, 0o700); err != nil {
+		if err := os.MkdirAll(o.sarifOut, 0o700); err != nil { // #nosec G703 -- the path comes from the operator's own command-line flags
 			return model.Scan{}, nil, err
 		}
 	}
@@ -238,7 +238,7 @@ func scanTarget(ctx context.Context, o *options, ev vault.Store, runID, absTarge
 		}
 
 		if o.sarifOut != "" {
-			if err := os.WriteFile(filepath.Join(o.sarifOut, r.id+".sarif"), r.raw.Data, 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(o.sarifOut, r.id+".sarif"), r.raw.Data, 0o600); err != nil { // #nosec G703 -- the path comes from the operator's own command-line flags
 				fmt.Fprintf(os.Stderr, "achilles: %s sarif-out write failed: %v\n", r.id, err)
 			}
 		}
@@ -382,7 +382,7 @@ func applyPRMini(o *options) (seedMode bool, err error) {
 	if o.baselinePath != "" || o.writeBl != "" {
 		return false, fmt.Errorf("--pr-mini is mutually exclusive with --baseline/--write-baseline")
 	}
-	if _, statErr := os.Stat(o.prMini); statErr == nil {
+	if _, statErr := os.Stat(o.prMini); statErr == nil { // #nosec G703 -- the path comes from the operator's own command-line flags
 		o.baselinePath = o.prMini
 		return false, nil
 	}

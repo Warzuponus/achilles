@@ -42,7 +42,7 @@ type Table struct {
 
 // LoadTable reads a price table YAML file.
 func LoadTable(path string) (Table, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return Table{}, fmt.Errorf("read price-config: %w", err)
 	}

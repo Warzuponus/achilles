@@ -139,7 +139,7 @@ func (in *Installer) installAsset(ctx context.Context, finalName string, a Asset
 		if err := dl.Close(); err != nil {
 			return "", err
 		}
-		if err := os.Chmod(dlPath, 0o755); err != nil {
+		if err := os.Chmod(dlPath, 0o755); err != nil { // #nosec G302 -- an installed tool binary has to be executable
 			return "", err
 		}
 		if err := os.Rename(dlPath, final); err != nil {
@@ -180,7 +180,7 @@ func (in *Installer) installAsset(ctx context.Context, finalName string, a Asset
 	if err := out.Close(); err != nil {
 		return "", err
 	}
-	if err := os.Chmod(outPath, 0o755); err != nil {
+	if err := os.Chmod(outPath, 0o755); err != nil { // #nosec G302 -- an installed tool binary has to be executable
 		return "", err
 	}
 	if err := os.Rename(outPath, final); err != nil {

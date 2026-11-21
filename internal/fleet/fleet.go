@@ -53,7 +53,7 @@ var tenantRE = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
 // LoadConfig reads and validates a fleet YAML file.
 func LoadConfig(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return nil, fmt.Errorf("read fleet config: %w", err)
 	}

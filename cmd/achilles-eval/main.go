@@ -337,7 +337,7 @@ func modelFor(task string, tasks map[string]llm.TaskModel, fallback string) stri
 }
 
 func writeJSON(path string, fn func(io.Writer) error) error {
-	f, err := os.Create(path)
+	f, err := os.Create(path) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return err
 	}

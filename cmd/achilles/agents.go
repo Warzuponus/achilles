@@ -153,7 +153,7 @@ func runThreatModel(ctx context.Context, ev vault.Store, runID, target string, s
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(outPath, out, 0o600); err != nil {
+	if err := os.WriteFile(outPath, out, 0o600); err != nil { // #nosec G703 -- the path comes from the operator's own command-line flags
 		return nil, err
 	}
 	fmt.Fprintf(os.Stderr, "achilles: threat-model — %d component(s), %d threat(s) (OTM) -> %s\n",

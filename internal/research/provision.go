@@ -93,7 +93,7 @@ func (r *RuleRepo) Provision(baselineDir string, shadowWindow time.Duration, now
 // or unreadable.
 func (r *RuleRepo) admittedMeta(id string) ruleMeta {
 	var m ruleMeta
-	b, err := os.ReadFile(filepath.Join(r.AdmittedDir(), id+".meta.json"))
+	b, err := os.ReadFile(filepath.Join(r.AdmittedDir(), id+".meta.json")) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return ruleMeta{}
 	}
@@ -137,12 +137,12 @@ func copyRules(src, dst, prefix string) error {
 }
 
 func copyFile(src, dst string) error {
-	in, err := os.Open(src)
+	in, err := os.Open(src) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	out, err := os.Create(dst)
+	out, err := os.Create(dst) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return err
 	}

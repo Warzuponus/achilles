@@ -26,7 +26,7 @@ type TaskModel struct {
 
 // LoadModelRouting reads a model-routing YAML file.
 func LoadModelRouting(path string) (ModelRouting, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return ModelRouting{}, fmt.Errorf("read model-config: %w", err)
 	}

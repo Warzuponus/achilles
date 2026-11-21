@@ -203,7 +203,7 @@ func resolveTenant(w http.ResponseWriter, r *http.Request) string {
 		// following one shows that project for this page only. The switcher on our
 		// own page, a bookmark and a typed URL still remember the choice.
 		if !startedByAnotherSite(r) {
-			http.SetCookie(w, &http.Cookie{
+			http.SetCookie(w, &http.Cookie{ // #nosec G124 -- HttpOnly and SameSite=Lax; Secure whenever the request came over HTTPS (achillesd also serves plain-HTTP localhost); the cookie only remembers a project selection
 				Name: tenantCookie, Value: v, Path: "/",
 				HttpOnly: true, SameSite: http.SameSiteLaxMode,
 				// The cookie only remembers a selection. Mark it Secure whenever the

@@ -241,7 +241,7 @@ func compareVersions(a, b string) int {
 
 // ProbeVersion runs `path args...` and returns its combined output.
 func ProbeVersion(ctx context.Context, path string, args []string) (string, error) {
-	out, err := exec.CommandContext(ctx, path, args...).CombinedOutput()
+	out, err := exec.CommandContext(ctx, path, args...).CombinedOutput() // #nosec G204 -- argument list, never a shell; the binary and arguments are chosen by Achilles or by the operator's own config
 	return string(out), err
 }
 

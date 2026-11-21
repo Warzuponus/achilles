@@ -82,7 +82,7 @@ func collectRules() (map[string][]byte, error) {
 			if n++; n > maxOverlayFiles {
 				break
 			}
-			b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			b, err := os.ReadFile(filepath.Join(dir, e.Name())) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 			if err != nil || len(b) > maxOverlayBytes {
 				continue
 			}
@@ -189,7 +189,7 @@ func rulesDirMatches(dir string, want map[string][]byte) bool {
 		if !ok {
 			return errors.New("unexpected file")
 		}
-		b, err := os.ReadFile(p)
+		b, err := os.ReadFile(p) // #nosec G122 G304 -- each file's bytes are compared with the embedded rules, so a file swapped mid-walk still fails verification; the path comes from the operator's own flags or config, or from a directory Achilles manages
 		if err != nil || !bytes.Equal(b, exp) {
 			return errors.New("content differs")
 		}

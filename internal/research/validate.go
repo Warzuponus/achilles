@@ -125,18 +125,18 @@ func (v *OpengrepValidator) Validate(ctx context.Context, r GeneratedRule) (Vali
 	patchedDir := filepath.Join(base, "patched")
 	controlDir := filepath.Join(base, "control")
 	for _, d := range []string{rulesDir, vulnDir, patchedDir, controlDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
+		if err := os.MkdirAll(d, 0o755); err != nil { // #nosec G301 -- inside a private MkdirTemp dir; must stay readable by the scanner container's user
 			return ValidationResult{}, err
 		}
 	}
 	ext := extFor(r.Language)
-	if err := os.WriteFile(filepath.Join(rulesDir, "rule.yaml"), []byte(r.RuleYAML), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(rulesDir, "rule.yaml"), []byte(r.RuleYAML), 0o644); err != nil { // #nosec G306 -- inside a private MkdirTemp dir; must stay readable by the scanner container's user
 		return ValidationResult{}, err
 	}
-	if err := os.WriteFile(filepath.Join(vulnDir, "case"+ext), []byte(r.VulnerableSnippet), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(vulnDir, "case"+ext), []byte(r.VulnerableSnippet), 0o644); err != nil { // #nosec G306 -- inside a private MkdirTemp dir; must stay readable by the scanner container's user
 		return ValidationResult{}, err
 	}
-	if err := os.WriteFile(filepath.Join(patchedDir, "case"+ext), []byte(r.PatchedSnippet), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(patchedDir, "case"+ext), []byte(r.PatchedSnippet), 0o644); err != nil { // #nosec G306 -- inside a private MkdirTemp dir; must stay readable by the scanner container's user
 		return ValidationResult{}, err
 	}
 

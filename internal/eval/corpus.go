@@ -79,7 +79,7 @@ type Corpus struct {
 // purpose: a corpus with a stale line number silently measures the wrong thing,
 // which is worse than not measuring at all.
 func LoadCorpus(path string) (Corpus, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return Corpus{}, fmt.Errorf("read corpus: %w", err)
 	}

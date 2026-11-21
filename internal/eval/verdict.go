@@ -666,7 +666,7 @@ func routingLabel(r VerdictReport) string {
 }
 
 func readFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}

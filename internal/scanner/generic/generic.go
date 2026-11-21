@@ -128,7 +128,7 @@ func (s *Scanner) Run(ctx context.Context, t scanner.Target) (scanner.RawResult,
 	// scanners exit non-zero when they find issues, so we key success on the
 	// output file existing, not on the exit code.
 	outHost := strings.ReplaceAll(s.cfg.OutputFile, "{out}", outDir)
-	data, err := os.ReadFile(outHost)
+	data, err := os.ReadFile(outHost) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if s.cfg.OutputFile == StdoutReport {
 		// A tool with no "write the report to this file" option prints it instead.
 		// (The read above found no such file; its result is replaced here.)

@@ -167,7 +167,7 @@ func (f FetchingRunner) runGit(ctx context.Context, dir string, env []string, sc
 	if bin == "" {
 		bin = "git"
 	}
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, bin, args...) // #nosec G204 -- argument list, never a shell; the binary and arguments are chosen by Achilles or by the operator's own config
 	cmd.Dir, cmd.Env = dir, env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -265,7 +265,7 @@ func (f FetchingRunner) gitEnv(root string, src *GitSource, sc *scrubber) ([]str
 			}
 		}
 		path := filepath.Join(root, "id_key")
-		fh, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		fh, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 		if err != nil {
 			return nil, noop, fmt.Errorf("write ssh key: %w", err)
 		}

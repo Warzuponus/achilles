@@ -268,7 +268,7 @@ func (fs *FileStore) Purge(before time.Time) (int, error) {
 	// (before umask), turning a private file of findings and prompts into one any
 	// local user can read the first time retention runs.
 	tmp := fs.path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		return 0, fmt.Errorf("purge open: %w", err)
 	}

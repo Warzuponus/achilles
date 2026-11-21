@@ -18,7 +18,7 @@ type Baseline struct {
 // Load reads a baseline file. A missing file is an empty baseline (not an error)
 // so the first CI run works before a baseline exists.
 func Load(path string) (*Baseline, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the path comes from the operator's own flags or config, or from a directory Achilles manages
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &Baseline{}, nil
@@ -102,9 +102,9 @@ func Write(path string, findings []model.Finding) error {
 		return err
 	}
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- the baseline is a committed repository file, like .github/
 			return err
 		}
 	}
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0o644) // #nosec G306 -- the baseline is a committed repository file
 }

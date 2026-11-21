@@ -99,7 +99,7 @@ func copyFile(src, dst string, perm fs.FileMode) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
+		_ = out.Close() // already failing; report the copy error
 		return err
 	}
 	return out.Close()

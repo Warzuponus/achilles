@@ -95,10 +95,14 @@ func (r *Repo) Apply(ctx context.Context, diff string) error {
 	}
 	defer os.Remove(f.Name())
 	if _, err := f.WriteString(diff); err != nil {
-		f.Close()
+		_ = f.Close() // already failing; the write error is the one to report
 		return err
 	}
-	f.Close()
+	// A failed close can mean the patch never fully reached disk: git would then
+	// apply a truncated diff, so fail here instead.
+	if err := f.Close(); err != nil {
+		return err
+	}
 	// -p1 is explicit: without it git guesses how many leading path components
 	// to strip from a plain (non "diff --git") patch by looking at the files on
 	// disk, so the path a caller validated would not be the path git writes.

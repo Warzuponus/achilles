@@ -69,7 +69,7 @@ func LoadContext(root string) (*Context, error) {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 		data, err := io.ReadAll(io.LimitReader(f, maxContextBytes+1))
-		f.Close()
+		_ = f.Close() // read-only; ReadAll's error is the one that matters
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}

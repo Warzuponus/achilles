@@ -253,7 +253,7 @@ func runFixPR(ctx context.Context, dir, repo, remote, base string, scan model.Sc
 
 	h := sha256.New()
 	for _, fx := range fixes {
-		io.WriteString(h, fx.fp+"\n")
+		_, _ = io.WriteString(h, fx.fp+"\n") // hash.Hash writes never fail
 	}
 	branch := "achilles/autofix-" + hex.EncodeToString(h.Sum(nil))[:8]
 

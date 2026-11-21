@@ -128,9 +128,9 @@ func (in *Installer) installAsset(ctx context.Context, finalName string, a Asset
 	dlPath := dl.Name()
 	keepDownload := false // true once the download itself becomes the final file
 	defer func() {
-		dl.Close()
+		_ = dl.Close() // best-effort cleanup; already closed on the success path
 		if !keepDownload {
-			os.Remove(dlPath)
+			_ = os.Remove(dlPath)
 		}
 	}()
 
@@ -155,8 +155,8 @@ func (in *Installer) installAsset(ctx context.Context, finalName string, a Asset
 	}
 	outPath := out.Name()
 	defer func() {
-		out.Close()
-		os.Remove(outPath) // no-op after a successful rename
+		_ = out.Close()        // best-effort cleanup; already closed on the success path
+		_ = os.Remove(outPath) // no-op after a successful rename
 	}()
 
 	max := in.MaxBinary
@@ -202,8 +202,8 @@ func (in *Installer) downloadVerified(ctx context.Context, a Asset) (*os.File, e
 		err = fmt.Errorf("sha256 mismatch for %s: got %s, want %s (refusing to install)", a.URL, got, a.SHA256)
 	}
 	if err != nil {
-		dl.Close()
-		os.Remove(dl.Name())
+		_ = dl.Close() // already failing; report the download error
+		_ = os.Remove(dl.Name())
 		return nil, err
 	}
 	return dl, nil

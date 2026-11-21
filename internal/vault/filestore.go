@@ -273,22 +273,22 @@ func (fs *FileStore) Purge(before time.Time) (int, error) {
 		return 0, fmt.Errorf("purge open: %w", err)
 	}
 	if err := f.Chmod(0o600); err != nil && runtime.GOOS != "windows" { // a leftover .tmp keeps its old mode
-		f.Close()
+		_ = f.Close() // already failing; the earlier error is the one to report
 		return 0, fmt.Errorf("purge chmod: %w", err)
 	}
 	for _, r := range kept {
 		line, err := json.Marshal(r)
 		if err != nil {
-			f.Close()
+			_ = f.Close() // already failing; the earlier error is the one to report
 			return 0, err
 		}
 		if _, err := f.Write(append(line, '\n')); err != nil {
-			f.Close()
+			_ = f.Close() // already failing; the earlier error is the one to report
 			return 0, err
 		}
 	}
 	if err := f.Sync(); err != nil { // the old file is about to be replaced: have the new one on disk first
-		f.Close()
+		_ = f.Close() // already failing; the earlier error is the one to report
 		return 0, err
 	}
 	if err := f.Close(); err != nil {

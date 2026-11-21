@@ -145,7 +145,7 @@ func materializeRules() (string, error) {
 	}
 	if _, serr := os.Lstat(dest); serr == nil {
 		// Present but failed verification (tampered or partial): replace it.
-		os.RemoveAll(dest)
+		_ = os.RemoveAll(dest) // if this fails, the Rename below fails and reports it
 	}
 	if err := os.Rename(tmp, dest); err != nil {
 		if rulesDirMatches(dest, files) { // lost a race to an identical writer

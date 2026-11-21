@@ -230,7 +230,7 @@ func (c *Client) doURL(ctx context.Context, method, fullURL string, body []byte,
 			return nil, fmt.Errorf("gitlab %s %s: %w", method, label, err)
 		}
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
-		resp.Body.Close()
+		_ = resp.Body.Close() // body fully read; nothing to act on
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			if out != nil {

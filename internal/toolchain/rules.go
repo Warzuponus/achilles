@@ -197,8 +197,8 @@ func (in *Installer) installRulesArchive(ctx context.Context, a Asset, rulesRoot
 		return "", err
 	}
 	defer func() {
-		dl.Close()
-		os.Remove(dl.Name())
+		_ = dl.Close() // best-effort cleanup of the verified download
+		_ = os.Remove(dl.Name())
 	}()
 
 	tmp, err := os.MkdirTemp(rulesRoot, ".rules-tmp-*")

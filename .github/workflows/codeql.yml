@@ -32,8 +32,12 @@ jobs:
         include:
           - language: actions
             build-mode: none
+          # manual, not autobuild: autobuild finds every go.mod (including the
+          # fixture modules under evals/ and examples/) and the Go extractor does
+          # not honor paths-ignore. Building ./... from the root covers only the
+          # shipped module (the go tool already skips testdata).
           - language: go
-            build-mode: autobuild
+            build-mode: manual
           - language: javascript-typescript
             build-mode: none
           - language: python
@@ -42,11 +46,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - if: matrix.language == 'go'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
       - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           config-file: ./.github/codeql/codeql-config.yml
+      - if: matrix.language == 'go'
+        run: go build ./...
       - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: "/language:${{ matrix.language }}"

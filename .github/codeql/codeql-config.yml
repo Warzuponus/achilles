@@ -1,0 +1,13 @@
+# CodeQL configuration for .github/workflows/codeql.yml.
+#
+# These directories hold code that is vulnerable ON PURPOSE: it is the ground
+# truth Achilles' evals, rule tests and scanner verification check against. It is
+# never built into or shipped with Achilles, so alerts on it are noise that buries
+# alerts on the real code. (The self scan excludes evals and examples the same way.)
+name: achilles-codeql
+
+paths-ignore:
+  - evals                  # detect/triage fixtures and the juice-shop corpus
+  - examples/quickstart    # deliberately vulnerable compose quickstart app
+  - verify/tier2           # known-vulnerable samples for scanner verification
+  - "**/testdata"          # rule test cases (internal/config/testdata/rules/*) and parser inputs
